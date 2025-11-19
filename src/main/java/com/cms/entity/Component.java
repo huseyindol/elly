@@ -2,13 +2,14 @@ package com.cms.entity;
 
 import java.util.List;
 
+import com.cms.enums.ComponentTypeEnum;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -16,23 +17,20 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "pages")
+@Table(name = "components")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Page extends BaseEntity {
-  private String title;
+public class Component extends BaseEntity {
+  private String name;
   private String description;
-  private String slug;
+  private ComponentTypeEnum type;
+  private String content;
+  private Integer orderIndex;
   private Boolean status;
 
-  @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-  @JoinColumn(name = "seo_info_id", referencedColumnName = "id")
-  private SeoInfo seoInfo;
-
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-  @JoinTable(name = "page_components", joinColumns = @JoinColumn(name = "page_id"), inverseJoinColumns = @JoinColumn(name = "component_id"))
-  @jakarta.persistence.OrderBy("orderIndex")
-  private List<Component> components;
+  @JoinTable(name = "page_components", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "page_id"))
+  private List<Page> pages;
 }

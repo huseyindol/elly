@@ -22,10 +22,6 @@ public class ComponentService implements IComponentService {
   private PageRepository pageRepository;
 
   @Override
-  public Component saveComponent(Component component) {
-    return componentRepository.save(component);
-  }
-
   public Component saveComponentWithPages(Component component, List<Long> pageIds) {
     if (pageIds != null && !pageIds.isEmpty()) {
       List<Page> pages = pageRepository.findAllById(pageIds);

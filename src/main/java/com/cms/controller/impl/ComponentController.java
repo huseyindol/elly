@@ -32,7 +32,8 @@ public class ComponentController extends BaseController implements IComponentCon
   @PostMapping
   public RootEntityResponse<DtoComponent> createComponent(@RequestBody DtoComponentIU dtoComponentIU) {
     Component component = componentMapper.toComponent(dtoComponentIU);
-    Component savedComponent = componentService.saveComponentWithPages(component, dtoComponentIU.getPageIds());
+    Component savedComponent = componentService.saveComponent(component, dtoComponentIU.getPageIds(),
+        dtoComponentIU.getBannerIds());
     DtoComponent dtoComponent = componentMapper.toDtoComponent(savedComponent);
     return ok(dtoComponent);
   }
@@ -43,7 +44,8 @@ public class ComponentController extends BaseController implements IComponentCon
       @RequestBody DtoComponentIU dtoComponentIU) {
     Component component = componentService.getComponentById(id);
     componentMapper.updateComponentFromDto(dtoComponentIU, component);
-    Component savedComponent = componentService.saveComponentWithPages(component, dtoComponentIU.getPageIds());
+    Component savedComponent = componentService.saveComponent(component, dtoComponentIU.getPageIds(),
+        dtoComponentIU.getBannerIds());
     DtoComponent dtoComponent = componentMapper.toDtoComponent(savedComponent);
     return ok(dtoComponent);
   }

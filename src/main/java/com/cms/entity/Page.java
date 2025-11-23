@@ -9,6 +9,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -33,6 +34,6 @@ public class Page extends BaseEntity {
 
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "page_components", joinColumns = @JoinColumn(name = "page_id"), inverseJoinColumns = @JoinColumn(name = "component_id"))
-  @jakarta.persistence.OrderBy("orderIndex")
+  @OrderBy("orderIndex")
   private List<Component> components;
 }

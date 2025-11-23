@@ -21,4 +21,5 @@ public class DtoComponentIU {
   private Integer orderIndex;
   private Boolean status;
   private List<Long> pageIds;
+  private List<Long> bannerIds;
 }

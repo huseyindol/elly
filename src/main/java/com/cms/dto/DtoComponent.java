@@ -24,4 +24,5 @@ public class DtoComponent {
   private Integer orderIndex;
   private Boolean status;
   private List<Long> pageIds;
+  private List<DtoBanner> banners;
 }

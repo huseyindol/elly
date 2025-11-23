@@ -25,4 +25,5 @@ public class DtoComponent {
   private Boolean status;
   private List<Long> pageIds;
   private List<DtoBanner> banners;
+  private List<DtoWidget> widgets;
 }

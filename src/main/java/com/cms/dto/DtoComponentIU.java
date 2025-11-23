@@ -22,4 +22,5 @@ public class DtoComponentIU {
   private Boolean status;
   private List<Long> pageIds;
   private List<Long> bannerIds;
+  private List<Long> widgetIds;
 }

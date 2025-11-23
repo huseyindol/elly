@@ -9,9 +9,11 @@ import org.springframework.stereotype.Service;
 import com.cms.entity.Banner;
 import com.cms.entity.Component;
 import com.cms.entity.Page;
+import com.cms.entity.Widget;
 import com.cms.repository.BannerRepository;
 import com.cms.repository.ComponentRepository;
 import com.cms.repository.PageRepository;
+import com.cms.repository.WidgetRepository;
 import com.cms.service.IComponentService;
 
 @Service
@@ -26,8 +28,11 @@ public class ComponentService implements IComponentService {
   @Autowired
   private PageRepository pageRepository;
 
+  @Autowired
+  private WidgetRepository widgetRepository;
+
   @Override
-  public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds) {
+  public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds) {
     if (pageIds != null && !pageIds.isEmpty()) {
       List<Page> pages = pageRepository.findAllById(pageIds);
       component.setPages(pages);
@@ -39,6 +44,12 @@ public class ComponentService implements IComponentService {
       component.setBanners(banners);
     } else {
       component.setBanners(new ArrayList<>());
+    }
+    if (widgetIds != null && !widgetIds.isEmpty()) {
+      List<Widget> widgets = widgetRepository.findAllById(widgetIds);
+      component.setWidgets(widgets);
+    } else {
+      component.setWidgets(new ArrayList<>());
     }
     return componentRepository.save(component);
   }

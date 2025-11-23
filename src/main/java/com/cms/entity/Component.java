@@ -39,4 +39,9 @@ public class Component extends BaseEntity {
   @JoinTable(name = "component_banners", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "banner_id"))
   @OrderBy("orderIndex")
   private List<Banner> banners;
+
+  @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+  @JoinTable(name = "component_widgets", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "widget_id"))
+  @OrderBy("orderIndex")
+  private List<Widget> widgets;
 }

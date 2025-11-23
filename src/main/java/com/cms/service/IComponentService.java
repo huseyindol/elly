@@ -5,7 +5,7 @@ import java.util.List;
 import com.cms.entity.Component;
 
 public interface IComponentService {
-  Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds);
+  Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds);
 
   Boolean deleteComponent(Long id);
 

@@ -11,6 +11,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -44,4 +46,14 @@ public class Component extends BaseEntity {
   @JoinTable(name = "component_widgets", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "widget_id"))
   @OrderBy("orderIndex")
   private List<Widget> widgets;
+
+  @PrePersist
+  @PreUpdate
+  private void validateComponentType() {
+    if (type == ComponentTypeEnum.BANNER) {
+      this.widgets = null;
+    } else if (type == ComponentTypeEnum.WIDGET) {
+      this.banners = null;
+    }
+  }
 }

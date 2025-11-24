@@ -32,7 +32,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
   @PostMapping
   public RootEntityResponse<DtoWidget> createWidget(@RequestBody DtoWidgetIU dtoWidgetIU) {
     Widget widget = widgetMapper.toWidget(dtoWidgetIU);
-    Widget savedWidget = widgetService.saveWidget(widget, dtoWidgetIU.getBannerIds());
+    Widget savedWidget = widgetService.saveWidget(widget, dtoWidgetIU.getBannerIds(), dtoWidgetIU.getPostIds());
     DtoWidget dtoWidget = widgetMapper.toDtoWidget(savedWidget);
     return ok(dtoWidget);
   }
@@ -42,7 +42,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
   public RootEntityResponse<DtoWidget> updateWidget(@PathVariable Long id, @RequestBody DtoWidgetIU dtoWidgetIU) {
     Widget widget = widgetService.getWidgetById(id);
     widgetMapper.updateWidgetFromDto(dtoWidgetIU, widget);
-    Widget savedWidget = widgetService.saveWidget(widget, dtoWidgetIU.getBannerIds());
+    Widget savedWidget = widgetService.saveWidget(widget, dtoWidgetIU.getBannerIds(), dtoWidgetIU.getPostIds());
     DtoWidget dtoWidget = widgetMapper.toDtoWidget(savedWidget);
     return ok(dtoWidget);
   }

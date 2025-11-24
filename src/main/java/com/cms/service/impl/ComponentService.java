@@ -10,6 +10,7 @@ import com.cms.entity.Banner;
 import com.cms.entity.Component;
 import com.cms.entity.Page;
 import com.cms.entity.Widget;
+import com.cms.enums.ComponentTypeEnum;
 import com.cms.repository.BannerRepository;
 import com.cms.repository.ComponentRepository;
 import com.cms.repository.PageRepository;
@@ -33,6 +34,15 @@ public class ComponentService implements IComponentService {
 
   @Override
   public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds) {
+    // ComponentTypeEnum validation
+    ComponentTypeEnum componentType = component.getType();
+    if (componentType == ComponentTypeEnum.BANNER && widgetIds != null && !widgetIds.isEmpty()) {
+      throw new RuntimeException("BANNER tipindeki component'e widget eklenemez");
+    }
+    if (componentType == ComponentTypeEnum.WIDGET && bannerIds != null && !bannerIds.isEmpty()) {
+      throw new RuntimeException("WIDGET tipindeki component'e banner eklenemez");
+    }
+
     if (pageIds != null && !pageIds.isEmpty()) {
       List<Page> pages = pageRepository.findAllById(pageIds);
       component.setPages(pages);

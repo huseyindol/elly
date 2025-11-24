@@ -1,0 +1,43 @@
+package com.cms.service.impl;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.cms.entity.Post;
+import com.cms.repository.PostRepository;
+import com.cms.service.IPostService;
+
+@Service
+public class PostService implements IPostService {
+
+  @Autowired
+  private PostRepository postRepository;
+
+  @Override
+  public Post savePost(Post post) {
+    return postRepository.save(post);
+  }
+
+  @Override
+  public Post getPostById(Long id) {
+    return postRepository.findById(id)
+        .orElseThrow(() -> new RuntimeException("Post not found"));
+  }
+
+  @Override
+  public Boolean deletePost(Long id) {
+    if (postRepository.existsById(id)) {
+      postRepository.deleteById(id);
+      return true;
+    }
+    return false;
+  }
+
+  @Override
+  public List<Post> getAllPosts() {
+    return postRepository.findAll();
+  }
+
+}

@@ -21,4 +21,5 @@ public class DtoWidgetIU {
   private Integer orderIndex;
   private Boolean status;
   private List<Long> bannerIds;
+  private List<Long> postIds;
 }

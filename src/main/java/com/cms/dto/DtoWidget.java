@@ -22,4 +22,5 @@ public class DtoWidget {
   private Integer orderIndex;
   private Boolean status;
   private List<DtoBanner> banners;
+  private List<DtoPost> posts;
 }

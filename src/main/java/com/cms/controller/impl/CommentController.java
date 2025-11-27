@@ -15,9 +15,11 @@ import com.cms.controller.ICommentController;
 import com.cms.dto.DtoComment;
 import com.cms.dto.DtoCommentIU;
 import com.cms.entity.Comment;
+import com.cms.entity.Post;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.CommentMapper;
 import com.cms.service.ICommentService;
+import com.cms.service.IPostService;
 
 import jakarta.validation.Valid;
 
@@ -31,10 +33,23 @@ public class CommentController extends BaseController implements ICommentControl
   @Autowired
   private CommentMapper commentMapper;
 
+  @Autowired
+  private IPostService postService;
+
   @Override
   @PostMapping
   public RootEntityResponse<DtoComment> saveComment(@Valid @RequestBody DtoCommentIU dtoCommentIU) {
     Comment comment = commentMapper.toComment(dtoCommentIU);
+    if (dtoCommentIU.getPostId() != null) {
+      Post post = postService.getPostById(dtoCommentIU.getPostId());
+      comment.setPost(post);
+    } else {
+      return error("Post ID is required");
+    }
+    if (dtoCommentIU.getParentCommentId() != null) {
+      Comment parentComment = commentService.getCommentById(dtoCommentIU.getParentCommentId());
+      comment.setParentComment(parentComment);
+    }
     Comment savedComment = commentService.saveComment(comment);
     DtoComment dtoComment = commentMapper.toDtoComment(savedComment);
     return ok(dtoComment);
@@ -53,7 +68,7 @@ public class CommentController extends BaseController implements ICommentControl
   @Override
   @GetMapping("/post/{postId}")
   public RootEntityResponse<List<DtoComment>> getCommentsByPostId(@PathVariable Long postId) {
-    List<Comment> comments = commentService.getCommentsByPostId(postId);
+    List<Comment> comments = commentService.getTopLevelCommentsByPostId(postId);
     List<DtoComment> dtoComments = commentMapper.toDtoComments(comments);
     return ok(dtoComments);
   }

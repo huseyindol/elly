@@ -19,6 +19,6 @@ public class DtoCommentIU {
   private String content;
   private Long postId;
   // private Long articleId;
-  private Long parentCommentId;
   private Boolean status;
+  private Long parentCommentId;
 }

@@ -16,6 +16,8 @@ public interface ICommentService {
 
   List<Comment> getCommentsByPostId(Long postId);
 
+  List<Comment> getTopLevelCommentsByPostId(Long postId);
+
   // List<Comment> getCommentsByArticleId(Long articleId);
 
 }

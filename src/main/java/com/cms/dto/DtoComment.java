@@ -1,5 +1,8 @@
 package com.cms.dto;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,9 +17,9 @@ public class DtoComment {
   private String name;
   private String email;
   private String content;
-  private Long postId;
-  // private Long articleId;
-  private Long parentCommentId;
-  private Boolean status;
+  private DtoPost post;
+  // private DtoArticle article;
   private DtoComment parentComment;
+  private List<DtoComment> subComments = new ArrayList<>();
+  private Boolean status;
 }

@@ -29,6 +29,11 @@ public class CommentService implements ICommentService {
     return commentRepository.findByPostId(postId);
   }
 
+  @Override
+  public List<Comment> getTopLevelCommentsByPostId(Long postId) {
+    return commentRepository.findByPostIdAndParentCommentIsNull(postId);
+  }
+
   // @Override
   // public List<Comment> getCommentsByArticleId(Long articleId) {
   // return commentRepository.findByArticleId(articleId);
@@ -42,8 +47,9 @@ public class CommentService implements ICommentService {
 
   @Override
   public Comment getCommentById(Long id) {
-    return commentRepository.findById(id)
+    Comment comment = commentRepository.findById(id)
         .orElseThrow(() -> new RuntimeException("Comment not found"));
+    return comment;
   }
 
 }

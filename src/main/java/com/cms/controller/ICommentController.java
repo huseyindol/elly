@@ -16,6 +16,4 @@ public interface ICommentController {
 
   RootEntityResponse<List<DtoComment>> getCommentsByPostId(Long postId);
 
-  // RootEntityResponse<List<DtoComment>> getCommentsByArticleId(Long articleId);
-
 }

@@ -43,12 +43,6 @@ public class Widget extends BaseEntity {
   @OrderBy("orderIndex")
   private List<Post> posts;
 
-  // @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-  // @JoinTable(name = "widget_articles", joinColumns = @JoinColumn(name =
-  // "widget_id"), inverseJoinColumns = @JoinColumn(name = "article_id"))
-  // @OrderBy("orderIndex")
-  // private List<Article> articles;
-
   @PrePersist
   @PreUpdate
   private void validateWidgetType() {

@@ -34,11 +34,6 @@ public class CommentService implements ICommentService {
     return commentRepository.findByPostIdAndParentCommentIsNull(postId);
   }
 
-  // @Override
-  // public List<Comment> getCommentsByArticleId(Long articleId) {
-  // return commentRepository.findByArticleId(articleId);
-  // }
-
   @Override
   public Comment saveComment(Comment comment) {
     Comment savedComment = commentRepository.save(comment);

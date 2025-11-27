@@ -30,9 +30,6 @@ public class Comment extends BaseEntity {
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "post_id", referencedColumnName = "id")
   private Post post;
-  // @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-  // @JoinColumn(name = "article_id", referencedColumnName = "id")
-  // private Article article;
   // Cascade burada OLMAMALI - child silinince parent silinmemeli
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "parent_comment_id", referencedColumnName = "id")

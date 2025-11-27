@@ -18,7 +18,6 @@ public class DtoCommentIU {
   private String email;
   private String content;
   private Long postId;
-  // private Long articleId;
   private Boolean status;
   private Long parentCommentId;
 }

@@ -18,6 +18,4 @@ public interface ICommentService {
 
   List<Comment> getTopLevelCommentsByPostId(Long postId);
 
-  // List<Comment> getCommentsByArticleId(Long articleId);
-
 }

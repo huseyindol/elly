@@ -18,7 +18,6 @@ public class DtoComment {
   private String email;
   private String content;
   private DtoPost post;
-  // private DtoArticle article;
   private DtoComment parentComment;
   private List<DtoComment> subComments = new ArrayList<>();
   private Boolean status;

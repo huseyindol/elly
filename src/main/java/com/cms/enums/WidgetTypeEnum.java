@@ -2,8 +2,7 @@ package com.cms.enums;
 
 public enum WidgetTypeEnum {
   BANNER,
-  POST,
-  ARTICLE;
+  POST;
 
   public static WidgetTypeEnum fromString(String type) {
     return WidgetTypeEnum.valueOf(type.toUpperCase());

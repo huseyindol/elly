@@ -18,6 +18,8 @@ public class FileService implements IFileService {
 
   @Value("${file.upload.directory:uploads/assets/images}")
   private String uploadDirectory;
+  @Value("${file.upload.directory.files:uploads/assets}")
+  private String uploadDirectoryFiles;
 
   @Override
   public String saveImage(MultipartFile file, String subfolder) {
@@ -40,10 +42,7 @@ public class FileService implements IFileService {
 
       // Benzersiz dosya adı oluştur
       String originalFilename = file.getOriginalFilename();
-      String extension = "";
-      if (originalFilename != null && originalFilename.contains(".")) {
-        extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-      }
+      String extension = getFileExtension(originalFilename);
       String filename = UUID.randomUUID().toString() + extension;
 
       // Dosyayı kaydet
@@ -79,6 +78,68 @@ public class FileService implements IFileService {
       }
     } catch (IOException e) {
       throw new RuntimeException("Failed to delete image file", e);
+    }
+  }
+
+  @Override
+  public String saveFile(MultipartFile file, String subfolder) {
+    if (file == null || file.isEmpty()) {
+      throw new IllegalArgumentException("File is empty or null");
+    }
+
+    try {
+      // Klasör yolu oluştur
+      Path uploadPath = Paths.get(uploadDirectoryFiles, subfolder != null ? subfolder : "");
+
+      // Klasör yoksa oluştur
+      if (!Files.exists(uploadPath)) {
+        Files.createDirectories(uploadPath);
+      }
+
+      // Benzersiz dosya adı oluştur
+      String originalFilename = file.getOriginalFilename();
+
+      // Dosyayı kaydet
+      Path filePath = uploadPath.resolve(originalFilename);
+      Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+      // DB'de saklanacak yol: assets/{subfolder}/{filename}
+      String dbPath = "assets";
+      if (subfolder != null && !subfolder.isEmpty()) {
+        dbPath += "/" + subfolder;
+      }
+      dbPath += "/" + originalFilename;
+
+      return dbPath;
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to save file", e);
+    }
+  }
+
+  @Override
+  public void deleteFile(String filePath) {
+    try {
+      // DB'deki yol: assets/images/... -> uploads/assets/images/...
+      String actualPath = filePath.replace("assets", uploadDirectoryFiles);
+      Path path = Paths.get(actualPath);
+
+      if (Files.exists(path)) {
+        Files.delete(path);
+      }
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to delete file", e);
+    }
+  }
+
+  @Override
+  public String getFileExtension(String filename) {
+    try {
+      if (filename != null && filename.contains(".")) {
+        return filename.substring(filename.lastIndexOf("."));
+      }
+      return null;
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to get file extension", e);
     }
   }
 

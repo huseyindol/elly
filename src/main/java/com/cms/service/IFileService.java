@@ -7,5 +7,11 @@ public interface IFileService {
 
   void deleteImage(String filePath);
 
+  String saveFile(MultipartFile file, String subfolder);
+
+  void deleteFile(String filePath);
+
+  String getFileExtension(String filename);
+
   boolean isImageFile(MultipartFile file);
 }

@@ -32,3 +32,16 @@ build/
 ### VS Code ###
 .vscode/
 assets/
+
+### Docker ###
+.env
+.env.local
+.env.*.local
+backups/
+docker/postgres.conf
+docker/nginx.conf
+docker/ssl/
+
+### Logs ###
+logs/
+*.log

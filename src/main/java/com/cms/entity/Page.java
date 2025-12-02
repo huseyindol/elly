@@ -5,19 +5,24 @@ import java.util.List;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "pages")
+@Table(name = "pages", indexes = {
+    @Index(columnList = "slug", name = "id_page_page_slug", unique = true),
+    @Index(name = "id_page_status", columnList = "status")
+}, uniqueConstraints = { @UniqueConstraint(columnNames = { "slug" }, name = "uc_page_slug") })
 @Getter
 @Setter
 @NoArgsConstructor

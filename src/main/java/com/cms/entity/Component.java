@@ -7,6 +7,7 @@ import com.cms.enums.ComponentTypeEnum;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
@@ -20,7 +21,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "components")
+@Table(name = "components", indexes = {
+    @Index(name = "id_component_name", columnList = "name"),
+    @Index(name = "id_component_type", columnList = "type"),
+
+    @Index(name = "id_component_type_status", columnList = "type, status"),
+    @Index(name = "id_component_type_name", columnList = "type, name")
+})
 @Getter
 @Setter
 @NoArgsConstructor

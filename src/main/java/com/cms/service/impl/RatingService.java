@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.cms.entity.Rating;
+import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.RatingRepository;
 import com.cms.service.IRatingService;
 
@@ -37,7 +38,7 @@ public class RatingService implements IRatingService {
   @Override
   public Rating getRatingById(Long id) {
     return ratingRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Rating not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("Rating", id));
   }
 
   @Override

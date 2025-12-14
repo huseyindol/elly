@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.cms.entity.Comment;
+import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.CommentRepository;
 import com.cms.service.ICommentService;
 
@@ -42,9 +43,8 @@ public class CommentService implements ICommentService {
 
   @Override
   public Comment getCommentById(Long id) {
-    Comment comment = commentRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Comment not found"));
-    return comment;
+    return commentRepository.findById(id)
+        .orElseThrow(() -> new ResourceNotFoundException("Comment", id));
   }
 
 }

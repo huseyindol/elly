@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.cms.exception.BadRequestException;
 import com.cms.service.IFileService;
 
 @Service
@@ -24,11 +25,11 @@ public class FileService implements IFileService {
   @Override
   public String saveImage(MultipartFile file, String subfolder) {
     if (file == null || file.isEmpty()) {
-      throw new IllegalArgumentException("File is empty or null");
+      throw new BadRequestException("File is empty or null");
     }
 
     if (!isImageFile(file)) {
-      throw new IllegalArgumentException("File is not an image");
+      throw new BadRequestException("File is not an image");
     }
 
     try {
@@ -58,7 +59,7 @@ public class FileService implements IFileService {
 
       return dbPath;
     } catch (IOException e) {
-      throw new RuntimeException("Failed to save image file", e);
+      throw new BadRequestException("Failed to save image file", e);
     }
   }
 
@@ -77,14 +78,14 @@ public class FileService implements IFileService {
         Files.delete(path);
       }
     } catch (IOException e) {
-      throw new RuntimeException("Failed to delete image file", e);
+      throw new BadRequestException("Failed to delete image file", e);
     }
   }
 
   @Override
   public String saveFile(MultipartFile file, String subfolder) {
     if (file == null || file.isEmpty()) {
-      throw new IllegalArgumentException("File is empty or null");
+      throw new BadRequestException("File is empty or null");
     }
 
     try {
@@ -112,7 +113,7 @@ public class FileService implements IFileService {
 
       return dbPath;
     } catch (IOException e) {
-      throw new RuntimeException("Failed to save file", e);
+      throw new BadRequestException("Failed to save file", e);
     }
   }
 
@@ -127,7 +128,7 @@ public class FileService implements IFileService {
         Files.delete(path);
       }
     } catch (IOException e) {
-      throw new RuntimeException("Failed to delete file", e);
+      throw new BadRequestException("Failed to delete file", e);
     }
   }
 
@@ -139,7 +140,7 @@ public class FileService implements IFileService {
       }
       return null;
     } catch (Exception e) {
-      throw new RuntimeException("Failed to get file extension", e);
+      throw new BadRequestException("Failed to get file extension", e);
     }
   }
 

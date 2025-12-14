@@ -10,6 +10,8 @@ import com.cms.entity.Banner;
 import com.cms.entity.Post;
 import com.cms.entity.Widget;
 import com.cms.enums.WidgetTypeEnum;
+import com.cms.exception.ResourceNotFoundException;
+import com.cms.exception.ValidationException;
 import com.cms.repository.BannerRepository;
 import com.cms.repository.PostRepository;
 import com.cms.repository.WidgetRepository;
@@ -32,10 +34,10 @@ public class WidgetService implements IWidgetService {
     // WidgetTypeEnum validation
     WidgetTypeEnum widgetType = widget.getType();
     if (widgetType == WidgetTypeEnum.BANNER && postIds != null && !postIds.isEmpty()) {
-      throw new RuntimeException("BANNER tipindeki widget'a post eklenemez");
+      throw new ValidationException("BANNER tipindeki widget'a post eklenemez");
     }
     if (widgetType == WidgetTypeEnum.POST && bannerIds != null && !bannerIds.isEmpty()) {
-      throw new RuntimeException("POST tipindeki widget'a banner eklenemez");
+      throw new ValidationException("POST tipindeki widget'a banner eklenemez");
     }
 
     if (bannerIds != null && !bannerIds.isEmpty()) {
@@ -65,7 +67,7 @@ public class WidgetService implements IWidgetService {
   @Override
   public Widget getWidgetById(Long id) {
     return widgetRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Widget not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("Widget", id));
   }
 
 }

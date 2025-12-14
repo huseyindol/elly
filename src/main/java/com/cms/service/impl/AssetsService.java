@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.entity.Assets;
+import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.AssetsRepository;
 import com.cms.service.IAssetsService;
 import com.cms.service.IFileService;
@@ -42,13 +43,13 @@ public class AssetsService implements IAssetsService {
   @Override
   public Assets getAssetsById(Long id) {
     return assetsRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Assets not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("Assets", id));
   }
 
   @Override
   public Assets getAssetsByName(String name) {
     return assetsRepository.findByName(name)
-        .orElseThrow(() -> new RuntimeException("Assets not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("Assets", "name", name));
   }
 
 }

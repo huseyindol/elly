@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.cms.entity.Post;
+import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.PostRepository;
 import com.cms.service.IPostService;
 
@@ -23,7 +24,7 @@ public class PostService implements IPostService {
   @Override
   public Post getPostById(Long id) {
     return postRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Post not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("Post", id));
   }
 
   @Override

@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.cms.entity.Page;
+import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.PageRepository;
 import com.cms.service.IPageService;
 
@@ -29,16 +30,14 @@ public class PageService implements IPageService {
 
   @Override
   public Page getPageBySlug(String slug) {
-    Page page = pageRepository.findBySlug(slug)
-        .orElseThrow(() -> new RuntimeException("Page not found"));
-    return page;
+    return pageRepository.findBySlug(slug)
+        .orElseThrow(() -> new ResourceNotFoundException("Page", "slug", slug));
   }
 
   @Override
   public Page getPageById(Long id) {
-    Page page = pageRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Page not found"));
-    return page;
+    return pageRepository.findById(id)
+        .orElseThrow(() -> new ResourceNotFoundException("Page", id));
   }
 
 }

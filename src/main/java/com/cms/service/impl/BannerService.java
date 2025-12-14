@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.entity.Banner;
+import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.BannerRepository;
 import com.cms.service.IBannerService;
 import com.cms.service.IFileService;
@@ -35,7 +36,7 @@ public class BannerService implements IBannerService {
           if (existingBanner.getImage() != null) {
             fileService.deleteImage(existingBanner.getImage());
           }
-        } catch (RuntimeException e) {
+        } catch (ResourceNotFoundException e) {
           // Banner bulunamadıysa devam et (yeni kayıt olabilir)
         }
       }
@@ -64,7 +65,7 @@ public class BannerService implements IBannerService {
   @Override
   public Banner getBannerById(Long id) {
     return bannerRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Banner not found"));
+        .orElseThrow(() -> new ResourceNotFoundException("Banner", id));
   }
 
   @Override

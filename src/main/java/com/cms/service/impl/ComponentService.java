@@ -11,6 +11,8 @@ import com.cms.entity.Component;
 import com.cms.entity.Page;
 import com.cms.entity.Widget;
 import com.cms.enums.ComponentTypeEnum;
+import com.cms.exception.ResourceNotFoundException;
+import com.cms.exception.ValidationException;
 import com.cms.repository.BannerRepository;
 import com.cms.repository.ComponentRepository;
 import com.cms.repository.PageRepository;
@@ -37,10 +39,10 @@ public class ComponentService implements IComponentService {
     // ComponentTypeEnum validation
     ComponentTypeEnum componentType = component.getType();
     if (componentType == ComponentTypeEnum.BANNER && widgetIds != null && !widgetIds.isEmpty()) {
-      throw new RuntimeException("BANNER tipindeki component'e widget eklenemez");
+      throw new ValidationException("BANNER tipindeki component'e widget eklenemez");
     }
     if (componentType == ComponentTypeEnum.WIDGET && bannerIds != null && !bannerIds.isEmpty()) {
-      throw new RuntimeException("WIDGET tipindeki component'e banner eklenemez");
+      throw new ValidationException("WIDGET tipindeki component'e banner eklenemez");
     }
 
     if (pageIds != null && !pageIds.isEmpty()) {
@@ -75,9 +77,8 @@ public class ComponentService implements IComponentService {
 
   @Override
   public Component getComponentById(Long id) {
-    Component component = componentRepository.findById(id)
-        .orElseThrow(() -> new RuntimeException("Component not found"));
-    return component;
+    return componentRepository.findById(id)
+        .orElseThrow(() -> new ResourceNotFoundException("Component", id));
   }
 
 }

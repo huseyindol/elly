@@ -117,7 +117,7 @@ make stress-test
 make db-perf
 
 # Veya manuel:
-psql "postgresql://neondb_owner:npg_NExeW0baq3HB@ep-billowing-scene-adbekobg-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require" \
+psql "postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}?sslmode=require&channel_binding=require" \
   -f src/main/resources/db-performance-indexes.sql
 ```
 

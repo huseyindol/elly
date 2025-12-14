@@ -45,3 +45,7 @@ docker/ssl/
 ### Logs ###
 logs/
 *.log
+
+
+# Makefile
+QUICK_START_PERFORMANCE.md

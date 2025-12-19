@@ -2,6 +2,7 @@ package com.cms.service.impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.entity.Page;
 import com.cms.exception.ResourceNotFoundException;
@@ -15,11 +16,13 @@ public class PageService implements IPageService {
   private PageRepository pageRepository;
 
   @Override
+  @Transactional
   public Page savePage(Page page) {
     return pageRepository.save(page);
   }
 
   @Override
+  @Transactional
   public Boolean deletePage(Long id) {
     if (pageRepository.existsById(id)) {
       pageRepository.deleteById(id);

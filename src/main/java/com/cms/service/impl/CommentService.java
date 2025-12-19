@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.entity.Comment;
 import com.cms.exception.ResourceNotFoundException;
@@ -17,6 +18,7 @@ public class CommentService implements ICommentService {
   private CommentRepository commentRepository;
 
   @Override
+  @Transactional
   public Boolean deleteComment(Long id) {
     if (commentRepository.existsById(id)) {
       commentRepository.deleteById(id);
@@ -36,6 +38,7 @@ public class CommentService implements ICommentService {
   }
 
   @Override
+  @Transactional
   public Comment saveComment(Comment comment) {
     Comment savedComment = commentRepository.save(comment);
     return savedComment;

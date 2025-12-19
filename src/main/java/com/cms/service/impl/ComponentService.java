@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.entity.Banner;
 import com.cms.entity.Component;
@@ -35,6 +36,7 @@ public class ComponentService implements IComponentService {
   private WidgetRepository widgetRepository;
 
   @Override
+  @Transactional
   public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds) {
     // ComponentTypeEnum validation
     ComponentTypeEnum componentType = component.getType();
@@ -67,6 +69,7 @@ public class ComponentService implements IComponentService {
   }
 
   @Override
+  @Transactional
   public Boolean deleteComponent(Long id) {
     if (componentRepository.existsById(id)) {
       componentRepository.deleteById(id);

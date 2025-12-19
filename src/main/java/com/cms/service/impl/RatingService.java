@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.entity.Rating;
 import com.cms.exception.ResourceNotFoundException;
@@ -18,6 +19,7 @@ public class RatingService implements IRatingService {
   private RatingRepository ratingRepository;
 
   @Override
+  @Transactional
   public Rating saveRating(Rating rating) {
     // Aynı kullanıcı daha önce oy verdiyse güncelle
     Optional<Rating> existing = ratingRepository

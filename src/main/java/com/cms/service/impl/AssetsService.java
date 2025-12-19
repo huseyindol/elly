@@ -2,6 +2,7 @@ package com.cms.service.impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.entity.Assets;
@@ -20,6 +21,7 @@ public class AssetsService implements IAssetsService {
   private AssetsRepository assetsRepository;
 
   @Override
+  @Transactional
   public Assets saveAssets(Assets assets, MultipartFile file) {
     String path = fileService.saveFile(file, assets.getSubFolder());
     assets.setPath(path);
@@ -28,6 +30,7 @@ public class AssetsService implements IAssetsService {
   }
 
   @Override
+  @Transactional
   public Boolean deleteAssets(Long id) {
     if (assetsRepository.existsById(id)) {
       Assets assets = getAssetsById(id);

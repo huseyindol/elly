@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.entity.Banner;
 import com.cms.entity.Post;
@@ -30,6 +31,7 @@ public class WidgetService implements IWidgetService {
   private PostRepository postRepository;
 
   @Override
+  @Transactional
   public Widget saveWidget(Widget widget, List<Long> bannerIds, List<Long> postIds) {
     // WidgetTypeEnum validation
     WidgetTypeEnum widgetType = widget.getType();
@@ -56,6 +58,7 @@ public class WidgetService implements IWidgetService {
   }
 
   @Override
+  @Transactional
   public Boolean deleteWidget(Long id) {
     if (widgetRepository.existsById(id)) {
       widgetRepository.deleteById(id);

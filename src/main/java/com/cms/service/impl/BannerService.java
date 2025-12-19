@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.entity.Banner;
@@ -22,11 +23,13 @@ public class BannerService implements IBannerService {
   private IFileService fileService;
 
   @Override
+  @Transactional
   public Banner saveBanner(Banner banner) {
     return bannerRepository.save(banner);
   }
 
   @Override
+  @Transactional
   public Banner saveBannerWithImage(Banner banner, MultipartFile imageFile) {
     if (imageFile != null && !imageFile.isEmpty()) {
       // Eski dosyayı sil (update işlemi için)
@@ -49,6 +52,7 @@ public class BannerService implements IBannerService {
   }
 
   @Override
+  @Transactional
   public Boolean deleteBanner(Long id) {
     if (bannerRepository.existsById(id)) {
       // Banner silinmeden önce image dosyasını da sil

@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.entity.Post;
 import com.cms.exception.ResourceNotFoundException;
@@ -17,6 +18,7 @@ public class PostService implements IPostService {
   private PostRepository postRepository;
 
   @Override
+  @Transactional
   public Post savePost(Post post) {
     return postRepository.save(post);
   }
@@ -28,6 +30,7 @@ public class PostService implements IPostService {
   }
 
   @Override
+  @Transactional
   public Boolean deletePost(Long id) {
     if (postRepository.existsById(id)) {
       postRepository.deleteById(id);

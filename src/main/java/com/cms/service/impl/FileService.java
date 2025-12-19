@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.exception.BadRequestException;
@@ -23,6 +24,7 @@ public class FileService implements IFileService {
   private String uploadDirectoryFiles;
 
   @Override
+  @Transactional
   public String saveImage(MultipartFile file, String subfolder) {
     if (file == null || file.isEmpty()) {
       throw new BadRequestException("File is empty or null");
@@ -64,6 +66,7 @@ public class FileService implements IFileService {
   }
 
   @Override
+  @Transactional
   public void deleteImage(String filePath) {
     if (filePath == null || filePath.isEmpty()) {
       return;
@@ -83,6 +86,7 @@ public class FileService implements IFileService {
   }
 
   @Override
+  @Transactional
   public String saveFile(MultipartFile file, String subfolder) {
     if (file == null || file.isEmpty()) {
       throw new BadRequestException("File is empty or null");
@@ -118,6 +122,7 @@ public class FileService implements IFileService {
   }
 
   @Override
+  @Transactional
   public void deleteFile(String filePath) {
     try {
       // DB'deki yol: assets/images/... -> uploads/assets/images/...

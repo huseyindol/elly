@@ -15,6 +15,10 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -245,6 +249,40 @@ public class GlobalExceptionHandler {
         request.getRequestURI());
 
     return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+  }
+
+  /**
+   * Handle Spring Security Authentication exceptions
+   */
+  @ExceptionHandler(AuthenticationException.class)
+  public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex,
+      HttpServletRequest request) {
+    log.error("Authentication failed: {}", ex.getMessage());
+
+    String message = "Authentication failed";
+    String errorCode = "AUTHENTICATION_FAILED";
+    HttpStatus status = HttpStatus.UNAUTHORIZED;
+
+    if (ex instanceof BadCredentialsException) {
+      message = "Invalid username/email or password";
+      errorCode = "BAD_CREDENTIALS";
+    } else if (ex instanceof DisabledException) {
+      message = "User account is disabled";
+      errorCode = "ACCOUNT_DISABLED";
+    } else if (ex instanceof LockedException) {
+      message = "User account is locked";
+      errorCode = "ACCOUNT_LOCKED";
+    }
+
+    ErrorResponse errorResponse = ErrorResponse.of(
+        false,
+        status.value(),
+        status.getReasonPhrase(),
+        errorCode,
+        message,
+        request.getRequestURI());
+
+    return new ResponseEntity<>(errorResponse, status);
   }
 
   /**

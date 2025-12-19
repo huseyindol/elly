@@ -18,6 +18,7 @@ import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerIU;
 import com.cms.entity.Banner;
 import com.cms.entity.RootEntityResponse;
+import com.cms.exception.BadRequestException;
 import com.cms.mapper.BannerMapper;
 import com.cms.service.IBannerService;
 import com.cms.service.impl.BannerService;
@@ -42,7 +43,7 @@ public class BannerController extends BaseController implements IBannerControlle
       DtoBanner dtoBanner = bannerMapper.toDtoBanner(savedBanner);
       return ok(dtoBanner);
     } catch (Exception e) {
-      throw new RuntimeException("Banner not created" + e.getMessage());
+      throw new BadRequestException("Banner not created" + e.getMessage());
     }
   }
 
@@ -58,7 +59,7 @@ public class BannerController extends BaseController implements IBannerControlle
       DtoBanner dtoBanner = bannerMapper.toDtoBanner(savedBanner);
       return ok(dtoBanner);
     } catch (Exception e) {
-      throw new RuntimeException("Banner not updated" + e.getMessage());
+      throw new BadRequestException("Banner not updated" + e.getMessage());
     }
 
   }
@@ -70,7 +71,7 @@ public class BannerController extends BaseController implements IBannerControlle
     if (deleted) {
       return ok(deleted);
     }
-    return error("Banner not deleted");
+    throw new BadRequestException("Banner not deleted");
   }
 
   @Override

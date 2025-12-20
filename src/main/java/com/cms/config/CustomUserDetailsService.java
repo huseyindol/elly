@@ -22,9 +22,12 @@ public class CustomUserDetailsService implements UserDetailsService {
         .orElseGet(() -> userRepository.findByEmail(usernameOrEmail)
             .orElseThrow(() -> new UsernameNotFoundException("User not found: " + usernameOrEmail)));
 
+    // OAuth kullanıcıları için password null olabilir, bu durumda boş string kullan
+    String password = user.getPassword() != null ? user.getPassword() : "";
+
     return new org.springframework.security.core.userdetails.User(
         user.getUsername(),
-        user.getPassword(),
+        password,
         new ArrayList<>());
   }
 }

@@ -29,8 +29,14 @@ public class User extends BaseEntity {
   @Column(name = "email", nullable = false, unique = true)
   private String email;
 
-  @Column(name = "password", nullable = false)
-  private String password;
+  @Column(name = "password")
+  private String password; // OAuth kullanıcıları için null olabilir
+
+  @Column(name = "provider")
+  private String provider; // "local", "google", "facebook", "github", "x"
+
+  @Column(name = "provider_id")
+  private String providerId; // OAuth provider'dan gelen unique ID
 
   @Column(name = "first_name")
   private String firstName;

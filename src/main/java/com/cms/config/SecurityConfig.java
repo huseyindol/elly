@@ -25,6 +25,12 @@ public class SecurityConfig {
   @Autowired
   private JwtAuthenticationFilter jwtAuthenticationFilter;
 
+  @Autowired
+  private OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+
+  @Autowired
+  private CustomOAuth2UserService customOAuth2UserService;
+
   @Bean
   public PasswordEncoder passwordEncoder() {
     return new BCryptPasswordEncoder();
@@ -49,9 +55,15 @@ public class SecurityConfig {
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/v1/auth/**").permitAll()
+            .requestMatchers("/oauth2/**").permitAll()
+            .requestMatchers("/login/oauth2/**").permitAll()
             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
             .requestMatchers("/actuator/**").permitAll()
-            .anyRequest().authenticated());
+            .anyRequest().authenticated())
+        .oauth2Login(oauth2 -> oauth2
+            .successHandler(oAuth2AuthenticationSuccessHandler)
+            .userInfoEndpoint(userInfo -> userInfo
+                .userService(customOAuth2UserService)));
 
     http.authenticationProvider(authenticationProvider());
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -67,6 +67,7 @@ public class AuthService implements IAuthService {
     user.setPassword(passwordEncoder.encode(dtoRegister.getPassword()));
     user.setFirstName(dtoRegister.getFirstName());
     user.setLastName(dtoRegister.getLastName());
+    user.setProvider("local"); // Local kayıt için
     user.setIsActive(true);
 
     User savedUser = userRepository.save(user);

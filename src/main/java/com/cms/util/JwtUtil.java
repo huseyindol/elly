@@ -1,23 +1,28 @@
 package com.cms.util;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
-import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+import javax.crypto.SecretKey;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+
 @Component
 public class JwtUtil {
 
   @Value("${jwt.secret:mySecretKey123456789012345678901234567890}")
   private String secret;
+
+  @Value("${jwt.encryption.secret:myEncryptionKey123456789012345678901234567890}")
+  private String encryptionSecret;
 
   @Value("${jwt.expiration:86400000}")
   private Long expiration; // 24 saat (milisaniye cinsinden)
@@ -27,6 +32,28 @@ public class JwtUtil {
 
   private SecretKey getSigningKey() {
     return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private SecretKey getEncryptionKey() {
+    // AES-256-GCM için 256-bit (32 byte) key gerekiyor
+    // Eğer secret 32 byte'dan kısa ise, SHA-256 hash kullan
+    byte[] keyBytes = encryptionSecret.getBytes(StandardCharsets.UTF_8);
+    if (keyBytes.length < 32) {
+      // Key'i 32 byte'a uzatmak için SHA-256 hash kullan
+      try {
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        keyBytes = digest.digest(keyBytes);
+      } catch (java.security.NoSuchAlgorithmException e) {
+        throw new RuntimeException("SHA-256 algorithm not found", e);
+      }
+    } else if (keyBytes.length > 32) {
+      // Key'i 32 byte'a kısalt
+      byte[] truncated = new byte[32];
+      System.arraycopy(keyBytes, 0, truncated, 0, 32);
+      keyBytes = truncated;
+    }
+    // AES için javax.crypto.spec.SecretKeySpec kullanılmalı
+    return new javax.crypto.spec.SecretKeySpec(keyBytes, "AES");
   }
 
   public String extractUsername(String token) {
@@ -48,10 +75,11 @@ public class JwtUtil {
   }
 
   private Claims extractAllClaims(String token) {
+    // JWE (encrypted) token'ı decrypt et
     return Jwts.parser()
-        .verifyWith(getSigningKey())
+        .decryptWith(getEncryptionKey())
         .build()
-        .parseSignedClaims(token)
+        .parseEncryptedClaims(token)
         .getPayload();
   }
 
@@ -66,12 +94,14 @@ public class JwtUtil {
   }
 
   private String createToken(Map<String, Object> claims, String subject) {
+    // JWE (JSON Web Encryption) ile token'ı şifrele
+    // Direct key encryption için sadece encryption key ve algorithm belirtilir
     return Jwts.builder()
         .claims(claims)
         .subject(subject)
         .issuedAt(new Date(System.currentTimeMillis()))
         .expiration(new Date(System.currentTimeMillis() + expiration))
-        .signWith(getSigningKey())
+        .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
         .compact();
   }
 
@@ -88,12 +118,14 @@ public class JwtUtil {
   }
 
   private String createRefreshToken(Map<String, Object> claims, String subject) {
+    // JWE (JSON Web Encryption) ile refresh token'ı şifrele
+    // Direct key encryption için sadece encryption key ve algorithm belirtilir
     return Jwts.builder()
         .claims(claims)
         .subject(subject)
         .issuedAt(new Date(System.currentTimeMillis()))
         .expiration(new Date(System.currentTimeMillis() + refreshExpiration))
-        .signWith(getSigningKey())
+        .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
         .compact();
   }
 

@@ -178,10 +178,31 @@ public class AuthService implements IAuthService {
     // Yeni access token oluştur
     String newToken = jwtUtil.generateToken(user.getId(), user.getUsername());
 
+    // Eski refresh token'ı iptal et (Token Rotation için)
+    refreshToken.setIsRevoked(true);
+    refreshTokenRepository.save(refreshToken);
+
+    // Yeni refresh token oluştur (Token Rotation)
+    String newRefreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+
+    // Kullanıcının tüm eski refresh token'larını sil (unique constraint ihlalini
+    // önlemek için)
+    // Önce silme işlemini yap, sonra yeni token'ı kaydet
+    refreshTokenRepository.deleteByUserId(user.getId());
+    refreshTokenRepository.flush(); // Hemen commit et
+
+    // Yeni refresh token'ı kaydet
+    RefreshToken newRefreshToken = new RefreshToken();
+    newRefreshToken.setToken(newRefreshTokenString);
+    newRefreshToken.setUser(user);
+    newRefreshToken.setIsRevoked(false);
+    newRefreshToken.setExpiryDate(new Date(System.currentTimeMillis() + refreshTokenExpiration));
+    refreshTokenRepository.save(newRefreshToken);
+
     // Response oluştur
     DtoAuthResponse response = new DtoAuthResponse();
     response.setToken(newToken);
-    response.setRefreshToken(refreshTokenString); // Aynı refresh token'ı döndür
+    response.setRefreshToken(newRefreshTokenString); // Yeni refresh token döndür
     response.setUserId(user.getId());
     response.setUsername(user.getUsername());
     response.setEmail(user.getEmail());

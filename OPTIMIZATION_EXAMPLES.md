@@ -505,7 +505,7 @@ ORDER BY pg_relation_size(indexname::regclass) DESC;
 psql -U postgres -d neondb -f src/main/resources/db-performance-indexes.sql
 
 # Neon Cloud'da (psql ile)
-psql "postgresql://neondb_owner:npg_NExeW0baq3HB@ep-billowing-scene-adbekobg-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require" \
+psql "postgresql://xxx:yyy@zzz" \
   -f src/main/resources/db-performance-indexes.sql
 ```
 

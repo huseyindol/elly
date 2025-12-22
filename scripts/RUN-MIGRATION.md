@@ -51,7 +51,7 @@ Eğer yüklü değilse:
 ### Adım 2: Connection String ile bağlanın
 
 ```bash
-psql "postgresql://neondb_owner:npg_NExeW0baq3HB@ep-billowing-scene-adbekobg-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"
+psql "postgresql://xxx:yyy@zzz"
 ```
 
 ### Adım 3: Schema'yı seçin ve migration'ı çalıştırın

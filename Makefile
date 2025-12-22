@@ -231,7 +231,7 @@ perf-setup:
 db-perf:
 	@echo "🔧 Installing performance indexes..."
 	@if [ -f src/main/resources/db-performance-indexes.sql ]; then \
-		psql "postgresql://neondb_owner:npg_NExeW0baq3HB@ep-billowing-scene-adbekobg-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require" \
+		psql "postgresql://xxx:yyy@zzz" \
 			-f src/main/resources/db-performance-indexes.sql && \
 		echo "✅ Performance indexes installed!" || \
 		echo "❌ Failed to install indexes. Check connection and file."; \

@@ -15,6 +15,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import jakarta.servlet.http.HttpServletResponse;
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -59,11 +61,21 @@ public class SecurityConfig {
             .requestMatchers("/login/oauth2/**").permitAll()
             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
             .requestMatchers("/actuator/**").permitAll()
-            .anyRequest().authenticated())
+            .anyRequest().permitAll())
         .oauth2Login(oauth2 -> oauth2
+            .loginPage("/api/v1/auth/login") // OAuth2 login sayfasını devre dışı bırak, API endpoint'e yönlendir
             .successHandler(oAuth2AuthenticationSuccessHandler)
             .userInfoEndpoint(userInfo -> userInfo
-                .userService(customOAuth2UserService)));
+                .userService(customOAuth2UserService)))
+        .exceptionHandling(exceptions -> exceptions
+            .authenticationEntryPoint((request, response, authException) -> {
+              // OAuth2 login sayfası yerine 401 JSON response döndür
+              response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+              response.setContentType("application/json");
+              response.setCharacterEncoding("UTF-8");
+              response.getWriter().write(
+                  "{\"result\":false,\"status\":401,\"error\":\"Unauthorized\",\"errorCode\":\"AUTHENTICATION_REQUIRED\",\"message\":\"Authentication required\"}");
+            }));
 
     http.authenticationProvider(authenticationProvider());
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

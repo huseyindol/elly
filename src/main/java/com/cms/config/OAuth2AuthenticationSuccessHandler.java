@@ -57,8 +57,14 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     // Kullanıcıyı bul veya oluştur
     User user = findOrCreateUser(provider, providerId, email, firstName, lastName, username);
 
-    // JWT token oluştur
-    String token = jwtUtil.generateToken(user.getId(), user.getUsername());
+    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
+    // için)
+    Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+    user.setTokenVersion(currentVersion + 1);
+    user = userRepository.save(user);
+
+    // JWT token oluştur (güncel version ile)
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion());
     String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
 
     // Refresh token kaydet
@@ -218,4 +224,3 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     return username;
   }
 }
-

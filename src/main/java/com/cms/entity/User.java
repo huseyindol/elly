@@ -46,4 +46,7 @@ public class User extends BaseEntity {
 
   @Column(name = "is_active", nullable = false)
   private Boolean isActive = true;
+
+  @Column(name = "token_version", nullable = false)
+  private Long tokenVersion = 0L; // Token versioning için - yeni token alındığında artırılır
 }

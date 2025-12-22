@@ -72,8 +72,14 @@ public class AuthService implements IAuthService {
 
     User savedUser = userRepository.save(user);
 
-    // JWT token oluştur
-    String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername());
+    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
+    // için)
+    Long currentVersion = savedUser.getTokenVersion() != null ? savedUser.getTokenVersion() : 0L;
+    savedUser.setTokenVersion(currentVersion + 1);
+    savedUser = userRepository.save(savedUser);
+
+    // JWT token oluştur (güncel version ile)
+    String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername(), savedUser.getTokenVersion());
 
     // Refresh token oluştur ve kaydet
     String refreshTokenString = jwtUtil.generateRefreshToken(savedUser.getId(), savedUser.getUsername());
@@ -115,8 +121,14 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("User account is deactivated");
     }
 
-    // JWT token oluştur
-    String token = jwtUtil.generateToken(user.getId(), user.getUsername());
+    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
+    // için)
+    Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+    user.setTokenVersion(currentVersion + 1);
+    user = userRepository.save(user);
+
+    // JWT token oluştur (güncel version ile)
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion());
 
     // Refresh token oluştur
     String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
@@ -175,8 +187,14 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("User account is deactivated");
     }
 
-    // Yeni access token oluştur
-    String newToken = jwtUtil.generateToken(user.getId(), user.getUsername());
+    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
+    // için)
+    Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+    user.setTokenVersion(currentVersion + 1);
+    user = userRepository.save(user);
+
+    // Yeni access token oluştur (güncel version ile)
+    String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion());
 
     // Eski refresh token'ı iptal et (Token Rotation için)
     refreshToken.setIsRevoked(true);

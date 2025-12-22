@@ -48,5 +48,7 @@ logs/
 
 
 # Makefile
-QUICK_START_PERFORMANCE.md
+Makefile
+
+# Markdown files
 **/*.md

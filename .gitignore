@@ -49,3 +49,4 @@ logs/
 
 # Makefile
 QUICK_START_PERFORMANCE.md
+**/*.md

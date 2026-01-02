@@ -1,5 +1,7 @@
 package com.cms.controller;
 
+import java.util.List;
+
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.dto.DtoBanner;
@@ -14,4 +16,6 @@ public interface IBannerController {
   public RootEntityResponse<Boolean> deleteBanner(Long id);
 
   public RootEntityResponse<DtoBanner> getBannerById(Long id);
+
+  public RootEntityResponse<List<DtoBanner>> getAllBanners();
 }

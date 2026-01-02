@@ -1,5 +1,7 @@
 package com.cms.controller.impl;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -63,6 +65,14 @@ public class PostController extends BaseController implements IPostController {
     Post post = postService.getPostById(id);
     DtoPost dtoPost = postMapper.toDtoPost(post);
     return ok(dtoPost);
+  }
+
+  @Override
+  @GetMapping("/list")
+  public RootEntityResponse<List<DtoPost>> getAllPosts() {
+    List<Post> posts = postService.getAllPosts();
+    List<DtoPost> dtoPosts = postMapper.toDtoPostList(posts);
+    return ok(dtoPosts);
   }
 
 }

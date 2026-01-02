@@ -1,5 +1,7 @@
 package com.cms.mapper;
 
+import java.util.List;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.MappingTarget;
 
@@ -15,4 +17,5 @@ public interface WidgetMapper {
 
   void updateWidgetFromDto(DtoWidgetIU dtoWidgetIU, @MappingTarget Widget widget);
 
+  List<DtoWidget> toDtoWidgetList(List<Widget> widgets);
 }

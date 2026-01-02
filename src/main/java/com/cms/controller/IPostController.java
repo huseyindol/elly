@@ -1,5 +1,7 @@
 package com.cms.controller;
 
+import java.util.List;
+
 import com.cms.dto.DtoPost;
 import com.cms.dto.DtoPostIU;
 import com.cms.entity.RootEntityResponse;
@@ -13,4 +15,5 @@ public interface IPostController {
 
   RootEntityResponse<DtoPost> getPostById(Long id);
 
+  RootEntityResponse<List<DtoPost>> getAllPosts();
 }

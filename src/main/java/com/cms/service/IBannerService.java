@@ -18,4 +18,6 @@ public interface IBannerService {
   List<Banner> getBannersByComponentId(Long componentId);
 
   List<Banner> getBannersByWidgetId(Long widgetId);
+
+  List<Banner> getAllBanners();
 }

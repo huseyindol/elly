@@ -87,4 +87,9 @@ public class BannerService implements IBannerService {
     return java.util.Collections.emptyList();
   }
 
+  @Override
+  public List<Banner> getAllBanners() {
+    return bannerRepository.findAll();
+  }
+
 }

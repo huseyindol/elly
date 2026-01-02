@@ -1,5 +1,7 @@
 package com.cms.controller.impl;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -63,6 +65,14 @@ public class WidgetController extends BaseController implements IWidgetControlle
     Widget widget = widgetService.getWidgetById(id);
     DtoWidget dtoWidget = widgetMapper.toDtoWidget(widget);
     return ok(dtoWidget);
+  }
+
+  @Override
+  @GetMapping("/list")
+  public RootEntityResponse<List<DtoWidget>> getAllWidgets() {
+    List<Widget> widgets = widgetService.getAllWidgets();
+    List<DtoWidget> dtoWidgets = widgetMapper.toDtoWidgetList(widgets);
+    return ok(dtoWidgets);
   }
 
 }

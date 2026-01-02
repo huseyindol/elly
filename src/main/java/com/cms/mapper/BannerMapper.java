@@ -1,5 +1,7 @@
 package com.cms.mapper;
 
+import java.util.List;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
@@ -18,4 +20,5 @@ public interface BannerMapper {
   @Mapping(target = "image", ignore = true)
   void updateBannerFromDto(DtoBannerIU dtoBannerIU, @MappingTarget Banner banner);
 
+  List<DtoBanner> toDtoBannerList(List<Banner> banners);
 }

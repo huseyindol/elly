@@ -1,5 +1,7 @@
 package com.cms.controller.impl;
 
+import java.util.List;
+
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -80,6 +82,14 @@ public class BannerController extends BaseController implements IBannerControlle
     Banner banner = bannerService.getBannerById(id);
     DtoBanner dtoBanner = bannerMapper.toDtoBanner(banner);
     return ok(dtoBanner);
+  }
+
+  @Override
+  @GetMapping("/list")
+  public RootEntityResponse<List<DtoBanner>> getAllBanners() {
+    List<Banner> banners = bannerService.getAllBanners();
+    List<DtoBanner> dtoBanners = bannerMapper.toDtoBannerList(banners);
+    return ok(dtoBanners);
   }
 
 }

@@ -1,5 +1,7 @@
 package com.cms.mapper;
 
+import java.util.List;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.MappingTarget;
 
@@ -15,4 +17,5 @@ public interface PostMapper {
 
   void updatePostFromDto(DtoPostIU dtoPostIU, @MappingTarget Post post);
 
+  List<DtoPost> toDtoPostList(List<Post> posts);
 }

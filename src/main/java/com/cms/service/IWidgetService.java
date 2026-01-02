@@ -11,4 +11,6 @@ public interface IWidgetService {
 
   Widget getWidgetById(Long id);
 
+  List<Widget> getAllWidgets();
+
 }

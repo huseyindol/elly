@@ -73,4 +73,9 @@ public class WidgetService implements IWidgetService {
         .orElseThrow(() -> new ResourceNotFoundException("Widget", id));
   }
 
+  @Override
+  public List<Widget> getAllWidgets() {
+    return widgetRepository.findAll();
+  }
+
 }

@@ -25,6 +25,7 @@ import com.cms.repository.RefreshTokenRepository;
 import com.cms.repository.UserRepository;
 import com.cms.service.IAuthService;
 import com.cms.util.JwtUtil;
+import com.cms.util.UserUtil;
 
 @Service
 public class AuthService implements IAuthService {
@@ -39,13 +40,18 @@ public class AuthService implements IAuthService {
   private JwtUtil jwtUtil;
 
   @Autowired
+  private UserUtil userUtil;
+
+  @Autowired
   private AuthenticationManager authenticationManager;
 
   @Autowired
   private RefreshTokenRepository refreshTokenRepository;
 
-  @Value("${jwt.refresh.expiration:604800000}")
-  private Long refreshTokenExpiration; // 7 gün (milisaniye cinsinden)
+  @Value("${jwt.refresh.expiration:3600000}")
+  private Long refreshTokenExpiration;
+  @Value("${jwt.expiration:1800000}")
+  private Long accessTokenExpiration;
 
   @Override
   @Transactional
@@ -93,6 +99,8 @@ public class AuthService implements IAuthService {
     response.setUserId(savedUser.getId());
     response.setUsername(savedUser.getUsername());
     response.setEmail(savedUser.getEmail());
+    response.setUserCode(userUtil.generateUserCode(savedUser));
+    response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
 
     return response;
   }
@@ -152,6 +160,8 @@ public class AuthService implements IAuthService {
     response.setUserId(user.getId());
     response.setUsername(user.getUsername());
     response.setEmail(user.getEmail());
+    response.setUserCode(userUtil.generateUserCode(user));
+    response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
 
     return response;
   }
@@ -210,11 +220,7 @@ public class AuthService implements IAuthService {
     refreshTokenRepository.flush(); // Hemen commit et
 
     // Yeni refresh token'ı kaydet
-    RefreshToken newRefreshToken = new RefreshToken();
-    newRefreshToken.setToken(newRefreshTokenString);
-    newRefreshToken.setUser(user);
-    newRefreshToken.setIsRevoked(false);
-    newRefreshToken.setExpiryDate(new Date(System.currentTimeMillis() + refreshTokenExpiration));
+    RefreshToken newRefreshToken = createRefreshTokenEntity(user, newRefreshTokenString);
     refreshTokenRepository.save(newRefreshToken);
 
     // Response oluştur
@@ -224,6 +230,8 @@ public class AuthService implements IAuthService {
     response.setUserId(user.getId());
     response.setUsername(user.getUsername());
     response.setEmail(user.getEmail());
+    response.setUserCode(userUtil.generateUserCode(user));
+    response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
 
     return response;
   }

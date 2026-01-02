@@ -8,12 +8,15 @@ import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
 import com.cms.entity.RootEntityResponse;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 
 public interface IAuthController {
   RootEntityResponse<DtoAuthResponse> register(@Valid @RequestBody DtoRegister dtoRegister);
 
-  RootEntityResponse<DtoAuthResponse> login(@Valid @RequestBody DtoLogin dtoLogin);
+  RootEntityResponse<DtoAuthResponse> login(@Valid @RequestBody DtoLogin dtoLogin,
+      HttpServletResponse httpResponse);
 
-  RootEntityResponse<DtoAuthResponse> refreshToken(@Valid @RequestBody DtoRefreshToken dtoRefreshToken);
+  RootEntityResponse<DtoAuthResponse> refreshToken(@Valid @RequestBody DtoRefreshToken dtoRefreshToken,
+      HttpServletResponse httpResponse);
 }

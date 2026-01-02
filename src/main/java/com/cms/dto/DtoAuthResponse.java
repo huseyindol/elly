@@ -16,4 +16,6 @@ public class DtoAuthResponse {
   private Long userId;
   private String username;
   private String email;
+  private String userCode;
+  private Long expiredDate;
 }

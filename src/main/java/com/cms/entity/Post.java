@@ -28,7 +28,10 @@ import lombok.Setter;
 @AllArgsConstructor
 public class Post extends BaseEntity {
   private String title;
+
+  @Column(columnDefinition = "TEXT")
   private String content;
+
   @Column(name = "slug", nullable = false, unique = true)
   private String slug;
   private Integer orderIndex;

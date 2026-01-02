@@ -1,5 +1,7 @@
 package com.cms.service.impl;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,11 @@ public class PageService implements IPageService {
   public Page getPageById(Long id) {
     return pageRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Page", id));
+  }
+
+  @Override
+  public List<Page> getAllPages() {
+    return pageRepository.findAll();
   }
 
 }

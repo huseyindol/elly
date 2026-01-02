@@ -1,5 +1,7 @@
 package com.cms.mapper;
 
+import java.util.List;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
@@ -17,4 +19,6 @@ public interface PageMapper {
 
   @Mapping(target = "components", ignore = true)
   void updatePageFromDto(DtoPageIU dtoPageIU, @MappingTarget Page page);
+
+  List<DtoPage> toDtoPageList(List<Page> pages);
 }

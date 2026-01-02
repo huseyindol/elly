@@ -1,5 +1,7 @@
 package com.cms.controller;
 
+import java.util.List;
+
 import com.cms.dto.DtoComponent;
 import com.cms.dto.DtoComponentIU;
 import com.cms.entity.RootEntityResponse;
@@ -12,5 +14,7 @@ public interface IComponentController {
   RootEntityResponse<Boolean> deleteComponent(Long id);
 
   RootEntityResponse<DtoComponent> getComponentById(Long id);
+
+  RootEntityResponse<List<DtoComponent>> getAllComponents();
 
 }

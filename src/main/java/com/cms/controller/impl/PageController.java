@@ -1,5 +1,7 @@
 package com.cms.controller.impl;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -63,5 +65,13 @@ public class PageController extends BaseController implements IPageController {
     Page pageBySlug = pageService.getPageBySlug(slug);
     DtoPage dtoPage = pageMapper.toDtoPage(pageBySlug);
     return ok(dtoPage);
+  }
+
+  @Override
+  @GetMapping("/list")
+  public RootEntityResponse<List<DtoPage>> getAllPages() {
+    List<Page> pages = pageService.getAllPages();
+    List<DtoPage> dtoPages = pageMapper.toDtoPageList(pages);
+    return ok(dtoPages);
   }
 }

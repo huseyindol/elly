@@ -84,4 +84,9 @@ public class ComponentService implements IComponentService {
         .orElseThrow(() -> new ResourceNotFoundException("Component", id));
   }
 
+  @Override
+  public List<Component> getAllComponents() {
+    return componentRepository.findAll();
+  }
+
 }

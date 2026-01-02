@@ -1,5 +1,7 @@
 package com.cms.controller.impl;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,6 +68,14 @@ public class ComponentController extends BaseController implements IComponentCon
     Component component = componentService.getComponentById(id);
     DtoComponent dtoComponent = componentMapper.toDtoComponent(component);
     return ok(dtoComponent);
+  }
+
+  @Override
+  @GetMapping("/list")
+  public RootEntityResponse<List<DtoComponent>> getAllComponents() {
+    List<Component> components = componentService.getAllComponents();
+    List<DtoComponent> dtoComponents = componentMapper.toDtoComponentList(components);
+    return ok(dtoComponents);
   }
 
 }

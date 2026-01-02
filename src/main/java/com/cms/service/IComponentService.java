@@ -11,4 +11,6 @@ public interface IComponentService {
 
   Component getComponentById(Long id);
 
+  List<Component> getAllComponents();
+
 }

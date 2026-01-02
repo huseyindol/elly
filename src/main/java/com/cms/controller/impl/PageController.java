@@ -71,7 +71,7 @@ public class PageController extends BaseController implements IPageController {
   @GetMapping("/list")
   public RootEntityResponse<List<DtoPage>> getAllPages() {
     List<Page> pages = pageService.getAllPages();
-    List<DtoPage> dtoPages = pageMapper.toDtoPageList(pages);
+    List<DtoPage> dtoPages = pageMapper.toDtoPageListSimple(pages);
     return ok(dtoPages);
   }
 }

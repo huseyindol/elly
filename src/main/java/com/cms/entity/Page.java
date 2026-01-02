@@ -1,6 +1,7 @@
 package com.cms.entity;
 
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
@@ -40,5 +41,5 @@ public class Page extends BaseEntity {
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "page_components", joinColumns = @JoinColumn(name = "page_id"), inverseJoinColumns = @JoinColumn(name = "component_id"))
   @OrderBy("orderIndex")
-  private List<Component> components;
+  private Set<Component> components = new LinkedHashSet<>();
 }

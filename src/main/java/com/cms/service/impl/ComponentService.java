@@ -1,7 +1,8 @@
 package com.cms.service.impl;
 
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -48,22 +49,22 @@ public class ComponentService implements IComponentService {
     }
 
     if (pageIds != null && !pageIds.isEmpty()) {
-      List<Page> pages = pageRepository.findAllById(pageIds);
+      Set<Page> pages = new HashSet<>(pageRepository.findAllById(pageIds));
       component.setPages(pages);
     } else {
-      component.setPages(new ArrayList<>());
+      component.setPages(new HashSet<>());
     }
     if (bannerIds != null && !bannerIds.isEmpty()) {
-      List<Banner> banners = bannerRepository.findAllById(bannerIds);
+      Set<Banner> banners = new HashSet<>(bannerRepository.findAllById(bannerIds));
       component.setBanners(banners);
     } else {
-      component.setBanners(new ArrayList<>());
+      component.setBanners(new HashSet<>());
     }
     if (widgetIds != null && !widgetIds.isEmpty()) {
-      List<Widget> widgets = widgetRepository.findAllById(widgetIds);
+      Set<Widget> widgets = new HashSet<>(widgetRepository.findAllById(widgetIds));
       component.setWidgets(widgets);
     } else {
-      component.setWidgets(new ArrayList<>());
+      component.setWidgets(new HashSet<>());
     }
     return componentRepository.save(component);
   }
@@ -86,7 +87,7 @@ public class ComponentService implements IComponentService {
 
   @Override
   public List<Component> getAllComponents() {
-    return componentRepository.findAll();
+    return componentRepository.findAllWithRelations();
   }
 
 }

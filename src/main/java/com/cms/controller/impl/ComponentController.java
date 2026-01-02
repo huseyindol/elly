@@ -74,7 +74,7 @@ public class ComponentController extends BaseController implements IComponentCon
   @GetMapping("/list")
   public RootEntityResponse<List<DtoComponent>> getAllComponents() {
     List<Component> components = componentService.getAllComponents();
-    List<DtoComponent> dtoComponents = componentMapper.toDtoComponentList(components);
+    List<DtoComponent> dtoComponents = componentMapper.toDtoComponentListSimple(components);
     return ok(dtoComponents);
   }
 

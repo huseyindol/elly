@@ -1,7 +1,8 @@
 package com.cms.service.impl;
 
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -43,16 +44,16 @@ public class WidgetService implements IWidgetService {
     }
 
     if (bannerIds != null && !bannerIds.isEmpty()) {
-      List<Banner> banners = bannerRepository.findAllById(bannerIds);
+      Set<Banner> banners = new HashSet<>(bannerRepository.findAllById(bannerIds));
       widget.setBanners(banners);
     } else {
-      widget.setBanners(new ArrayList<>());
+      widget.setBanners(new HashSet<>());
     }
     if (postIds != null && !postIds.isEmpty()) {
-      List<Post> posts = postRepository.findAllById(postIds);
+      Set<Post> posts = new HashSet<>(postRepository.findAllById(postIds));
       widget.setPosts(posts);
     } else {
-      widget.setPosts(new ArrayList<>());
+      widget.setPosts(new HashSet<>());
     }
     return widgetRepository.save(widget);
   }
@@ -75,7 +76,7 @@ public class WidgetService implements IWidgetService {
 
   @Override
   public List<Widget> getAllWidgets() {
-    return widgetRepository.findAll();
+    return widgetRepository.findAllWithRelations();
   }
 
 }

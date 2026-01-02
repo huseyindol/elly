@@ -71,7 +71,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
   @GetMapping("/list")
   public RootEntityResponse<List<DtoWidget>> getAllWidgets() {
     List<Widget> widgets = widgetService.getAllWidgets();
-    List<DtoWidget> dtoWidgets = widgetMapper.toDtoWidgetList(widgets);
+    List<DtoWidget> dtoWidgets = widgetMapper.toDtoWidgetListSimple(widgets);
     return ok(dtoWidgets);
   }
 

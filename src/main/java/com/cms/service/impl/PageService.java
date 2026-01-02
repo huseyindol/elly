@@ -47,7 +47,7 @@ public class PageService implements IPageService {
 
   @Override
   public List<Page> getAllPages() {
-    return pageRepository.findAll();
+    return pageRepository.findAllWithRelations();
   }
 
 }

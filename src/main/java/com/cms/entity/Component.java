@@ -1,6 +1,7 @@
 package com.cms.entity;
 
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import com.cms.enums.ComponentTypeEnum;
 
@@ -42,17 +43,17 @@ public class Component extends BaseEntity {
 
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "page_components", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "page_id"))
-  private List<Page> pages;
+  private Set<Page> pages = new LinkedHashSet<>();
 
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "component_banners", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "banner_id"))
   @OrderBy("orderIndex")
-  private List<Banner> banners;
+  private Set<Banner> banners = new LinkedHashSet<>();
 
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "component_widgets", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "widget_id"))
   @OrderBy("orderIndex")
-  private List<Widget> widgets;
+  private Set<Widget> widgets = new LinkedHashSet<>();
 
   @PrePersist
   @PreUpdate

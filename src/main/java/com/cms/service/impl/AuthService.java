@@ -5,10 +5,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.cms.config.CustomUserDetailsService;
 
 import java.util.Date;
 
@@ -20,7 +21,6 @@ import com.cms.entity.RefreshToken;
 import com.cms.entity.User;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
-import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.RefreshTokenRepository;
 import com.cms.repository.UserRepository;
 import com.cms.service.IAuthService;
@@ -114,17 +114,13 @@ public class AuthService implements IAuthService {
             dtoLogin.getUsernameOrEmail(),
             dtoLogin.getPassword()));
 
-    // User bilgilerini al
-    // CustomUserDetailsService her zaman username döndürür, bu yüzden direkt
-    // username ile arama yapabiliriz
-    UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-    String username = userDetails.getUsername();
+    // User bilgilerini authentication'dan al (tekrar sorgu yapmadan)
+    CustomUserDetailsService.CustomUserPrincipal principal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+        .getPrincipal();
+    User user = principal.getUser();
 
-    // Username ile user'ı bul (CustomUserDetailsService zaten username döndürüyor)
-    User user = userRepository.findByUsername(username)
-        .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
-
-    // Kullanıcı aktif mi kontrol et
+    // Kullanıcı aktif mi kontrol et (CustomUserPrincipal.isEnabled() ile de kontrol
+    // ediliyor)
     if (!user.getIsActive()) {
       throw new BadRequestException("User account is deactivated");
     }

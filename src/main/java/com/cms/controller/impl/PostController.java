@@ -71,7 +71,7 @@ public class PostController extends BaseController implements IPostController {
   @GetMapping("/list")
   public RootEntityResponse<List<DtoPost>> getAllPosts() {
     List<Post> posts = postService.getAllPosts();
-    List<DtoPost> dtoPosts = postMapper.toDtoPostList(posts);
+    List<DtoPost> dtoPosts = postMapper.toDtoPostListSimple(posts);
     return ok(dtoPosts);
   }
 

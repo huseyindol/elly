@@ -1,6 +1,7 @@
 package com.cms.entity;
 
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 import com.cms.enums.WidgetTypeEnum;
 
@@ -43,12 +44,12 @@ public class Widget extends BaseEntity {
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "widget_banners", joinColumns = @JoinColumn(name = "widget_id"), inverseJoinColumns = @JoinColumn(name = "banner_id"))
   @OrderBy("orderIndex")
-  private List<Banner> banners;
+  private Set<Banner> banners = new LinkedHashSet<>();
 
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "widget_posts", joinColumns = @JoinColumn(name = "widget_id"), inverseJoinColumns = @JoinColumn(name = "post_id"))
   @OrderBy("orderIndex")
-  private List<Post> posts;
+  private Set<Post> posts = new LinkedHashSet<>();
 
   @PrePersist
   @PreUpdate

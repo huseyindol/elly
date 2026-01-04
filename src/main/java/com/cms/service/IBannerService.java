@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.web.multipart.MultipartFile;
 
+import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.Banner;
 
 public interface IBannerService {
@@ -20,4 +21,6 @@ public interface IBannerService {
   List<Banner> getBannersByWidgetId(Long widgetId);
 
   List<Banner> getAllBanners();
+
+  List<DtoBannerSummary> getAllBannersWithSummary();
 }

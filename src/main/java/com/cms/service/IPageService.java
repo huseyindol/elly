@@ -2,6 +2,7 @@ package com.cms.service;
 
 import java.util.List;
 
+import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
 
 public interface IPageService {
@@ -14,4 +15,6 @@ public interface IPageService {
   Page getPageById(Long id);
 
   List<Page> getAllPages();
+
+  List<DtoPageSummary> getAllPageSummary();
 }

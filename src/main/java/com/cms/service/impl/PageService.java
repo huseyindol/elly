@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.PageRepository;
@@ -48,6 +49,12 @@ public class PageService implements IPageService {
   @Override
   public List<Page> getAllPages() {
     return pageRepository.findAllWithRelations();
+  }
+
+  @Override
+  public List<DtoPageSummary> getAllPageSummary() {
+    List<DtoPageSummary> pageSummary = pageRepository.findAllWithSummary();
+    return pageSummary;
   }
 
 }

@@ -2,6 +2,7 @@ package com.cms.service;
 
 import java.util.List;
 
+import com.cms.dto.DtoWidgetSummary;
 import com.cms.entity.Widget;
 
 public interface IWidgetService {
@@ -12,5 +13,7 @@ public interface IWidgetService {
   Widget getWidgetById(Long id);
 
   List<Widget> getAllWidgets();
+
+  List<DtoWidgetSummary> getAllWidgetsSummary();
 
 }

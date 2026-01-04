@@ -2,6 +2,7 @@ package com.cms.service;
 
 import java.util.List;
 
+import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.Component;
 
 public interface IComponentService {
@@ -12,5 +13,7 @@ public interface IComponentService {
   Component getComponentById(Long id);
 
   List<Component> getAllComponents();
+
+  List<DtoComponentSummary> getAllComponentsSummary();
 
 }

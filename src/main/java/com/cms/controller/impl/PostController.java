@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.controller.IPostController;
 import com.cms.dto.DtoPost;
 import com.cms.dto.DtoPostIU;
+import com.cms.dto.DtoPostSummary;
 import com.cms.entity.Post;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.PostMapper;
@@ -73,6 +74,13 @@ public class PostController extends BaseController implements IPostController {
     List<Post> posts = postService.getAllPosts();
     List<DtoPost> dtoPosts = postMapper.toDtoPostListSimple(posts);
     return ok(dtoPosts);
+  }
+
+  @Override
+  @GetMapping("/list/summary")
+  public RootEntityResponse<List<DtoPostSummary>> getAllPostsSummary() {
+    List<DtoPostSummary> posts = postService.getAllPostsSummary();
+    return ok(posts);
   }
 
 }

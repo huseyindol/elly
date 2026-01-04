@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.controller.IWidgetController;
 import com.cms.dto.DtoWidget;
 import com.cms.dto.DtoWidgetIU;
+import com.cms.dto.DtoWidgetSummary;
 import com.cms.entity.RootEntityResponse;
 import com.cms.entity.Widget;
 import com.cms.mapper.WidgetMapper;
@@ -73,6 +74,13 @@ public class WidgetController extends BaseController implements IWidgetControlle
     List<Widget> widgets = widgetService.getAllWidgets();
     List<DtoWidget> dtoWidgets = widgetMapper.toDtoWidgetListSimple(widgets);
     return ok(dtoWidgets);
+  }
+
+  @Override
+  @GetMapping("/list/summary")
+  public RootEntityResponse<List<DtoWidgetSummary>> getAllWidgetsSummary() {
+    List<DtoWidgetSummary> dtoWidgetSummaries = widgetService.getAllWidgetsSummary();
+    return ok(dtoWidgetSummaries);
   }
 
 }

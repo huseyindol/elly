@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.cms.controller.IBannerController;
 import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerIU;
+import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.Banner;
 import com.cms.entity.RootEntityResponse;
 import com.cms.exception.BadRequestException;
@@ -90,6 +91,13 @@ public class BannerController extends BaseController implements IBannerControlle
     List<Banner> banners = bannerService.getAllBanners();
     List<DtoBanner> dtoBanners = bannerMapper.toDtoBannerList(banners);
     return ok(dtoBanners);
+  }
+
+  @Override
+  @GetMapping("/list/summary")
+  public RootEntityResponse<List<DtoBannerSummary>> getAllBannersWithSummary() {
+    List<DtoBannerSummary> dtoBannerSummaries = bannerService.getAllBannersWithSummary();
+    return ok(dtoBannerSummaries);
   }
 
 }

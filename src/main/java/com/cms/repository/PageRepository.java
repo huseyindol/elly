@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.lang.NonNull;
 
+import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
 
 public interface PageRepository extends JpaRepository<Page, Long> {
@@ -22,4 +23,7 @@ public interface PageRepository extends JpaRepository<Page, Long> {
   @Query("SELECT p FROM Page p")
   @EntityGraph(attributePaths = { "seoInfo" })
   List<Page> findAllWithRelations();
+
+  @Query("SELECT new com.cms.dto.DtoPageSummary(p.id, p.title, p.slug, p.status) FROM Page p")
+  List<DtoPageSummary> findAllWithSummary();
 }

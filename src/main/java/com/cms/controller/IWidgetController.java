@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.cms.dto.DtoWidget;
 import com.cms.dto.DtoWidgetIU;
+import com.cms.dto.DtoWidgetSummary;
 import com.cms.entity.RootEntityResponse;
 
 public interface IWidgetController {
@@ -16,4 +17,6 @@ public interface IWidgetController {
   RootEntityResponse<DtoWidget> getWidgetById(Long id);
 
   RootEntityResponse<List<DtoWidget>> getAllWidgets();
+
+  RootEntityResponse<List<DtoWidgetSummary>> getAllWidgetsSummary();
 }

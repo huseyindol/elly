@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cms.dto.DtoPostSummary;
 import com.cms.entity.Post;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.PostRepository;
@@ -42,6 +43,11 @@ public class PostService implements IPostService {
   @Override
   public List<Post> getAllPosts() {
     return postRepository.findAllWithRelations();
+  }
+
+  @Override
+  public List<DtoPostSummary> getAllPostsSummary() {
+    return postRepository.findAllWithSummary();
   }
 
 }

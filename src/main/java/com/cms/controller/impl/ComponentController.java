@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.controller.IComponentController;
 import com.cms.dto.DtoComponent;
 import com.cms.dto.DtoComponentIU;
+import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.Component;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.ComponentMapper;
@@ -76,6 +77,13 @@ public class ComponentController extends BaseController implements IComponentCon
     List<Component> components = componentService.getAllComponents();
     List<DtoComponent> dtoComponents = componentMapper.toDtoComponentListSimple(components);
     return ok(dtoComponents);
+  }
+
+  @Override
+  @GetMapping("/list/summary")
+  public RootEntityResponse<List<DtoComponentSummary>> getAllComponentsSummary() {
+    List<DtoComponentSummary> dtoComponentSummary = componentService.getAllComponentsSummary();
+    return ok(dtoComponentSummary);
   }
 
 }

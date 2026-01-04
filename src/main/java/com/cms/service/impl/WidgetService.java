@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cms.dto.DtoWidgetSummary;
 import com.cms.entity.Banner;
 import com.cms.entity.Post;
 import com.cms.entity.Widget;
@@ -77,6 +78,11 @@ public class WidgetService implements IWidgetService {
   @Override
   public List<Widget> getAllWidgets() {
     return widgetRepository.findAllWithRelations();
+  }
+
+  @Override
+  public List<DtoWidgetSummary> getAllWidgetsSummary() {
+    return widgetRepository.findAllWithSummary();
   }
 
 }

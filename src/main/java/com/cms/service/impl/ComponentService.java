@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.Banner;
 import com.cms.entity.Component;
 import com.cms.entity.Page;
@@ -88,6 +89,11 @@ public class ComponentService implements IComponentService {
   @Override
   public List<Component> getAllComponents() {
     return componentRepository.findAllWithRelations();
+  }
+
+  @Override
+  public List<DtoComponentSummary> getAllComponentsSummary() {
+    return componentRepository.findAllWithSummary();
   }
 
 }

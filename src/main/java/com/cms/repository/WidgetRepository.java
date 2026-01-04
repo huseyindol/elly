@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.lang.NonNull;
 
+import com.cms.dto.DtoWidgetSummary;
 import com.cms.entity.Widget;
 
 public interface WidgetRepository extends JpaRepository<Widget, Long> {
@@ -19,4 +20,7 @@ public interface WidgetRepository extends JpaRepository<Widget, Long> {
   @Query("SELECT w FROM Widget w")
   @EntityGraph(attributePaths = { "banners", "posts" })
   List<Widget> findAllWithRelations();
+
+  @Query("SELECT new com.cms.dto.DtoWidgetSummary(w.id, w.name, w.type, w.orderIndex, w.status) FROM Widget w")
+  List<DtoWidgetSummary> findAllWithSummary();
 }

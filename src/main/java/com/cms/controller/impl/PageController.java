@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.controller.IPageController;
 import com.cms.dto.DtoPage;
 import com.cms.dto.DtoPageIU;
+import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.PageMapper;
@@ -73,5 +74,12 @@ public class PageController extends BaseController implements IPageController {
     List<Page> pages = pageService.getAllPages();
     List<DtoPage> dtoPages = pageMapper.toDtoPageListSimple(pages);
     return ok(dtoPages);
+  }
+
+  @Override
+  @GetMapping("/list/summary")
+  public RootEntityResponse<List<DtoPageSummary>> getAllPageSummary() {
+    List<DtoPageSummary> pages = pageService.getAllPageSummary();
+    return ok(pages);
   }
 }

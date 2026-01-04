@@ -10,6 +10,7 @@ import org.mapstruct.Named;
 
 import com.cms.dto.DtoPage;
 import com.cms.dto.DtoPageIU;
+import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
 
 @Mapper(componentModel = "spring", uses = ComponentMapper.class)
@@ -31,4 +32,6 @@ public interface PageMapper {
 
   @IterableMapping(qualifiedByName = "toDtoPageSimple")
   List<DtoPage> toDtoPageListSimple(List<Page> pages);
+
+  List<DtoPageSummary> toDtoPageSummaryList(List<Page> pages);
 }

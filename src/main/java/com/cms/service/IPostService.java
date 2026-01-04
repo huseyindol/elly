@@ -2,6 +2,7 @@ package com.cms.service;
 
 import java.util.List;
 
+import com.cms.dto.DtoPostSummary;
 import com.cms.entity.Post;
 
 public interface IPostService {
@@ -12,4 +13,6 @@ public interface IPostService {
   Boolean deletePost(Long id);
 
   List<Post> getAllPosts();
+
+  List<DtoPostSummary> getAllPostsSummary();
 }

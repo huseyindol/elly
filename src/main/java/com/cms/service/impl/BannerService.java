@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.Banner;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.BannerRepository;
@@ -90,6 +91,11 @@ public class BannerService implements IBannerService {
   @Override
   public List<Banner> getAllBanners() {
     return bannerRepository.findAll();
+  }
+
+  @Override
+  public List<DtoBannerSummary> getAllBannersWithSummary() {
+    return bannerRepository.findAllWithSummary();
   }
 
 }

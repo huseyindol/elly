@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.cms.dto.DtoComponent;
 import com.cms.dto.DtoComponentIU;
+import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.RootEntityResponse;
 
 public interface IComponentController {
@@ -16,5 +17,7 @@ public interface IComponentController {
   RootEntityResponse<DtoComponent> getComponentById(Long id);
 
   RootEntityResponse<List<DtoComponent>> getAllComponents();
+
+  RootEntityResponse<List<DtoComponentSummary>> getAllComponentsSummary();
 
 }

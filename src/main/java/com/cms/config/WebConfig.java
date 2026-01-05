@@ -23,11 +23,11 @@ public class WebConfig implements WebMvcConfigurer {
             "http://elly-639969822644.europe-west1.run.app",
             "http://elly-bw5r3k32la-ew.a.run.app",
             "http://api.huseyindol.site",
-            "http://huseyindol.site",
+            "http://www.huseyindol.site",
             "https://elly-639969822644.europe-west1.run.app",
             "https://elly-bw5r3k32la-ew.a.run.app",
             "https://api.huseyindol.site",
-            "https://huseyindol.site")
+            "https://www.huseyindol.site")
         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
         .allowedHeaders("*")
         .exposedHeaders("Authorization", "Content-Type")

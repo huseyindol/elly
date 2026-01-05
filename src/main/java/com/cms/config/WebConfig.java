@@ -17,8 +17,17 @@ public class WebConfig implements WebMvcConfigurer {
   @Override
   public void addCorsMappings(@NonNull CorsRegistry registry) {
     registry.addMapping("/**")
-        .allowedOrigins("http://localhost:3000", "http://localhost:8080", "http://localhost:5173",
-            "https://elly-639969822644.europe-west1.run.app", "https://api.huseyindol.site", "https://huseyindol.site")
+        .allowedOrigins("http://localhost:3000",
+            "http://localhost:8080",
+            "http://localhost:5173",
+            "http://elly-639969822644.europe-west1.run.app",
+            "http://elly-bw5r3k32la-ew.a.run.app",
+            "http://api.huseyindol.site",
+            "http://huseyindol.site",
+            "https://elly-639969822644.europe-west1.run.app",
+            "https://elly-bw5r3k32la-ew.a.run.app",
+            "https://api.huseyindol.site",
+            "https://huseyindol.site")
         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
         .allowedHeaders("*")
         .exposedHeaders("Authorization", "Content-Type")

@@ -60,8 +60,16 @@ public class SecurityConfig {
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration configuration = new CorsConfiguration();
     configuration
-        .setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:8080", "http://localhost:5173",
-            "https://elly-639969822644.europe-west1.run.app", "https://api.huseyindol.site",
+        .setAllowedOrigins(Arrays.asList("http://localhost:3000",
+            "http://localhost:8080",
+            "http://localhost:5173",
+            "http://elly-639969822644.europe-west1.run.app",
+            "http://elly-bw5r3k32la-ew.a.run.app",
+            "http://api.huseyindol.site",
+            "http://huseyindol.site",
+            "https://elly-639969822644.europe-west1.run.app",
+            "https://elly-bw5r3k32la-ew.a.run.app",
+            "https://api.huseyindol.site",
             "https://huseyindol.site"));
     configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
     configuration.setAllowedHeaders(Collections.singletonList("*"));

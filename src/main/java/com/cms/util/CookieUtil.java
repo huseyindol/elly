@@ -34,6 +34,9 @@ public class CookieUtil {
     response.addCookie(cookie);
   }
 
+  @Autowired
+  private org.springframework.core.env.Environment environment;
+
   /**
    * Cookie oluşturur ve response'a ekler
    * 
@@ -49,19 +52,42 @@ public class CookieUtil {
       int maxAgeSeconds, boolean httpOnly, boolean secure, String path) {
     ZonedDateTime expiration = ZonedDateTime.now(applicationZoneId).plusSeconds(maxAgeSeconds);
 
-    String cookieString = String.format("%s=%s; Path=%s; Max-Age=%d; Expires=%s",
+    // Aktif profili kontrol et (null check ekle)
+    String[] activeProfiles = environment.getActiveProfiles();
+    boolean isLocal = activeProfiles.length == 0 || java.util.Arrays.asList(activeProfiles).contains("local")
+        || java.util.Arrays.asList(activeProfiles).contains("dev");
+
+    // Local ortamda SameSite=None kullan (cross-origin çalışması için)
+    // Production ortamda domain belirt (.huseyindol.site) ve SameSite=Lax/Strict
+    // kullan
+
+    StringBuilder cookieBuilder = new StringBuilder();
+    cookieBuilder.append(String.format("%s=%s; Path=%s; Max-Age=%d; Expires=%s",
         cookieName, cookieValue, path, maxAgeSeconds,
-        expiration.format(DateTimeFormatter.RFC_1123_DATE_TIME));
+        expiration.format(DateTimeFormatter.RFC_1123_DATE_TIME)));
+
+    if (!isLocal) {
+      cookieBuilder.append("; Domain=.huseyindol.site");
+    }
 
     if (httpOnly) {
-      cookieString += "; HttpOnly";
+      cookieBuilder.append("; HttpOnly");
     }
     if (secure) {
-      cookieString += "; Secure";
+      cookieBuilder.append("; Secure");
     }
-    cookieString += "; SameSite=Strict";
 
-    response.addHeader("Set-Cookie", cookieString);
+    // Localde frontend (localhost:3000) backend'e (remote) bağlanıyorsa
+    // SameSite=None şart
+    // Ancak backend de localdeyse Strict olabilir.
+    // Kullanıcının senaryosu: Local Frontend -> Remote Backend gibi duruyor.
+    if (isLocal) {
+      cookieBuilder.append("; SameSite=Strict");
+    } else {
+      cookieBuilder.append("; SameSite=Lax"); // Subdomain paylaşımı için Lax daha güvenli ve uyumlu
+    }
+
+    response.addHeader("Set-Cookie", cookieBuilder.toString());
   }
 
   /**

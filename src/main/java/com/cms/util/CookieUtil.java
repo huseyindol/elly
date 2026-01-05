@@ -59,7 +59,7 @@ public class CookieUtil {
     if (secure) {
       cookieString += "; Secure";
     }
-    cookieString += "; SameSite=Strict";
+    cookieString += "; SameSite=None";
 
     response.addHeader("Set-Cookie", cookieString);
   }

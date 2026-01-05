@@ -3,6 +3,8 @@ package com.cms.service.impl;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,11 +22,13 @@ public class PostService implements IPostService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "posts", allEntries = true)
   public Post savePost(Post post) {
     return postRepository.save(post);
   }
 
   @Override
+  @Cacheable(value = "posts", key = "#id")
   public Post getPostById(Long id) {
     return postRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Post", id));
@@ -32,6 +36,7 @@ public class PostService implements IPostService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "posts", allEntries = true)
   public Boolean deletePost(Long id) {
     if (postRepository.existsById(id)) {
       postRepository.deleteById(id);
@@ -41,11 +46,13 @@ public class PostService implements IPostService {
   }
 
   @Override
+  @Cacheable(value = "posts", key = "'getAllPosts'")
   public List<Post> getAllPosts() {
     return postRepository.findAllWithRelations();
   }
 
   @Override
+  @Cacheable(value = "posts", key = "'getAllPostsSummary'")
   public List<DtoPostSummary> getAllPostsSummary() {
     return postRepository.findAllWithSummary();
   }

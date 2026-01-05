@@ -5,6 +5,8 @@ import java.util.Set;
 
 import com.cms.enums.ComponentTypeEnum;
 
+import org.hibernate.annotations.BatchSize;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -48,11 +50,13 @@ public class Component extends BaseEntity {
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "component_banners", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "banner_id"))
   @OrderBy("orderIndex")
+  @BatchSize(size = 20)
   private Set<Banner> banners = new LinkedHashSet<>();
 
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "component_widgets", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "widget_id"))
   @OrderBy("orderIndex")
+  @BatchSize(size = 20)
   private Set<Widget> widgets = new LinkedHashSet<>();
 
   @PrePersist

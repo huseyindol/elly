@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +36,7 @@ public class WidgetService implements IWidgetService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "widgets", allEntries = true)
   public Widget saveWidget(Widget widget, List<Long> bannerIds, List<Long> postIds) {
     // WidgetTypeEnum validation
     WidgetTypeEnum widgetType = widget.getType();
@@ -61,6 +64,7 @@ public class WidgetService implements IWidgetService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "widgets", allEntries = true)
   public Boolean deleteWidget(Long id) {
     if (widgetRepository.existsById(id)) {
       widgetRepository.deleteById(id);
@@ -70,17 +74,20 @@ public class WidgetService implements IWidgetService {
   }
 
   @Override
+  @Cacheable(value = "widgets", key = "#id")
   public Widget getWidgetById(Long id) {
     return widgetRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Widget", id));
   }
 
   @Override
+  @Cacheable(value = "widgets", key = "'getAllWidgets'")
   public List<Widget> getAllWidgets() {
     return widgetRepository.findAllWithRelations();
   }
 
   @Override
+  @Cacheable(value = "widgets", key = "'getAllWidgetsSummary'")
   public List<DtoWidgetSummary> getAllWidgetsSummary() {
     return widgetRepository.findAllWithSummary();
   }

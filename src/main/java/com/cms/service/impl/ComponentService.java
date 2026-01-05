@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,7 @@ public class ComponentService implements IComponentService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "components", allEntries = true)
   public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds) {
     // ComponentTypeEnum validation
     ComponentTypeEnum componentType = component.getType();
@@ -72,6 +75,7 @@ public class ComponentService implements IComponentService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "components", allEntries = true)
   public Boolean deleteComponent(Long id) {
     if (componentRepository.existsById(id)) {
       componentRepository.deleteById(id);
@@ -81,17 +85,20 @@ public class ComponentService implements IComponentService {
   }
 
   @Override
+  @Cacheable(value = "components", key = "#id")
   public Component getComponentById(Long id) {
     return componentRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Component", id));
   }
 
   @Override
+  @Cacheable(value = "components", key = "'getAllComponents'")
   public List<Component> getAllComponents() {
     return componentRepository.findAllWithRelations();
   }
 
   @Override
+  @Cacheable(value = "components", key = "'getAllComponentsSummary'")
   public List<DtoComponentSummary> getAllComponentsSummary() {
     return componentRepository.findAllWithSummary();
   }

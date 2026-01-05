@@ -3,6 +3,8 @@ package com.cms.service.impl;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,12 +27,14 @@ public class BannerService implements IBannerService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "banners", allEntries = true)
   public Banner saveBanner(Banner banner) {
     return bannerRepository.save(banner);
   }
 
   @Override
   @Transactional
+  @CacheEvict(value = "banners", allEntries = true)
   public Banner saveBannerWithImage(Banner banner, MultipartFile imageFile) {
     if (imageFile != null && !imageFile.isEmpty()) {
       // Eski dosyayı sil (update işlemi için)
@@ -54,6 +58,7 @@ public class BannerService implements IBannerService {
 
   @Override
   @Transactional
+  @CacheEvict(value = "banners", allEntries = true)
   public Boolean deleteBanner(Long id) {
     if (bannerRepository.existsById(id)) {
       // Banner silinmeden önce image dosyasını da sil
@@ -68,6 +73,7 @@ public class BannerService implements IBannerService {
   }
 
   @Override
+  @Cacheable(value = "banners", key = "#id")
   public Banner getBannerById(Long id) {
     return bannerRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Banner", id));
@@ -89,11 +95,13 @@ public class BannerService implements IBannerService {
   }
 
   @Override
+  @Cacheable(value = "banners", key = "'getAllBanners'")
   public List<Banner> getAllBanners() {
     return bannerRepository.findAll();
   }
 
   @Override
+  @Cacheable(value = "banners", key = "'getAllBannersWithSummary'")
   public List<DtoBannerSummary> getAllBannersWithSummary() {
     return bannerRepository.findAllWithSummary();
   }

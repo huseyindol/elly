@@ -20,6 +20,8 @@ import com.cms.entity.Page;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.PageMapper;
 import com.cms.service.IPageService;
+import com.cms.service.IComponentService;
+import com.cms.entity.Component;
 
 @RestController
 @RequestMapping("/api/v1/pages")
@@ -29,11 +31,19 @@ public class PageController extends BaseController implements IPageController {
   private IPageService pageService;
   @Autowired
   private PageMapper pageMapper;
+  @Autowired
+  private IComponentService componentService;
 
   @Override
   @PostMapping
   public RootEntityResponse<DtoPage> createPage(@RequestBody DtoPageIU dtoPageIU) {
     Page page = pageMapper.toPage(dtoPageIU);
+
+    if (dtoPageIU.getComponentIds() != null && !dtoPageIU.getComponentIds().isEmpty()) {
+      List<Component> components = componentService.getComponentsByIds(dtoPageIU.getComponentIds());
+      page.setComponents(new java.util.LinkedHashSet<>(components));
+    }
+
     Page savedPage = pageService.savePage(page);
     DtoPage dtoPage = pageMapper.toDtoPage(savedPage);
     return ok(dtoPage);
@@ -44,10 +54,19 @@ public class PageController extends BaseController implements IPageController {
   public RootEntityResponse<DtoPage> updatePage(@PathVariable Long id, @RequestBody DtoPageIU dtoPageIU) {
     Page page = pageService.getPageById(id);
     pageMapper.updatePageFromDto(dtoPageIU, page);
+
+    if (dtoPageIU.getComponentIds() != null) {
+      if (dtoPageIU.getComponentIds().isEmpty()) {
+        page.getComponents().clear();
+      } else {
+        List<Component> components = componentService.getComponentsByIds(dtoPageIU.getComponentIds());
+        page.setComponents(new java.util.LinkedHashSet<>(components));
+      }
+    }
+
     Page savedPage = pageService.savePage(page);
     DtoPage dtoPage = pageMapper.toDtoPage(savedPage);
     return ok(dtoPage);
-
   }
 
   @Override

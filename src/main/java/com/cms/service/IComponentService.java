@@ -16,4 +16,6 @@ public interface IComponentService {
 
   List<DtoComponentSummary> getAllComponentsSummary();
 
+  List<Component> getComponentsByIds(List<Long> ids);
+
 }

@@ -103,4 +103,9 @@ public class ComponentService implements IComponentService {
     return componentRepository.findAllWithSummary();
   }
 
+  @Override
+  public List<Component> getComponentsByIds(List<Long> ids) {
+    return componentRepository.findAllById(ids);
+  }
+
 }

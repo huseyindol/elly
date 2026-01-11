@@ -17,4 +17,5 @@ public interface IPageService {
   List<Page> getAllPages();
 
   List<DtoPageSummary> getAllPageSummary();
+
 }

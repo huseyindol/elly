@@ -47,6 +47,7 @@ public class PageService implements IPageService {
 
   @Override
   @Cacheable(value = "pages", key = "#id")
+  @CacheEvict(value = "pages", key = "#result.slug")
   public Page getPageById(Long id) {
     return pageRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Page", id));

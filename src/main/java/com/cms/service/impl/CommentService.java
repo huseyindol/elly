@@ -2,7 +2,6 @@ package com.cms.service.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -13,11 +12,13 @@ import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.CommentRepository;
 import com.cms.service.ICommentService;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class CommentService implements ICommentService {
 
-  @Autowired
-  private CommentRepository commentRepository;
+  private final CommentRepository commentRepository;
 
   @Override
   @Transactional

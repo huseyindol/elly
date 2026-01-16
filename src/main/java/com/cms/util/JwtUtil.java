@@ -100,13 +100,15 @@ public class JwtUtil {
   }
 
   private String createToken(Map<String, Object> claims, String subject) {
-    // JWE (JSON Web Encryption) ile token'ı şifrele
-    // Direct key encryption için sadece encryption key ve algorithm belirtilir
+    // JWS (signed) + JWE (encrypted) ile token oluştur
+    // Önce imzala (signWith), sonra şifrele (encryptWith) - SonarQube java:S6288
+    // uyumlu
     return Jwts.builder()
         .claims(claims)
         .subject(subject)
         .issuedAt(new Date(System.currentTimeMillis()))
         .expiration(new Date(System.currentTimeMillis() + expiration))
+        .signWith(getSigningKey())
         .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
         .compact();
   }
@@ -132,13 +134,15 @@ public class JwtUtil {
   }
 
   private String createRefreshToken(Map<String, Object> claims, String subject) {
-    // JWE (JSON Web Encryption) ile refresh token'ı şifrele
-    // Direct key encryption için sadece encryption key ve algorithm belirtilir
+    // JWS (signed) + JWE (encrypted) ile refresh token oluştur
+    // Önce imzala (signWith), sonra şifrele (encryptWith) - SonarQube java:S6288
+    // uyumlu
     return Jwts.builder()
         .claims(claims)
         .subject(subject)
         .issuedAt(new Date(System.currentTimeMillis()))
         .expiration(new Date(System.currentTimeMillis() + refreshExpiration))
+        .signWith(getSigningKey())
         .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
         .compact();
   }

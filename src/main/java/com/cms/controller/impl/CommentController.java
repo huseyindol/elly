@@ -2,7 +2,6 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,19 +21,16 @@ import com.cms.service.ICommentService;
 import com.cms.service.IPostService;
 
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/comments")
+@RequiredArgsConstructor
 public class CommentController extends BaseController implements ICommentController {
 
-  @Autowired
-  private ICommentService commentService;
-
-  @Autowired
-  private CommentMapper commentMapper;
-
-  @Autowired
-  private IPostService postService;
+  private final ICommentService commentService;
+  private final CommentMapper commentMapper;
+  private final IPostService postService;
 
   @Override
   @PostMapping

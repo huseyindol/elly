@@ -2,7 +2,6 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,16 +22,16 @@ import com.cms.service.IPageService;
 import com.cms.service.IComponentService;
 import com.cms.entity.Component;
 
+import lombok.RequiredArgsConstructor;
+
 @RestController
 @RequestMapping("/api/v1/pages")
+@RequiredArgsConstructor
 public class PageController extends BaseController implements IPageController {
 
-  @Autowired
-  private IPageService pageService;
-  @Autowired
-  private PageMapper pageMapper;
-  @Autowired
-  private IComponentService componentService;
+  private final IPageService pageService;
+  private final PageMapper pageMapper;
+  private final IComponentService componentService;
 
   @Override
   @PostMapping

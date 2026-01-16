@@ -4,7 +4,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -24,20 +23,16 @@ import com.cms.repository.PageRepository;
 import com.cms.repository.WidgetRepository;
 import com.cms.service.IComponentService;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class ComponentService implements IComponentService {
 
-  @Autowired
-  private ComponentRepository componentRepository;
-
-  @Autowired
-  private BannerRepository bannerRepository;
-
-  @Autowired
-  private PageRepository pageRepository;
-
-  @Autowired
-  private WidgetRepository widgetRepository;
+  private final ComponentRepository componentRepository;
+  private final BannerRepository bannerRepository;
+  private final PageRepository pageRepository;
+  private final WidgetRepository widgetRepository;
 
   @Override
   @Transactional

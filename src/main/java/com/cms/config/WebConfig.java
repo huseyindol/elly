@@ -1,6 +1,6 @@
 package com.cms.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -9,10 +9,10 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
+@RequiredArgsConstructor
 public class WebConfig implements WebMvcConfigurer {
 
-  @Autowired
-  private RequestTimingInterceptor requestTimingInterceptor;
+  private final RequestTimingInterceptor requestTimingInterceptor;
 
   @Override
   public void addCorsMappings(@NonNull CorsRegistry registry) {

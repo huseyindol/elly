@@ -8,7 +8,7 @@ import com.cms.util.JwtUtil;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -22,16 +22,12 @@ import java.util.Map;
 import java.util.Optional;
 
 @Component
+@RequiredArgsConstructor
 public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
-  @Autowired
-  private UserRepository userRepository;
-
-  @Autowired
-  private RefreshTokenRepository refreshTokenRepository;
-
-  @Autowired
-  private JwtUtil jwtUtil;
+  private final UserRepository userRepository;
+  private final RefreshTokenRepository refreshTokenRepository;
+  private final JwtUtil jwtUtil;
 
   @Value("${jwt.refresh.expiration:604800000}")
   private Long refreshTokenExpiration;

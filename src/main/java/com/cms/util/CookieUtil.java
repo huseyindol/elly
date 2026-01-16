@@ -1,41 +1,43 @@
 package com.cms.util;
 
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletResponse;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Cookie işlemleri için utility metodları
  */
 @Component
+@RequiredArgsConstructor
 public class CookieUtil {
 
-  @Autowired
-  private ZoneId applicationZoneId;
+  private final ZoneId applicationZoneId;
+  private final Environment environment;
 
   /**
    * Mevcut cookie'yi temizler (Max-Age=0 ile)
    * Aynı isim, path ve domain ile cookie gönderilirse tarayıcı eski cookie'yi
    * override eder
+   * HttpOnly ve Secure flag'leri eklenerek güvenlik sağlanır
    * 
    * @param response   HttpServletResponse
    * @param cookieName Cookie adı
    * @param path       Cookie path'i
    */
   public void clearCookie(HttpServletResponse response, String cookieName, String path) {
-    Cookie cookie = new Cookie(cookieName, "");
-    cookie.setPath(path);
-    cookie.setMaxAge(0); // Cookie'yi hemen sil
-    response.addCookie(cookie);
+    // Set-Cookie header ile cookie temizle - HttpOnly ve Secure flag'leri dahil
+    // SonarQube java:S3330 ve java:S2092 uyumlu
+    StringBuilder cookieBuilder = new StringBuilder();
+    cookieBuilder.append(String.format("%s=; Path=%s; Max-Age=0", cookieName, path));
+    cookieBuilder.append("; HttpOnly; Secure; SameSite=Strict");
+    response.addHeader("Set-Cookie", cookieBuilder.toString());
   }
-
-  @Autowired
-  private org.springframework.core.env.Environment environment;
 
   /**
    * Cookie oluşturur ve response'a ekler

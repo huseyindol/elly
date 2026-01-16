@@ -4,7 +4,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -22,17 +21,15 @@ import com.cms.repository.PostRepository;
 import com.cms.repository.WidgetRepository;
 import com.cms.service.IWidgetService;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class WidgetService implements IWidgetService {
 
-  @Autowired
-  private WidgetRepository widgetRepository;
-
-  @Autowired
-  private BannerRepository bannerRepository;
-
-  @Autowired
-  private PostRepository postRepository;
+  private final WidgetRepository widgetRepository;
+  private final BannerRepository bannerRepository;
+  private final PostRepository postRepository;
 
   @Override
   @Transactional

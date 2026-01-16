@@ -2,7 +2,6 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,19 +22,16 @@ import com.cms.service.IRatingService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/ratings")
+@RequiredArgsConstructor
 public class RatingController extends BaseController implements IRatingController {
 
-  @Autowired
-  private IRatingService ratingService;
-
-  @Autowired
-  private RatingMapper ratingMapper;
-
-  @Autowired
-  private IPostService postService;
+  private final IRatingService ratingService;
+  private final RatingMapper ratingMapper;
+  private final IPostService postService;
 
   @Override
   @PostMapping

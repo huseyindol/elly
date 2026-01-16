@@ -5,7 +5,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.caffeine.CaffeineCache;
@@ -18,12 +17,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.dto.DtoCacheInfo;
 import com.github.benmanes.caffeine.cache.stats.CacheStats;
 
+import lombok.RequiredArgsConstructor;
+
 @RestController
 @RequestMapping("/api/v1/cache")
+@RequiredArgsConstructor
 public class CacheController {
 
-  @Autowired
-  private CacheManager cacheManager;
+  private final CacheManager cacheManager;
 
   @GetMapping
   public List<DtoCacheInfo> getCacheStats() {

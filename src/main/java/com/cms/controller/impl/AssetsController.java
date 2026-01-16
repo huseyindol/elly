@@ -1,7 +1,6 @@
 package com.cms.controller.impl;
 
 import org.springdoc.core.annotations.ParameterObject;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -22,20 +21,16 @@ import com.cms.mapper.AssetsMapper;
 import com.cms.service.IAssetsService;
 import com.cms.service.IFileService;
 
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/assets")
+@RequiredArgsConstructor
 public class AssetsController extends BaseController implements IAssetsController {
 
-  @Autowired
-  private IAssetsService assetsService;
-
-  @Autowired
-  private AssetsMapper assetsMapper;
-
-  @Autowired
-  private IFileService fileService;
+  private final IAssetsService assetsService;
+  private final AssetsMapper assetsMapper;
+  private final IFileService fileService;
 
   @Override
   @PostMapping(consumes = "multipart/form-data")

@@ -3,7 +3,6 @@ package com.cms.service.impl;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -14,11 +13,13 @@ import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.RatingRepository;
 import com.cms.service.IRatingService;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class RatingService implements IRatingService {
 
-  @Autowired
-  private RatingRepository ratingRepository;
+  private final RatingRepository ratingRepository;
 
   @Override
   @Transactional

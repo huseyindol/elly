@@ -2,7 +2,6 @@ package com.cms.service.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -16,14 +15,14 @@ import com.cms.repository.BannerRepository;
 import com.cms.service.IBannerService;
 import com.cms.service.IFileService;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class BannerService implements IBannerService {
 
-  @Autowired
-  private BannerRepository bannerRepository;
-
-  @Autowired
-  private IFileService fileService;
+  private final BannerRepository bannerRepository;
+  private final IFileService fileService;
 
   @Override
   @Transactional

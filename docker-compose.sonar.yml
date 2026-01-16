@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    depends_on:
+      - sonar-db
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_JDBC_URL=jdbc:postgresql://sonar-db:5432/sonarqube
+      - SONAR_JDBC_USERNAME=sonarqube
+      - SONAR_JDBC_PASSWORD=sonarqube
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-extensions:/opt/sonarqube/extensions
+      - sonar-logs:/opt/sonarqube/logs
+      - sonar-temp:/opt/sonarqube/temp
+    restart: unless-stopped
+
+  sonar-db:
+    image: postgres:16-alpine
+    container_name: sonar-db
+    environment:
+      - POSTGRES_USER=sonarqube
+      - POSTGRES_PASSWORD=sonarqube
+      - POSTGRES_DB=sonarqube
+    volumes:
+      - sonar-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  sonar-data:
+    name: sonar-data
+  sonar-extensions:
+    name: sonar-extensions
+  sonar-logs:
+    name: sonar-logs
+  sonar-temp:
+    name: sonar-temp
+  sonar-db-data:
+    name: sonar-db-data

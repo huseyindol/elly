@@ -3,7 +3,6 @@ package com.cms.controller.impl;
 import java.util.List;
 
 import org.springdoc.core.annotations.ParameterObject;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -26,15 +25,15 @@ import com.cms.mapper.BannerMapper;
 import com.cms.service.IBannerService;
 import com.cms.service.impl.BannerService;
 
+import lombok.RequiredArgsConstructor;
+
 @RestController
 @RequestMapping("/api/v1/banners")
+@RequiredArgsConstructor
 public class BannerController extends BaseController implements IBannerController {
 
-  @Autowired
-  private IBannerService bannerService;
-
-  @Autowired
-  private BannerMapper bannerMapper;
+  private final IBannerService bannerService;
+  private final BannerMapper bannerMapper;
 
   @Override
   @PostMapping(consumes = "multipart/form-data")

@@ -1,6 +1,5 @@
 package com.cms.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -11,14 +10,14 @@ import com.cms.repository.AssetsRepository;
 import com.cms.service.IAssetsService;
 import com.cms.service.IFileService;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class AssetsService implements IAssetsService {
 
-  @Autowired
-  private IFileService fileService;
-
-  @Autowired
-  private AssetsRepository assetsRepository;
+  private final IFileService fileService;
+  private final AssetsRepository assetsRepository;
 
   @Override
   @Transactional

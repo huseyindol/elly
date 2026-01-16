@@ -1,6 +1,5 @@
 package com.cms.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -10,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.config.CustomUserDetailsService;
+
+import lombok.RequiredArgsConstructor;
 
 import java.util.Date;
 
@@ -28,25 +29,15 @@ import com.cms.util.JwtUtil;
 import com.cms.util.UserUtil;
 
 @Service
+@RequiredArgsConstructor
 public class AuthService implements IAuthService {
 
-  @Autowired
-  private UserRepository userRepository;
-
-  @Autowired
-  private PasswordEncoder passwordEncoder;
-
-  @Autowired
-  private JwtUtil jwtUtil;
-
-  @Autowired
-  private UserUtil userUtil;
-
-  @Autowired
-  private AuthenticationManager authenticationManager;
-
-  @Autowired
-  private RefreshTokenRepository refreshTokenRepository;
+  private final UserRepository userRepository;
+  private final PasswordEncoder passwordEncoder;
+  private final JwtUtil jwtUtil;
+  private final UserUtil userUtil;
+  private final AuthenticationManager authenticationManager;
+  private final RefreshTokenRepository refreshTokenRepository;
 
   @Value("${jwt.refresh.expiration:3600000}")
   private Long refreshTokenExpiration;

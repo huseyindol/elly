@@ -2,7 +2,6 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,15 +20,15 @@ import com.cms.entity.Widget;
 import com.cms.mapper.WidgetMapper;
 import com.cms.service.IWidgetService;
 
+import lombok.RequiredArgsConstructor;
+
 @RestController
 @RequestMapping("/api/v1/widgets")
+@RequiredArgsConstructor
 public class WidgetController extends BaseController implements IWidgetController {
 
-  @Autowired
-  private IWidgetService widgetService;
-
-  @Autowired
-  private WidgetMapper widgetMapper;
+  private final IWidgetService widgetService;
+  private final WidgetMapper widgetMapper;
 
   @Override
   @PostMapping

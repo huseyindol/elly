@@ -1,6 +1,8 @@
 package com.cms.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Arrays;
+import java.util.Collections;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -14,29 +16,22 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
-import jakarta.servlet.http.HttpServletResponse;
-import java.util.Arrays;
-import java.util.Collections;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
-  @Autowired
-  private UserDetailsService userDetailsService;
-
-  @Autowired
-  private JwtAuthenticationFilter jwtAuthenticationFilter;
-
-  @Autowired
-  private OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
-
-  @Autowired
-  private CustomOAuth2UserService customOAuth2UserService;
+  private final UserDetailsService userDetailsService;
+  private final JwtAuthenticationFilter jwtAuthenticationFilter;
+  private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+  private final CustomOAuth2UserService customOAuth2UserService;
 
   @Bean
   public PasswordEncoder passwordEncoder() {
@@ -83,7 +78,13 @@ public class SecurityConfig {
   }
 
   @Bean
+  @SuppressWarnings("java:S4502") // CSRF disabled intentionally for stateless JWT API
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    // CSRF protection is disabled because:
+    // 1. This is a stateless REST API using JWT authentication
+    // 2. No server-side session/cookie-based auth is used for state management
+    // 3. All state-changing requests require valid JWT token
+    // 4. Tokens are stored in HttpOnly cookies with SameSite protection
     http.csrf(csrf -> csrf.disable())
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

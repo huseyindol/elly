@@ -2,7 +2,6 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,15 +20,15 @@ import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.ComponentMapper;
 import com.cms.service.IComponentService;
 
+import lombok.RequiredArgsConstructor;
+
 @RestController
 @RequestMapping("/api/v1/components")
+@RequiredArgsConstructor
 public class ComponentController extends BaseController implements IComponentController {
 
-  @Autowired
-  private IComponentService componentService;
-
-  @Autowired
-  private ComponentMapper componentMapper;
+  private final IComponentService componentService;
+  private final ComponentMapper componentMapper;
 
   @Override
   @PostMapping

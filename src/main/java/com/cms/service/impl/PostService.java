@@ -2,7 +2,6 @@ package com.cms.service.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -14,11 +13,13 @@ import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.PostRepository;
 import com.cms.service.IPostService;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class PostService implements IPostService {
 
-  @Autowired
-  private PostRepository postRepository;
+  private final PostRepository postRepository;
 
   @Override
   @Transactional

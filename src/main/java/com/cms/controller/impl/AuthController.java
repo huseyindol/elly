@@ -1,6 +1,5 @@
 package com.cms.controller.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,22 +20,17 @@ import com.cms.util.UserUtil;
 
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
 public class AuthController extends BaseController implements IAuthController {
 
-  @Autowired
-  private IAuthService authService;
-
-  @Autowired
-  private UserRepository userRepository;
-
-  @Autowired
-  private UserUtil userUtil;
-
-  @Autowired
-  private CookieUtil cookieUtil;
+  private final IAuthService authService;
+  private final UserRepository userRepository;
+  private final UserUtil userUtil;
+  private final CookieUtil cookieUtil;
 
   @Value("${cookie.access-token.expiration:180}")
   private Integer accessTokenCookieExpiration; // Saniye cinsinden

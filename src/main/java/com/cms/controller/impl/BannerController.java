@@ -2,15 +2,14 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
-import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,11 +18,11 @@ import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerIU;
 import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.Banner;
-import com.cms.entity.BannerImage;
 import com.cms.entity.RootEntityResponse;
 import com.cms.exception.BadRequestException;
 import com.cms.mapper.BannerMapper;
 import com.cms.service.IBannerService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
 
@@ -34,19 +33,26 @@ public class BannerController extends BaseController implements IBannerControlle
 
   private final IBannerService bannerService;
   private final BannerMapper bannerMapper;
+  private final ObjectMapper objectMapper;
 
   /**
-   * Banner oluştur - Tek endpoint
-   * Dosya gönderilirse dosyayı yükler, gönderilmezse DTO'daki URL'leri kullanır
+   * Banner oluştur
+   * multipart/form-data ile gönderim:
+   * - data: JSON formatında DtoBannerIU (String olarak)
+   * - desktop: opsiyonel dosya
+   * - tablet: opsiyonel dosya
+   * - mobile: opsiyonel dosya
    */
   @Override
-  @PostMapping(consumes = "multipart/form-data")
+  @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public RootEntityResponse<DtoBanner> createBanner(
-      @ParameterObject @ModelAttribute DtoBannerIU dtoBannerIU,
-      @RequestParam(value = "desktop", required = false) MultipartFile desktopImage,
-      @RequestParam(value = "tablet", required = false) MultipartFile tabletImage,
-      @RequestParam(value = "mobile", required = false) MultipartFile mobileImage) {
+      @RequestPart("data") String dataJson,
+      @RequestPart(value = "desktop", required = false) MultipartFile desktopImage,
+      @RequestPart(value = "tablet", required = false) MultipartFile tabletImage,
+      @RequestPart(value = "mobile", required = false) MultipartFile mobileImage) {
     try {
+      // JSON String'i DTO'ya parse et
+      DtoBannerIU dtoBannerIU = objectMapper.readValue(dataJson, DtoBannerIU.class);
       Banner banner = bannerMapper.toBanner(dtoBannerIU);
 
       // Dosya mı yoksa URL mi gönderildi kontrol et
@@ -72,18 +78,24 @@ public class BannerController extends BaseController implements IBannerControlle
   }
 
   /**
-   * Banner güncelle - Tek endpoint
-   * Dosya gönderilirse dosyayı yükler, gönderilmezse DTO'daki URL'leri kullanır
+   * Banner güncelle
+   * multipart/form-data ile gönderim:
+   * - data: JSON formatında DtoBannerIU (String olarak)
+   * - desktop: opsiyonel dosya
+   * - tablet: opsiyonel dosya
+   * - mobile: opsiyonel dosya
    */
   @Override
-  @PutMapping(value = "/{id}", consumes = "multipart/form-data")
+  @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public RootEntityResponse<DtoBanner> updateBanner(
       @PathVariable Long id,
-      @ParameterObject @ModelAttribute DtoBannerIU dtoBannerIU,
-      @RequestParam(value = "desktop", required = false) MultipartFile desktopImage,
-      @RequestParam(value = "tablet", required = false) MultipartFile tabletImage,
-      @RequestParam(value = "mobile", required = false) MultipartFile mobileImage) {
+      @RequestPart("data") String dataJson,
+      @RequestPart(value = "desktop", required = false) MultipartFile desktopImage,
+      @RequestPart(value = "tablet", required = false) MultipartFile tabletImage,
+      @RequestPart(value = "mobile", required = false) MultipartFile mobileImage) {
     try {
+      // JSON String'i DTO'ya parse et
+      DtoBannerIU dtoBannerIU = objectMapper.readValue(dataJson, DtoBannerIU.class);
       Banner banner = bannerService.getBannerById(id);
       bannerMapper.updateBannerFromDto(dtoBannerIU, banner);
 
@@ -127,13 +139,16 @@ public class BannerController extends BaseController implements IBannerControlle
   }
 
   @Override
-  @GetMapping("/{id}")
+  @GetMapping("/{id:\\d+}")
   public RootEntityResponse<DtoBanner> getBannerById(@PathVariable Long id) {
     Banner banner = bannerService.getBannerById(id);
     DtoBanner dtoBanner = bannerMapper.toDtoBanner(banner);
     return ok(dtoBanner);
   }
 
+  /**
+   * Tüm banner'ları düz liste olarak döndürür
+   */
   @Override
   @GetMapping("/list")
   public RootEntityResponse<List<DtoBanner>> getAllBanners() {
@@ -142,10 +157,50 @@ public class BannerController extends BaseController implements IBannerControlle
     return ok(dtoBanners);
   }
 
+  /**
+   * Tüm banner özetlerini düz liste olarak döndürür
+   */
   @Override
   @GetMapping("/list/summary")
   public RootEntityResponse<List<DtoBannerSummary>> getAllBannersWithSummary() {
     List<DtoBannerSummary> dtoBannerSummaries = bannerService.getAllBannersWithSummary();
     return ok(dtoBannerSummaries);
+  }
+
+  /**
+   * Belirli bir subFolder'daki banner'ları döndürür
+   */
+  @Override
+  @GetMapping("/list/{subFolder}")
+  public RootEntityResponse<List<DtoBanner>> getBannersBySubFolder(@PathVariable String subFolder) {
+    // subFolder boşluk ise null yap
+    if (subFolder != null && subFolder.trim().isEmpty()) {
+      subFolder = null;
+    }
+    List<DtoBanner> banners = bannerService.getBannersBySubFolder(subFolder);
+    return ok(banners);
+  }
+
+  /**
+   * Belirli bir subFolder'daki banner özetlerini döndürür
+   */
+  @Override
+  @GetMapping("/list/summary/{subFolder}")
+  public RootEntityResponse<List<DtoBannerSummary>> getBannersSummaryBySubFolder(@PathVariable String subFolder) {
+    if (subFolder != null && subFolder.trim().isEmpty()) {
+      subFolder = null;
+    }
+    List<DtoBannerSummary> banners = bannerService.getBannersSummaryBySubFolder(subFolder);
+    return ok(banners);
+  }
+
+  /**
+   * Tüm mevcut subFolder listesini döndürür
+   */
+  @Override
+  @GetMapping("/sub-folders")
+  public RootEntityResponse<List<String>> getAllSubFolders() {
+    List<String> subFolders = bannerService.getAllSubFolders();
+    return ok(subFolders);
   }
 }

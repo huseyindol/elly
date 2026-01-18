@@ -14,4 +14,5 @@ public class DtoBannerSummary {
   private String title;
   private Integer orderIndex;
   private Boolean status;
+  private String subFolder;
 }

@@ -36,4 +36,7 @@ public class DtoBannerIU {
   private boolean status;
 
   private BannerImage images;
+
+  @Schema(description = "Alt klasör yolu", example = "promo")
+  private String subFolder;
 }

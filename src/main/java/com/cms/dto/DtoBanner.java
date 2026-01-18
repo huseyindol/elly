@@ -21,4 +21,5 @@ public class DtoBanner {
   private String type;
   private Integer orderIndex;
   private Boolean status;
+  private String subFolder;
 }

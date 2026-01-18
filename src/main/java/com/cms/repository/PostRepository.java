@@ -23,4 +23,6 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
   @Query("SELECT new com.cms.dto.DtoPostSummary(p.id, p.title, p.slug, p.status, p.orderIndex) FROM Post p")
   List<DtoPostSummary> findAllWithSummary();
+
+  Optional<Post> findBySlug(String slug);
 }

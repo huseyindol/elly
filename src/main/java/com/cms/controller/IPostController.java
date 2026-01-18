@@ -19,4 +19,6 @@ public interface IPostController {
   RootEntityResponse<List<DtoPost>> getAllPosts();
 
   RootEntityResponse<List<DtoPostSummary>> getAllPostsSummary();
+
+  RootEntityResponse<DtoPost> getPostBySlug(String slug);
 }

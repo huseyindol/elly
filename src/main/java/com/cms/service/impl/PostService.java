@@ -58,4 +58,10 @@ public class PostService implements IPostService {
     return postRepository.findAllWithSummary();
   }
 
+  @Override
+  @Cacheable(value = "posts", key = "'slug_' + #slug")
+  public Post getPostBySlug(String slug) {
+    return postRepository.findBySlug(slug)
+        .orElseThrow(() -> new ResourceNotFoundException("Post not found with slug: " + slug));
+  }
 }

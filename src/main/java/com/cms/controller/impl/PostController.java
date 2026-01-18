@@ -82,4 +82,12 @@ public class PostController extends BaseController implements IPostController {
     return ok(posts);
   }
 
+  @Override
+  @GetMapping("/slug/{slug}")
+  public RootEntityResponse<DtoPost> getPostBySlug(@PathVariable String slug) {
+    Post post = postService.getPostBySlug(slug);
+    DtoPost dtoPost = postMapper.toDtoPost(post);
+    return ok(dtoPost);
+  }
+
 }

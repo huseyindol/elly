@@ -15,4 +15,6 @@ public interface IPostService {
   List<Post> getAllPosts();
 
   List<DtoPostSummary> getAllPostsSummary();
+
+  Post getPostBySlug(String slug);
 }

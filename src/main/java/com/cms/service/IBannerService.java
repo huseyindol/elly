@@ -10,7 +10,11 @@ import com.cms.entity.Banner;
 public interface IBannerService {
   Banner saveBanner(Banner banner);
 
-  Banner saveBannerWithImage(Banner banner, MultipartFile imageFile);
+  Banner saveBannerWithImages(Banner banner, MultipartFile desktopImage, MultipartFile tabletImage,
+      MultipartFile mobileImage);
+
+  Banner updateBannerWithImages(Banner banner, MultipartFile desktopImage, MultipartFile tabletImage,
+      MultipartFile mobileImage);
 
   Boolean deleteBanner(Long id);
 

@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.Banner;
+import com.cms.entity.BannerImage;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.BannerRepository;
 import com.cms.service.IBannerService;
@@ -34,24 +35,73 @@ public class BannerService implements IBannerService {
   @Override
   @Transactional
   @CacheEvict(value = "banners", allEntries = true)
-  public Banner saveBannerWithImage(Banner banner, MultipartFile imageFile) {
-    if (imageFile != null && !imageFile.isEmpty()) {
-      // Eski dosyayı sil (update işlemi için)
-      if (banner.getId() != null) {
-        try {
-          Banner existingBanner = getBannerById(banner.getId());
-          if (existingBanner.getImage() != null) {
-            fileService.deleteImage(existingBanner.getImage());
-          }
-        } catch (ResourceNotFoundException e) {
-          // Banner bulunamadıysa devam et (yeni kayıt olabilir)
-        }
-      }
+  public Banner saveBannerWithImages(Banner banner, MultipartFile desktopImage,
+      MultipartFile tabletImage, MultipartFile mobileImage) {
 
-      // Yeni dosyayı kaydet
-      String imagePath = fileService.saveImage(imageFile, "banners");
-      banner.setImage(imagePath);
+    BannerImage bannerImage = new BannerImage();
+
+    // Desktop görsel (zorunlu)
+    if (desktopImage != null && !desktopImage.isEmpty()) {
+      String desktopPath = fileService.saveImage(desktopImage, "banners/desktop");
+      bannerImage.setDesktop(desktopPath);
     }
+
+    // Tablet görsel (opsiyonel)
+    if (tabletImage != null && !tabletImage.isEmpty()) {
+      String tabletPath = fileService.saveImage(tabletImage, "banners/tablet");
+      bannerImage.setTablet(tabletPath);
+    }
+
+    // Mobile görsel (opsiyonel)
+    if (mobileImage != null && !mobileImage.isEmpty()) {
+      String mobilePath = fileService.saveImage(mobileImage, "banners/mobile");
+      bannerImage.setMobile(mobilePath);
+    }
+
+    banner.setImages(bannerImage);
+    return bannerRepository.save(banner);
+  }
+
+  @Override
+  @Transactional
+  @CacheEvict(value = "banners", allEntries = true)
+  public Banner updateBannerWithImages(Banner banner, MultipartFile desktopImage,
+      MultipartFile tabletImage, MultipartFile mobileImage) {
+
+    BannerImage currentImages = banner.getImages();
+    if (currentImages == null) {
+      currentImages = new BannerImage();
+    }
+
+    // Desktop görsel güncelle
+    if (desktopImage != null && !desktopImage.isEmpty()) {
+      // Eski görseli sil
+      if (currentImages.getDesktop() != null) {
+        fileService.deleteImage(currentImages.getDesktop());
+      }
+      String desktopPath = fileService.saveImage(desktopImage, "banners/desktop");
+      currentImages.setDesktop(desktopPath);
+    }
+
+    // Tablet görsel güncelle
+    if (tabletImage != null && !tabletImage.isEmpty()) {
+      if (currentImages.getTablet() != null) {
+        fileService.deleteImage(currentImages.getTablet());
+      }
+      String tabletPath = fileService.saveImage(tabletImage, "banners/tablet");
+      currentImages.setTablet(tabletPath);
+    }
+
+    // Mobile görsel güncelle
+    if (mobileImage != null && !mobileImage.isEmpty()) {
+      if (currentImages.getMobile() != null) {
+        fileService.deleteImage(currentImages.getMobile());
+      }
+      String mobilePath = fileService.saveImage(mobileImage, "banners/mobile");
+      currentImages.setMobile(mobilePath);
+    }
+
+    banner.setImages(currentImages);
     return bannerRepository.save(banner);
   }
 
@@ -60,10 +110,19 @@ public class BannerService implements IBannerService {
   @CacheEvict(value = "banners", allEntries = true)
   public Boolean deleteBanner(Long id) {
     if (bannerRepository.existsById(id)) {
-      // Banner silinmeden önce image dosyasını da sil
       Banner banner = getBannerById(id);
-      if (banner.getImage() != null) {
-        fileService.deleteImage(banner.getImage());
+      // Banner silinmeden önce tüm görselleri sil
+      if (banner.getImages() != null) {
+        BannerImage images = banner.getImages();
+        if (images.getDesktop() != null) {
+          fileService.deleteImage(images.getDesktop());
+        }
+        if (images.getTablet() != null) {
+          fileService.deleteImage(images.getTablet());
+        }
+        if (images.getMobile() != null) {
+          fileService.deleteImage(images.getMobile());
+        }
       }
       bannerRepository.deleteById(id);
       return true;
@@ -80,16 +139,11 @@ public class BannerService implements IBannerService {
 
   @Override
   public List<Banner> getBannersByComponentId(Long componentId) {
-    // TODO: Banner entity'sinde components ilişkisi tanımlandığında bu metod
-    // güncellenecek
-    // Şimdilik Component entity'sinden banners listesi alınabilir
     return java.util.Collections.emptyList();
   }
 
   @Override
   public List<Banner> getBannersByWidgetId(Long widgetId) {
-    // TODO: Banner entity'sinde widgets ilişkisi tanımlandığında bu metod
-    // güncellenecek
     return java.util.Collections.emptyList();
   }
 
@@ -104,5 +158,4 @@ public class BannerService implements IBannerService {
   public List<DtoBannerSummary> getAllBannersWithSummary() {
     return bannerRepository.findAllWithSummary();
   }
-
 }

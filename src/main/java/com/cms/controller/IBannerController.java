@@ -10,15 +10,18 @@ import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.RootEntityResponse;
 
 public interface IBannerController {
-  public RootEntityResponse<DtoBanner> createBanner(DtoBannerIU dtoBannerIU, MultipartFile imageFile);
+  // Tek endpoint - hem dosya hem URL destekler
+  RootEntityResponse<DtoBanner> createBanner(DtoBannerIU dtoBannerIU,
+      MultipartFile desktopImage, MultipartFile tabletImage, MultipartFile mobileImage);
 
-  public RootEntityResponse<DtoBanner> updateBanner(Long id, DtoBannerIU dtoBannerIU, MultipartFile imageFile);
+  RootEntityResponse<DtoBanner> updateBanner(Long id, DtoBannerIU dtoBannerIU,
+      MultipartFile desktopImage, MultipartFile tabletImage, MultipartFile mobileImage);
 
-  public RootEntityResponse<Boolean> deleteBanner(Long id);
+  RootEntityResponse<Boolean> deleteBanner(Long id);
 
-  public RootEntityResponse<DtoBanner> getBannerById(Long id);
+  RootEntityResponse<DtoBanner> getBannerById(Long id);
 
-  public RootEntityResponse<List<DtoBanner>> getAllBanners();
+  RootEntityResponse<List<DtoBanner>> getAllBanners();
 
-  public RootEntityResponse<List<DtoBannerSummary>> getAllBannersWithSummary();
+  RootEntityResponse<List<DtoBannerSummary>> getAllBannersWithSummary();
 }

@@ -19,11 +19,11 @@ import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerIU;
 import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.Banner;
+import com.cms.entity.BannerImage;
 import com.cms.entity.RootEntityResponse;
 import com.cms.exception.BadRequestException;
 import com.cms.mapper.BannerMapper;
 import com.cms.service.IBannerService;
-import com.cms.service.impl.BannerService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,35 +35,85 @@ public class BannerController extends BaseController implements IBannerControlle
   private final IBannerService bannerService;
   private final BannerMapper bannerMapper;
 
+  /**
+   * Banner oluştur - Tek endpoint
+   * Dosya gönderilirse dosyayı yükler, gönderilmezse DTO'daki URL'leri kullanır
+   */
   @Override
   @PostMapping(consumes = "multipart/form-data")
-  public RootEntityResponse<DtoBanner> createBanner(@ParameterObject @ModelAttribute DtoBannerIU dtoBannerIU,
-      @RequestParam(value = "image", required = true) MultipartFile imageFile) {
+  public RootEntityResponse<DtoBanner> createBanner(
+      @ParameterObject @ModelAttribute DtoBannerIU dtoBannerIU,
+      @RequestParam(value = "desktop", required = false) MultipartFile desktopImage,
+      @RequestParam(value = "tablet", required = false) MultipartFile tabletImage,
+      @RequestParam(value = "mobile", required = false) MultipartFile mobileImage) {
     try {
       Banner banner = bannerMapper.toBanner(dtoBannerIU);
-      Banner savedBanner = bannerService.saveBannerWithImage(banner, imageFile);
-      DtoBanner dtoBanner = bannerMapper.toDtoBanner(savedBanner);
+
+      // Dosya mı yoksa URL mi gönderildi kontrol et
+      boolean hasFiles = isFileUploaded(desktopImage) || isFileUploaded(tabletImage)
+          || isFileUploaded(mobileImage);
+
+      if (hasFiles) {
+        // Dosya yüklendi - dosyaları kaydet
+        banner = bannerService.saveBannerWithImages(banner, desktopImage, tabletImage, mobileImage);
+      } else {
+        // URL gönderildi - DTO'daki URL'leri kullan
+        if (dtoBannerIU.getImages() != null) {
+          banner.setImages(dtoBannerIU.getImages());
+        }
+        banner = bannerService.saveBanner(banner);
+      }
+
+      DtoBanner dtoBanner = bannerMapper.toDtoBanner(banner);
       return ok(dtoBanner);
     } catch (Exception e) {
-      throw new BadRequestException("Banner not created" + e.getMessage());
+      throw new BadRequestException("Banner oluşturulamadı: " + e.getMessage());
     }
   }
 
+  /**
+   * Banner güncelle - Tek endpoint
+   * Dosya gönderilirse dosyayı yükler, gönderilmezse DTO'daki URL'leri kullanır
+   */
   @Override
   @PutMapping(value = "/{id}", consumes = "multipart/form-data")
-  public RootEntityResponse<DtoBanner> updateBanner(@PathVariable Long id,
+  public RootEntityResponse<DtoBanner> updateBanner(
+      @PathVariable Long id,
       @ParameterObject @ModelAttribute DtoBannerIU dtoBannerIU,
-      @RequestParam(value = "image", required = false) MultipartFile imageFile) {
+      @RequestParam(value = "desktop", required = false) MultipartFile desktopImage,
+      @RequestParam(value = "tablet", required = false) MultipartFile tabletImage,
+      @RequestParam(value = "mobile", required = false) MultipartFile mobileImage) {
     try {
       Banner banner = bannerService.getBannerById(id);
       bannerMapper.updateBannerFromDto(dtoBannerIU, banner);
-      Banner savedBanner = ((BannerService) bannerService).saveBannerWithImage(banner, imageFile);
-      DtoBanner dtoBanner = bannerMapper.toDtoBanner(savedBanner);
+
+      // Dosya mı yoksa URL mi gönderildi kontrol et
+      boolean hasFiles = isFileUploaded(desktopImage) || isFileUploaded(tabletImage)
+          || isFileUploaded(mobileImage);
+
+      if (hasFiles) {
+        // Dosya yüklendi - dosyaları kaydet
+        banner = bannerService.updateBannerWithImages(banner, desktopImage, tabletImage, mobileImage);
+      } else {
+        // URL gönderildi - DTO'daki URL'leri kullan
+        if (dtoBannerIU.getImages() != null) {
+          banner.setImages(dtoBannerIU.getImages());
+        }
+        banner = bannerService.saveBanner(banner);
+      }
+
+      DtoBanner dtoBanner = bannerMapper.toDtoBanner(banner);
       return ok(dtoBanner);
     } catch (Exception e) {
-      throw new BadRequestException("Banner not updated" + e.getMessage());
+      throw new BadRequestException("Banner güncellenemedi: " + e.getMessage());
     }
+  }
 
+  /**
+   * Dosya yüklenmiş mi kontrol et
+   */
+  private boolean isFileUploaded(MultipartFile file) {
+    return file != null && !file.isEmpty();
   }
 
   @Override
@@ -73,7 +123,7 @@ public class BannerController extends BaseController implements IBannerControlle
     if (deleted) {
       return ok(deleted);
     }
-    throw new BadRequestException("Banner not deleted");
+    throw new BadRequestException("Banner silinemedi");
   }
 
   @Override
@@ -98,5 +148,4 @@ public class BannerController extends BaseController implements IBannerControlle
     List<DtoBannerSummary> dtoBannerSummaries = bannerService.getAllBannersWithSummary();
     return ok(dtoBannerSummaries);
   }
-
 }

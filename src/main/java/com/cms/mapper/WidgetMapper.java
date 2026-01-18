@@ -59,7 +59,7 @@ public interface WidgetMapper {
     DtoBanner dto = new DtoBanner();
     dto.setId(banner.getId());
     dto.setTitle(banner.getTitle());
-    dto.setImage(banner.getImage());
+    dto.setImages(banner.getImages());
     dto.setAltText(banner.getAltText());
     dto.setLink(banner.getLink());
     dto.setTarget(banner.getTarget());

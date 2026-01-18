@@ -1,5 +1,7 @@
 package com.cms.dto;
 
+import com.cms.entity.BannerImage;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -13,7 +15,7 @@ public class DtoBanner {
   private Long id;
   private String title;
   private String altText;
-  private String image;
+  private BannerImage images;
   private String link;
   private String target;
   private String type;

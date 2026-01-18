@@ -7,13 +7,13 @@ import com.cms.dto.DtoAssetsIU;
 import com.cms.entity.RootEntityResponse;
 
 public interface IAssetsController {
-  public RootEntityResponse<DtoAssets> createAssets(DtoAssetsIU dtoAssetsIU, MultipartFile file);
+  RootEntityResponse<DtoAssets> createAssets(DtoAssetsIU dtoAssetsIU, MultipartFile file);
 
-  public RootEntityResponse<DtoAssets> updateAssets(Long id, MultipartFile file);
+  RootEntityResponse<DtoAssets> updateAssets(Long id, MultipartFile file);
 
-  public RootEntityResponse<Boolean> deleteAssets(Long id);
+  RootEntityResponse<Boolean> deleteAssets(Long id);
 
-  public RootEntityResponse<DtoAssets> getAssetsById(Long id);
+  RootEntityResponse<DtoAssets> getAssetsById(Long id);
 
-  public RootEntityResponse<DtoAssets> getAssetsByName(String name);
+  RootEntityResponse<DtoAssets> getAssetsByName(String name);
 }

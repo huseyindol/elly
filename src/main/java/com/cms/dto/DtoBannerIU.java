@@ -1,5 +1,7 @@
 package com.cms.dto;
 
+import com.cms.entity.BannerImage;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -32,4 +34,6 @@ public class DtoBannerIU {
 
   @Schema(description = "Aktif mi", example = "true")
   private boolean status;
+
+  private BannerImage images;
 }

@@ -1,5 +1,6 @@
 package com.cms.entity;
 
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
@@ -20,7 +21,8 @@ import lombok.Setter;
 public class Banner extends BaseEntity {
   private String title;
   private String altText;
-  private String image;
+  @Embedded
+  private BannerImage images;
   private String link;
   private String target;
   private String type;

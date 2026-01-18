@@ -99,7 +99,7 @@ public class AuthService implements IAuthService {
   @Override
   @Transactional
   public DtoAuthResponse login(DtoLogin dtoLogin) {
-    // Authentication işlemi
+    // Authentication işlemi (BCrypt - kasıtlı yavaş)
     Authentication authentication = authenticationManager.authenticate(
         new UsernamePasswordAuthenticationToken(
             dtoLogin.getUsernameOrEmail(),
@@ -110,35 +110,26 @@ public class AuthService implements IAuthService {
         .getPrincipal();
     User user = principal.getUser();
 
-    // Kullanıcı aktif mi kontrol et (CustomUserPrincipal.isEnabled() ile de kontrol
-    // ediliyor)
+    // Kullanıcı aktif mi kontrol et
     if (!user.getIsActive()) {
       throw new BadRequestException("User account is deactivated");
     }
 
-    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
-    // için)
-    Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
-    user.setTokenVersion(currentVersion + 1);
-    user = userRepository.save(user);
+    // Token version'ı artır
+    Long newTokenVersion = (user.getTokenVersion() != null ? user.getTokenVersion() : 0L) + 1;
+
+    // Native query ile token_version'ı güncelle (tam entity update yerine)
+    userRepository.updateTokenVersion(user.getId(), newTokenVersion);
 
     // JWT token oluştur (güncel version ile)
-    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion());
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), newTokenVersion);
 
     // Refresh token oluştur
     String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
 
-    // Mevcut refresh token'ı bul veya yeni oluştur
-    RefreshToken refreshToken = refreshTokenRepository.findByUserId(user.getId())
-        .orElse(new RefreshToken());
-
-    // Refresh token'ı güncelle veya yeni oluştur
-    refreshToken.setToken(refreshTokenString);
-    refreshToken.setUser(user);
-    refreshToken.setIsRevoked(false);
-    refreshToken.setExpiryDate(new Date(System.currentTimeMillis() + refreshTokenExpiration));
-
-    refreshTokenRepository.save(refreshToken);
+    // Refresh token'ı upsert (INSERT veya UPDATE - tek sorgu)
+    Date expiryDate = new Date(System.currentTimeMillis() + refreshTokenExpiration);
+    refreshTokenRepository.upsertRefreshToken(user.getId(), refreshTokenString, expiryDate);
 
     // Response oluştur
     DtoAuthResponse response = new DtoAuthResponse();

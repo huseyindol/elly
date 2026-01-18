@@ -15,6 +15,7 @@ public class DtoPageIU {
   private String title;
   private String description;
   private String slug;
+  private String template;
   private Boolean status;
   private DtoSeoInfoIU seoInfo;
   private List<Long> componentIds;

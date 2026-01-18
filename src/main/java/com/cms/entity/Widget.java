@@ -38,6 +38,7 @@ public class Widget extends BaseEntity {
   private String description;
   private WidgetTypeEnum type;
   private String content;
+  private String template;
   private Integer orderIndex;
   private Boolean status;
 

@@ -40,6 +40,7 @@ public class Component extends BaseEntity {
   private String description;
   private ComponentTypeEnum type;
   private String content;
+  private String template;
   private Integer orderIndex;
   private Boolean status;
 

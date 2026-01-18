@@ -19,6 +19,7 @@ public class DtoWidget {
   private String description;
   private WidgetTypeEnum type;
   private String content;
+  private String template;
   private Integer orderIndex;
   private Boolean status;
   private List<DtoBanner> banners;

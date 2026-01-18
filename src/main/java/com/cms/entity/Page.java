@@ -32,6 +32,7 @@ public class Page extends BaseEntity {
   private String title;
   private String description;
   private String slug;
+  private String template;
   private Boolean status;
 
   @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)

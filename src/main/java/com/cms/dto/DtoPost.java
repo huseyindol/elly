@@ -14,6 +14,7 @@ public class DtoPost {
   private String title;
   private String content;
   private String slug;
+  private String template;
   private Boolean status;
   private Integer orderIndex;
   private DtoSeoInfo seoInfo;

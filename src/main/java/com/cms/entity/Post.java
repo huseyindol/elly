@@ -34,6 +34,7 @@ public class Post extends BaseEntity {
 
   @Column(name = "slug", nullable = false, unique = true)
   private String slug;
+  private String template;
   private Integer orderIndex;
   private Boolean status;
 

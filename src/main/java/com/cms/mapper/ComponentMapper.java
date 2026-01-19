@@ -14,8 +14,10 @@ import org.mapstruct.Named;
 
 import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoComponent;
+import com.cms.dto.DtoComponentForPage;
 import com.cms.dto.DtoComponentIU;
 import com.cms.dto.DtoPageSummary;
+import com.cms.dto.DtoPost;
 import com.cms.dto.DtoWidget;
 import com.cms.entity.Banner;
 import com.cms.entity.Component;
@@ -104,8 +106,36 @@ public interface ComponentMapper {
     dto.setDescription(widget.getDescription());
     dto.setType(widget.getType());
     dto.setContent(widget.getContent());
+    dto.setTemplate(widget.getTemplate());
     dto.setOrderIndex(widget.getOrderIndex());
     dto.setStatus(widget.getStatus());
+
+    // Map banners
+    if (widget.getBanners() != null && !widget.getBanners().isEmpty()) {
+      List<DtoBanner> banners = widget.getBanners().stream()
+          .map(this::bannerToDtoBanner)
+          .collect(Collectors.toList());
+      dto.setBanners(banners);
+    }
+
+    // Map posts
+    if (widget.getPosts() != null && !widget.getPosts().isEmpty()) {
+      List<DtoPost> posts = widget.getPosts().stream()
+          .map(post -> {
+            DtoPost dtoPost = new DtoPost();
+            dtoPost.setId(post.getId());
+            dtoPost.setTitle(post.getTitle());
+            dtoPost.setContent(post.getContent());
+            dtoPost.setSlug(post.getSlug());
+            dtoPost.setTemplate(post.getTemplate());
+            dtoPost.setStatus(post.getStatus());
+            dtoPost.setOrderIndex(post.getOrderIndex());
+            return dtoPost;
+          })
+          .collect(Collectors.toList());
+      dto.setPosts(posts);
+    }
+
     return dto;
   }
 
@@ -126,6 +156,47 @@ public interface ComponentMapper {
     return components.stream()
         .map(this::toDtoComponent)
         .collect(Collectors.toList());
+  }
+
+  @Named("toDtoComponentForPageList")
+  default List<DtoComponentForPage> toDtoComponentForPageList(Set<Component> components) {
+    if (components == null)
+      return new ArrayList<>();
+    return components.stream()
+        .map(this::toDtoComponentForPage)
+        .collect(Collectors.toList());
+  }
+
+  default DtoComponentForPage toDtoComponentForPage(Component component) {
+    if (component == null)
+      return null;
+    DtoComponentForPage dto = new DtoComponentForPage();
+    dto.setId(component.getId());
+    dto.setName(component.getName());
+    dto.setDescription(component.getDescription());
+    dto.setType(component.getType());
+    dto.setContent(component.getContent());
+    dto.setTemplate(component.getTemplate());
+    dto.setOrderIndex(component.getOrderIndex());
+    dto.setStatus(component.getStatus());
+
+    // Map banners
+    if (component.getBanners() != null && !component.getBanners().isEmpty()) {
+      List<DtoBanner> banners = component.getBanners().stream()
+          .map(this::bannerToDtoBanner)
+          .collect(Collectors.toList());
+      dto.setBanners(banners);
+    }
+
+    // Map widgets
+    if (component.getWidgets() != null && !component.getWidgets().isEmpty()) {
+      List<DtoWidget> widgets = component.getWidgets().stream()
+          .map(this::widgetToDtoWidget)
+          .collect(Collectors.toList());
+      dto.setWidgets(widgets);
+    }
+
+    return dto;
   }
 
   @IterableMapping(qualifiedByName = "toDtoComponentSimple")

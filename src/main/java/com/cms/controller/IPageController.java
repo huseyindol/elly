@@ -3,6 +3,7 @@ package com.cms.controller;
 import java.util.List;
 
 import com.cms.dto.DtoPage;
+import com.cms.dto.DtoPageDetail;
 import com.cms.dto.DtoPageIU;
 import com.cms.dto.DtoPageSummary;
 import com.cms.entity.RootEntityResponse;
@@ -14,7 +15,7 @@ public interface IPageController {
 
   RootEntityResponse<Boolean> deletePage(Long id);
 
-  RootEntityResponse<DtoPage> getPageBySlug(String slug);
+  RootEntityResponse<DtoPageDetail> getPageBySlug(String slug);
 
   RootEntityResponse<List<DtoPage>> getAllPages();
 

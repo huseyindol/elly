@@ -9,6 +9,7 @@ import org.mapstruct.MappingTarget;
 import org.mapstruct.Named;
 
 import com.cms.dto.DtoPage;
+import com.cms.dto.DtoPageDetail;
 import com.cms.dto.DtoPageIU;
 import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
@@ -34,4 +35,7 @@ public interface PageMapper {
   List<DtoPage> toDtoPageListSimple(List<Page> pages);
 
   List<DtoPageSummary> toDtoPageSummaryList(List<Page> pages);
+
+  @Mapping(target = "components", qualifiedByName = "toDtoComponentForPageList")
+  DtoPageDetail toDtoPageDetail(Page page);
 }

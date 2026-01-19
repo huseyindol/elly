@@ -12,7 +12,8 @@ import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
 
 public interface PageRepository extends JpaRepository<Page, Long> {
-  @EntityGraph(attributePaths = { "components", "seoInfo" })
+  @EntityGraph(attributePaths = { "components", "components.banners", "components.widgets", "components.widgets.posts",
+      "components.widgets.banners", "seoInfo" })
   Optional<Page> findBySlug(String slug);
 
   @Override

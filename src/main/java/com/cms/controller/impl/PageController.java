@@ -13,14 +13,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.controller.IPageController;
 import com.cms.dto.DtoPage;
+import com.cms.dto.DtoPageDetail;
 import com.cms.dto.DtoPageIU;
 import com.cms.dto.DtoPageSummary;
+import com.cms.entity.Component;
 import com.cms.entity.Page;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.PageMapper;
-import com.cms.service.IPageService;
 import com.cms.service.IComponentService;
-import com.cms.entity.Component;
+import com.cms.service.IPageService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -80,9 +81,9 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @GetMapping("/{slug}")
-  public RootEntityResponse<DtoPage> getPageBySlug(@PathVariable String slug) {
+  public RootEntityResponse<DtoPageDetail> getPageBySlug(@PathVariable String slug) {
     Page pageBySlug = pageService.getPageBySlug(slug);
-    DtoPage dtoPage = pageMapper.toDtoPage(pageBySlug);
+    DtoPageDetail dtoPage = pageMapper.toDtoPageDetail(pageBySlug);
     return ok(dtoPage);
   }
 

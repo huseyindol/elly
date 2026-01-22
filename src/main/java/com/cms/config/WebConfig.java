@@ -3,7 +3,7 @@ package com.cms.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
+
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -13,27 +13,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
   private final RequestTimingInterceptor requestTimingInterceptor;
-
-  @Override
-  public void addCorsMappings(@NonNull CorsRegistry registry) {
-    registry.addMapping("/**")
-        .allowedOrigins("http://localhost:3000",
-            "http://localhost:8080",
-            "http://localhost:5173",
-            "http://elly-639969822644.europe-west1.run.app",
-            "http://elly-bw5r3k32la-ew.a.run.app",
-            "http://api.huseyindol.site",
-            "http://www.huseyindol.site",
-            "https://elly-639969822644.europe-west1.run.app",
-            "https://elly-bw5r3k32la-ew.a.run.app",
-            "https://api.huseyindol.site",
-            "https://www.huseyindol.site")
-        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
-        .allowedHeaders("*")
-        .exposedHeaders("Authorization", "Content-Type")
-        .allowCredentials(true)
-        .maxAge(3600);
-  }
 
   @Override
   public void addResourceHandlers(@NonNull ResourceHandlerRegistry registry) {

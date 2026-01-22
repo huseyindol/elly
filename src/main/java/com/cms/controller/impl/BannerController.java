@@ -18,6 +18,7 @@ import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerIU;
 import com.cms.dto.DtoBannerSummary;
 import com.cms.entity.Banner;
+
 import com.cms.entity.RootEntityResponse;
 import com.cms.exception.BadRequestException;
 import com.cms.mapper.BannerMapper;
@@ -97,6 +98,10 @@ public class BannerController extends BaseController implements IBannerControlle
       // JSON String'i DTO'ya parse et
       DtoBannerIU dtoBannerIU = objectMapper.readValue(dataJson, DtoBannerIU.class);
       Banner banner = bannerService.getBannerById(id);
+
+      // Mevcut görselleri kaydet (mapper tarafından ezilmemesi için)
+      var originalImages = banner.getImages();
+
       bannerMapper.updateBannerFromDto(dtoBannerIU, banner);
 
       // Dosya mı yoksa URL mi gönderildi kontrol et
@@ -104,12 +109,16 @@ public class BannerController extends BaseController implements IBannerControlle
           || isFileUploaded(mobileImage);
 
       if (hasFiles) {
-        // Dosya yüklendi - dosyaları kaydet
+        // Mevcut görselleri geri yükle (updateBannerWithImages doğru merge yapabilsin)
+        banner.setImages(originalImages);
+        // Dosya yüklendi - dosyaları kaydet (mevcut görseller korunur, sadece yeni
+        // yüklenenler güncellenir)
         banner = bannerService.updateBannerWithImages(banner, desktopImage, tabletImage, mobileImage);
       } else {
-        // URL gönderildi - DTO'daki URL'leri kullan
+        // URL gönderildi - DTO'daki null olmayan URL'leri kullan, null olanlar mevcut
+        // değeri korur
         if (dtoBannerIU.getImages() != null) {
-          banner.setImages(dtoBannerIU.getImages());
+          bannerMapper.mergeImages(banner, dtoBannerIU.getImages());
         }
         banner = bannerService.saveBanner(banner);
       }

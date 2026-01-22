@@ -18,7 +18,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -51,30 +50,60 @@ public class SecurityConfig {
     return authConfig.getAuthenticationManager();
   }
 
+  // Tüm domainler (GET isteği için)
+  private static final java.util.List<String> ALL_DOMAINS = Arrays.asList(
+      "http://localhost:3000",
+      "http://localhost:8080",
+      "http://localhost:5173",
+      "http://elly-639969822644.europe-west1.run.app",
+      "http://elly-bw5r3k32la-ew.a.run.app",
+      "http://api.huseyindol.site",
+      "http://www.huseyindol.site",
+      "https://elly-639969822644.europe-west1.run.app",
+      "https://elly-bw5r3k32la-ew.a.run.app",
+      "https://api.huseyindol.site",
+      "https://www.huseyindol.site");
+
+  // Sadece yazma yetkisi olan domainler (POST, PUT, DELETE)
+  // TODO: Burayı ihtiyacınıza göre düzenleyin, şu an örnek olarak localhost:3000
+  // ve prod siteyi ekledim
+  private static final java.util.List<String> WRITE_DOMAINS = Arrays.asList(
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://www.huseyindol.site");
+
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration configuration = new CorsConfiguration();
-    configuration
-        .setAllowedOrigins(Arrays.asList("http://localhost:3000",
-            "http://localhost:8080",
-            "http://localhost:5173",
-            "http://elly-639969822644.europe-west1.run.app",
-            "http://elly-bw5r3k32la-ew.a.run.app",
-            "http://api.huseyindol.site",
-            "http://www.huseyindol.site",
-            "https://elly-639969822644.europe-west1.run.app",
-            "https://elly-bw5r3k32la-ew.a.run.app",
-            "https://api.huseyindol.site",
-            "https://www.huseyindol.site"));
-    configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-    configuration.setAllowedHeaders(Collections.singletonList("*"));
-    configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
-    configuration.setAllowCredentials(true);
-    configuration.setMaxAge(3600L);
+    return request -> {
+      CorsConfiguration configuration = new CorsConfiguration();
 
-    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", configuration);
-    return source;
+      // İstek metodunu al
+      String method = request.getMethod();
+
+      // Preflight (OPTIONS) istekleri için hedef metodu kontrol et
+      if ("OPTIONS".equalsIgnoreCase(method)) {
+        String headerMethod = request.getHeader("Access-Control-Request-Method");
+        if (headerMethod != null) {
+          method = headerMethod;
+        }
+      }
+
+      // Metoda göre izin verilen domainleri ayarla
+      if ("GET".equalsIgnoreCase(method)) {
+        configuration.setAllowedOrigins(ALL_DOMAINS);
+      } else {
+        // POST, PUT, DELETE, PATCH için kısıtlı domainler
+        configuration.setAllowedOrigins(WRITE_DOMAINS);
+      }
+
+      configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+      configuration.setAllowedHeaders(Collections.singletonList("*"));
+      configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
+      configuration.setAllowCredentials(true);
+      configuration.setMaxAge(3600L);
+
+      return configuration;
+    };
   }
 
   @Bean

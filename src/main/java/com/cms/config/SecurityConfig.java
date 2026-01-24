@@ -68,6 +68,7 @@ public class SecurityConfig {
   // TODO: Burayı ihtiyacınıza göre düzenleyin, şu an örnek olarak localhost:3000
   // ve prod siteyi ekledim
   private static final java.util.List<String> WRITE_DOMAINS = Arrays.asList(
+      "http://localhost:8080",
       "http://localhost:3000",
       "http://localhost:5173",
       "https://www.huseyindol.site");

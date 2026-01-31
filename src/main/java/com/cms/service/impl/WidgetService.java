@@ -6,6 +6,7 @@ import java.util.Set;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +34,10 @@ public class WidgetService implements IWidgetService {
 
   @Override
   @Transactional
-  @CacheEvict(value = "widgets", allEntries = true)
+  @Caching(evict = {
+      @CacheEvict(value = "widgets", allEntries = true),
+      @CacheEvict(value = "components", allEntries = true)
+  })
   public Widget saveWidget(Widget widget, List<Long> bannerIds, List<Long> postIds) {
     // WidgetTypeEnum validation
     WidgetTypeEnum widgetType = widget.getType();
@@ -61,7 +65,10 @@ public class WidgetService implements IWidgetService {
 
   @Override
   @Transactional
-  @CacheEvict(value = "widgets", allEntries = true)
+  @Caching(evict = {
+      @CacheEvict(value = "widgets", allEntries = true),
+      @CacheEvict(value = "components", allEntries = true)
+  })
   public Boolean deleteWidget(Long id) {
     if (widgetRepository.existsById(id)) {
       widgetRepository.deleteById(id);

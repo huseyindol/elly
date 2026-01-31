@@ -6,6 +6,7 @@ import java.util.Set;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +37,11 @@ public class ComponentService implements IComponentService {
 
   @Override
   @Transactional
-  @CacheEvict(value = "components", allEntries = true)
+  @Caching(evict = {
+      @CacheEvict(value = "components", allEntries = true),
+      @CacheEvict(value = "pages", allEntries = true),
+      @CacheEvict(value = "widgets", allEntries = true)
+  })
   public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds) {
     // ComponentTypeEnum validation
     ComponentTypeEnum componentType = component.getType();
@@ -70,7 +75,11 @@ public class ComponentService implements IComponentService {
 
   @Override
   @Transactional
-  @CacheEvict(value = "components", allEntries = true)
+  @Caching(evict = {
+      @CacheEvict(value = "components", allEntries = true),
+      @CacheEvict(value = "pages", allEntries = true),
+      @CacheEvict(value = "widgets", allEntries = true)
+  })
   public Boolean deleteComponent(Long id) {
     if (componentRepository.existsById(id)) {
       componentRepository.deleteById(id);

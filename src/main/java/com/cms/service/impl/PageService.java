@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,14 +24,20 @@ public class PageService implements IPageService {
 
   @Override
   @Transactional
-  @CacheEvict(value = "pages", allEntries = true)
+  @Caching(evict = {
+      @CacheEvict(value = "pages", allEntries = true),
+      @CacheEvict(value = "components", allEntries = true)
+  })
   public Page savePage(Page page) {
     return pageRepository.save(page);
   }
 
   @Override
   @Transactional
-  @CacheEvict(value = "pages", allEntries = true)
+  @Caching(evict = {
+      @CacheEvict(value = "pages", allEntries = true),
+      @CacheEvict(value = "components", allEntries = true)
+  })
   public Boolean deletePage(Long id) {
     if (pageRepository.existsById(id)) {
       pageRepository.deleteById(id);
@@ -48,7 +55,6 @@ public class PageService implements IPageService {
 
   @Override
   @Cacheable(value = "pages", key = "#id")
-  @CacheEvict(value = "pages", key = "#result.slug")
   public Page getPageById(Long id) {
     return pageRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Page", id));

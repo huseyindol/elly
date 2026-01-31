@@ -5,6 +5,7 @@ import java.util.List;
 import com.cms.dto.DtoWidget;
 import com.cms.dto.DtoWidgetIU;
 import com.cms.dto.DtoWidgetSummary;
+import com.cms.dto.PagedResponse;
 import com.cms.entity.RootEntityResponse;
 
 public interface IWidgetController {
@@ -19,4 +20,9 @@ public interface IWidgetController {
   RootEntityResponse<List<DtoWidget>> getAllWidgets();
 
   RootEntityResponse<List<DtoWidgetSummary>> getAllWidgetsSummary();
+
+  // Paginated endpoints
+  RootEntityResponse<PagedResponse<DtoWidget>> getAllWidgetsPaged(int page, int size, String sort);
+
+  RootEntityResponse<PagedResponse<DtoWidgetSummary>> getAllWidgetsSummaryPaged(int page, int size, String sort);
 }

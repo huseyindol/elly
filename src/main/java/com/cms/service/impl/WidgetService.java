@@ -7,6 +7,8 @@ import java.util.Set;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,4 +98,16 @@ public class WidgetService implements IWidgetService {
     return widgetRepository.findAllWithSummary();
   }
 
+  // Paginated methods
+  @Override
+  @Cacheable(value = "widgets", key = "'getAllWidgetsPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public Page<Widget> getAllWidgetsPaged(Pageable pageable) {
+    return widgetRepository.findAllWithRelationsPaged(pageable);
+  }
+
+  @Override
+  @Cacheable(value = "widgets", key = "'getAllWidgetsSummaryPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public Page<DtoWidgetSummary> getAllWidgetsSummaryPaged(Pageable pageable) {
+    return widgetRepository.findAllWithSummaryPaged(pageable);
+  }
 }

@@ -4,6 +4,8 @@ import java.util.List;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,5 +65,18 @@ public class PostService implements IPostService {
   public Post getPostBySlug(String slug) {
     return postRepository.findBySlug(slug)
         .orElseThrow(() -> new ResourceNotFoundException("Post not found with slug: " + slug));
+  }
+
+  // Paginated methods
+  @Override
+  @Cacheable(value = "posts", key = "'getAllPostsPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public Page<Post> getAllPostsPaged(Pageable pageable) {
+    return postRepository.findAllWithRelationsPaged(pageable);
+  }
+
+  @Override
+  @Cacheable(value = "posts", key = "'getAllPostsSummaryPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public Page<DtoPostSummary> getAllPostsSummaryPaged(Pageable pageable) {
+    return postRepository.findAllWithSummaryPaged(pageable);
   }
 }

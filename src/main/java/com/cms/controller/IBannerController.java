@@ -6,6 +6,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerSummary;
+import com.cms.dto.PagedResponse;
 import com.cms.entity.RootEntityResponse;
 
 public interface IBannerController {
@@ -31,4 +32,9 @@ public interface IBannerController {
   RootEntityResponse<List<DtoBannerSummary>> getBannersSummaryBySubFolder(String subFolder);
 
   RootEntityResponse<List<String>> getAllSubFolders();
+
+  // Paginated endpoints
+  RootEntityResponse<PagedResponse<DtoBanner>> getAllBannersPaged(int page, int size, String sort);
+
+  RootEntityResponse<PagedResponse<DtoBannerSummary>> getAllBannersWithSummaryPaged(int page, int size, String sort);
 }

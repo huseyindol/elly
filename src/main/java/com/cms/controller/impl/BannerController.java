@@ -2,6 +2,10 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,6 +22,7 @@ import com.cms.controller.IBannerController;
 import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerIU;
 import com.cms.dto.DtoBannerSummary;
+import com.cms.dto.PagedResponse;
 import com.cms.entity.Banner;
 
 import com.cms.entity.RootEntityResponse;
@@ -211,5 +217,38 @@ public class BannerController extends BaseController implements IBannerControlle
   public RootEntityResponse<List<String>> getAllSubFolders() {
     List<String> subFolders = bannerService.getAllSubFolders();
     return ok(subFolders);
+  }
+
+  // Paginated endpoints
+  @Override
+  @GetMapping("/list/paged")
+  public RootEntityResponse<PagedResponse<DtoBanner>> getAllBannersPaged(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    Pageable pageable = createPageable(page, size, sort);
+    Page<Banner> pageResult = bannerService.getAllBannersPaged(pageable);
+    List<DtoBanner> dtoBanners = bannerMapper.toDtoBannerList(pageResult.getContent());
+    return ok(PagedResponse.from(pageResult, dtoBanners));
+  }
+
+  @Override
+  @GetMapping("/list/summary/paged")
+  public RootEntityResponse<PagedResponse<DtoBannerSummary>> getAllBannersWithSummaryPaged(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    Pageable pageable = createPageable(page, size, sort);
+    Page<DtoBannerSummary> pageResult = bannerService.getAllBannersWithSummaryPaged(pageable);
+    return ok(PagedResponse.from(pageResult));
+  }
+
+  private Pageable createPageable(int page, int size, String sort) {
+    String[] sortParams = sort.split(",");
+    String sortField = sortParams[0];
+    Sort.Direction direction = sortParams.length > 1 && sortParams[1].equalsIgnoreCase("desc")
+        ? Sort.Direction.DESC
+        : Sort.Direction.ASC;
+    return PageRequest.of(page, size, Sort.by(direction, sortField));
   }
 }

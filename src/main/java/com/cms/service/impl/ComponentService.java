@@ -7,13 +7,14 @@ import java.util.Set;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.Banner;
 import com.cms.entity.Component;
-import com.cms.entity.Page;
 import com.cms.entity.Widget;
 import com.cms.enums.ComponentTypeEnum;
 import com.cms.exception.ResourceNotFoundException;
@@ -53,7 +54,7 @@ public class ComponentService implements IComponentService {
     }
 
     if (pageIds != null && !pageIds.isEmpty()) {
-      Set<Page> pages = new HashSet<>(pageRepository.findAllById(pageIds));
+      Set<com.cms.entity.Page> pages = new HashSet<>(pageRepository.findAllById(pageIds));
       component.setPages(pages);
     } else {
       component.setPages(new HashSet<>());
@@ -112,4 +113,16 @@ public class ComponentService implements IComponentService {
     return componentRepository.findAllById(ids);
   }
 
+  // Paginated methods
+  @Override
+  @Cacheable(value = "components", key = "'getAllComponentsPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public Page<Component> getAllComponentsPaged(Pageable pageable) {
+    return componentRepository.findAllWithRelationsPaged(pageable);
+  }
+
+  @Override
+  @Cacheable(value = "components", key = "'getAllComponentsSummaryPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public Page<DtoComponentSummary> getAllComponentsSummaryPaged(Pageable pageable) {
+    return componentRepository.findAllWithSummaryPaged(pageable);
+  }
 }

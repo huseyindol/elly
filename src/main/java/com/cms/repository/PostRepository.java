@@ -3,6 +3,8 @@ package com.cms.repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -25,4 +27,12 @@ public interface PostRepository extends JpaRepository<Post, Long> {
   List<DtoPostSummary> findAllWithSummary();
 
   Optional<Post> findBySlug(String slug);
+
+  // Paginated methods
+  @Query("SELECT p FROM Post p")
+  @EntityGraph(attributePaths = { "seoInfo" })
+  Page<Post> findAllWithRelationsPaged(Pageable pageable);
+
+  @Query(value = "SELECT new com.cms.dto.DtoPostSummary(p.id, p.title, p.slug, p.status, p.orderIndex) FROM Post p", countQuery = "SELECT count(p) FROM Post p")
+  Page<DtoPostSummary> findAllWithSummaryPaged(Pageable pageable);
 }

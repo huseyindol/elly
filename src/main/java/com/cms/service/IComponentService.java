@@ -2,6 +2,9 @@ package com.cms.service;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.Component;
 
@@ -18,4 +21,8 @@ public interface IComponentService {
 
   List<Component> getComponentsByIds(List<Long> ids);
 
+  // Paginated methods
+  Page<Component> getAllComponentsPaged(Pageable pageable);
+
+  Page<DtoComponentSummary> getAllComponentsSummaryPaged(Pageable pageable);
 }

@@ -6,6 +6,7 @@ import com.cms.dto.DtoPage;
 import com.cms.dto.DtoPageDetail;
 import com.cms.dto.DtoPageIU;
 import com.cms.dto.DtoPageSummary;
+import com.cms.dto.PagedResponse;
 import com.cms.entity.RootEntityResponse;
 
 public interface IPageController {
@@ -21,4 +22,8 @@ public interface IPageController {
 
   RootEntityResponse<List<DtoPageSummary>> getAllPageSummary();
 
+  // Paginated endpoints
+  RootEntityResponse<PagedResponse<DtoPage>> getAllPagesPaged(int page, int size, String sort);
+
+  RootEntityResponse<PagedResponse<DtoPageSummary>> getAllPageSummaryPaged(int page, int size, String sort);
 }

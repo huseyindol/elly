@@ -254,4 +254,19 @@ public class BannerService implements IBannerService {
     }
     return result.stream().distinct().collect(Collectors.toList());
   }
+
+  // Paginated methods
+  @Override
+  @Cacheable(value = "banners", key = "'getAllBannersPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public org.springframework.data.domain.Page<Banner> getAllBannersPaged(
+      org.springframework.data.domain.Pageable pageable) {
+    return bannerRepository.findAll(pageable);
+  }
+
+  @Override
+  @Cacheable(value = "banners", key = "'getAllBannersWithSummaryPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  public org.springframework.data.domain.Page<DtoBannerSummary> getAllBannersWithSummaryPaged(
+      org.springframework.data.domain.Pageable pageable) {
+    return bannerRepository.findAllWithSummaryPaged(pageable);
+  }
 }

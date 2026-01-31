@@ -3,6 +3,8 @@ package com.cms.repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,4 +34,10 @@ public interface BannerRepository extends JpaRepository<Banner, Long> {
 
   @Query("SELECT b FROM Banner b WHERE b.subFolder IS NULL OR b.subFolder = ''")
   List<Banner> findBySubFolderIsNullOrEmpty();
+
+  // Paginated methods
+  Page<Banner> findAll(Pageable pageable);
+
+  @Query(value = "SELECT new com.cms.dto.DtoBannerSummary(b.id, b.title, b.orderIndex, b.status, b.subFolder) FROM Banner b", countQuery = "SELECT count(b) FROM Banner b")
+  Page<DtoBannerSummary> findAllWithSummaryPaged(Pageable pageable);
 }

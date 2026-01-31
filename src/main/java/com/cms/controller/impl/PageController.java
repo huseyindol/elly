@@ -2,6 +2,9 @@ package com.cms.controller.impl;
 
 import java.util.List;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -9,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.controller.IPageController;
@@ -16,6 +20,7 @@ import com.cms.dto.DtoPage;
 import com.cms.dto.DtoPageDetail;
 import com.cms.dto.DtoPageIU;
 import com.cms.dto.DtoPageSummary;
+import com.cms.dto.PagedResponse;
 import com.cms.entity.Component;
 import com.cms.entity.Page;
 import com.cms.entity.RootEntityResponse;
@@ -100,5 +105,42 @@ public class PageController extends BaseController implements IPageController {
   public RootEntityResponse<List<DtoPageSummary>> getAllPageSummary() {
     List<DtoPageSummary> pages = pageService.getAllPageSummary();
     return ok(pages);
+  }
+
+  // Paginated endpoints
+  @Override
+  @GetMapping("/list/paged")
+  public RootEntityResponse<PagedResponse<DtoPage>> getAllPagesPaged(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    Pageable pageable = createPageable(page, size, sort);
+    org.springframework.data.domain.Page<Page> pageResult = pageService.getAllPagesPaged(pageable);
+    List<DtoPage> dtoPages = pageMapper.toDtoPageListSimple(pageResult.getContent());
+    return ok(PagedResponse.from(pageResult, dtoPages));
+  }
+
+  @Override
+  @GetMapping("/list/summary/paged")
+  public RootEntityResponse<PagedResponse<DtoPageSummary>> getAllPageSummaryPaged(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    Pageable pageable = createPageable(page, size, sort);
+    org.springframework.data.domain.Page<DtoPageSummary> pageResult = pageService.getAllPageSummaryPaged(pageable);
+    return ok(PagedResponse.from(pageResult));
+  }
+
+  /**
+   * Sort string'inden Pageable oluşturur.
+   * Format: "field,direction" (örn: "id,desc" veya "title,asc")
+   */
+  private Pageable createPageable(int page, int size, String sort) {
+    String[] sortParams = sort.split(",");
+    String sortField = sortParams[0];
+    Sort.Direction direction = sortParams.length > 1 && sortParams[1].equalsIgnoreCase("desc")
+        ? Sort.Direction.DESC
+        : Sort.Direction.ASC;
+    return PageRequest.of(page, size, Sort.by(direction, sortField));
   }
 }

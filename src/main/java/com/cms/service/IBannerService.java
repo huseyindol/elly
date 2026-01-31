@@ -3,6 +3,8 @@ package com.cms.service;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.dto.DtoBanner;
@@ -41,4 +43,9 @@ public interface IBannerService {
   List<DtoBannerSummary> getBannersSummaryBySubFolder(String subFolder);
 
   List<String> getAllSubFolders();
+
+  // Paginated methods
+  Page<Banner> getAllBannersPaged(Pageable pageable);
+
+  Page<DtoBannerSummary> getAllBannersWithSummaryPaged(Pageable pageable);
 }

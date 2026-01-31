@@ -2,6 +2,8 @@ package com.cms.service;
 
 import java.util.List;
 
+import org.springframework.data.domain.Pageable;
+
 import com.cms.dto.DtoPageSummary;
 import com.cms.entity.Page;
 
@@ -18,4 +20,8 @@ public interface IPageService {
 
   List<DtoPageSummary> getAllPageSummary();
 
+  // Paginated methods
+  org.springframework.data.domain.Page<Page> getAllPagesPaged(Pageable pageable);
+
+  org.springframework.data.domain.Page<DtoPageSummary> getAllPageSummaryPaged(Pageable pageable);
 }

@@ -4,6 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import com.cms.enums.ComponentTypeEnum;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import org.hibernate.annotations.BatchSize;
 
@@ -44,6 +45,7 @@ public class Component extends BaseEntity {
   private Integer orderIndex;
   private Boolean status;
 
+  @JsonIgnore // Prevents circular reference: Page -> Component -> Page
   @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinTable(name = "page_components", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "page_id"))
   private Set<Page> pages = new LinkedHashSet<>();

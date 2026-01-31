@@ -24,6 +24,38 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: elly-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - elly-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Web GUI
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: elly-redis-insight
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5540:5540"
+    volumes:
+      - redis_insight_data:/data
+    networks:
+      - elly-network
+
   # Spring Boot Application
   app:
     build:
@@ -34,6 +66,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       # Database Configuration
       DB_HOST: postgres
@@ -42,6 +76,10 @@ services:
       DB_SCHEMA: ${DB_SCHEMA:-elly}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-123456}
+      
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       
       # Spring Configuration
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
@@ -66,6 +104,12 @@ volumes:
   postgres_data:
     driver: local
     name: elly-postgres-data
+  redis_data:
+    driver: local
+    name: elly-redis-data
+  redis_insight_data:
+    driver: local
+    name: elly-redis-insight-data
   app_assets:
     driver: local
     name: elly-app-assets

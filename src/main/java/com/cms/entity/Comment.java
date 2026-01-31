@@ -3,6 +3,8 @@ package com.cms.entity;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -33,9 +35,14 @@ public class Comment extends BaseEntity {
   @Column(name = "email", nullable = false, length = 255)
   private String email;
   private String content;
+
+  @JsonIgnore // Prevents circular reference: Comment -> Post -> (if Post had comments list)
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "post_id", referencedColumnName = "id")
   private Post post;
+
+  @JsonIgnore // Prevents self-referencing circular: Comment -> parentComment -> subComments
+              // -> ...
   // Cascade burada OLMAMALI - child silinince parent silinmemeli
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "parent_comment_id", referencedColumnName = "id")

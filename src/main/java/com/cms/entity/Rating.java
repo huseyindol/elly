@@ -1,5 +1,7 @@
 package com.cms.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -26,6 +28,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class Rating extends BaseEntity {
 
+  @JsonIgnore // Prevents circular reference during Redis serialization
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "post_id", nullable = false)
   private Post post;

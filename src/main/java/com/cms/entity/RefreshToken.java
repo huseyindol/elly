@@ -1,5 +1,9 @@
 package com.cms.entity;
 
+import java.util.Date;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -11,8 +15,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.Date;
 
 @Entity
 @Table(name = "refresh_tokens", indexes = {
@@ -30,6 +32,7 @@ public class RefreshToken extends BaseEntity {
   @Column(name = "expiry_date", nullable = false)
   private Date expiryDate;
 
+  @JsonIgnore // Prevents circular reference during Redis serialization
   @OneToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "user_id", nullable = false)
   private User user;

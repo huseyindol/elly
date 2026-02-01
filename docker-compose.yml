@@ -61,6 +61,47 @@ services:
       retries: 5
       start_period: 60s
 
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: elly-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - elly-network
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # Grafana - Metrics Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: elly-grafana
+    restart: unless-stopped
+    ports:
+      - "3333:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - elly-network
+    depends_on:
+      - prometheus
+
 # Volumes
 volumes:
   postgres_data:
@@ -69,6 +110,12 @@ volumes:
   app_assets:
     driver: local
     name: elly-app-assets
+  prometheus_data:
+    driver: local
+    name: elly-prometheus-data
+  grafana_data:
+    driver: local
+    name: elly-grafana-data
 
 # Networks
 networks:

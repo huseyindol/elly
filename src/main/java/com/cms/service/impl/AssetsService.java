@@ -1,5 +1,8 @@
 package com.cms.service.impl;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,6 +29,24 @@ public class AssetsService implements IAssetsService {
     assets.setPath(path);
     Assets savedAssets = assetsRepository.save(assets);
     return savedAssets;
+  }
+
+  @Override
+  @Transactional
+  public List<Assets> saveMultipleAssets(String subFolder, List<MultipartFile> files) {
+    List<Assets> savedAssetsList = new ArrayList<>();
+    for (MultipartFile file : files) {
+      Assets assets = new Assets();
+      assets.setName(file.getOriginalFilename());
+      assets.setType(file.getContentType());
+      assets.setSubFolder(subFolder);
+      assets.setExtension(fileService.getFileExtension(file.getOriginalFilename()));
+      String path = fileService.saveFile(file, subFolder);
+      assets.setPath(path);
+      Assets savedAssets = assetsRepository.save(assets);
+      savedAssetsList.add(savedAssets);
+    }
+    return savedAssetsList;
   }
 
   @Override

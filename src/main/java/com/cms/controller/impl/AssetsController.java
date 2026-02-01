@@ -1,5 +1,8 @@
 package com.cms.controller.impl;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,6 +48,18 @@ public class AssetsController extends BaseController implements IAssetsControlle
     Assets savedAssets = assetsService.saveAssets(assets, file);
     DtoAssets dtoAssets = assetsMapper.toDtoAssets(savedAssets);
     return ok(dtoAssets);
+  }
+
+  @Override
+  @PostMapping(value = "/multi", consumes = "multipart/form-data")
+  public RootEntityResponse<List<DtoAssets>> createMultipleAssets(
+      @ParameterObject @ModelAttribute DtoAssetsIU dtoAssetsIU,
+      @RequestParam(value = "files", required = true) List<MultipartFile> files) {
+    List<Assets> savedAssetsList = assetsService.saveMultipleAssets(dtoAssetsIU.getSubFolder(), files);
+    List<DtoAssets> dtoAssetsList = savedAssetsList.stream()
+        .map(assetsMapper::toDtoAssets)
+        .collect(Collectors.toList());
+    return ok(dtoAssetsList);
   }
 
   @Override

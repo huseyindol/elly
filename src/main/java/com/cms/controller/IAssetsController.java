@@ -1,5 +1,7 @@
 package com.cms.controller;
 
+import java.util.List;
+
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.dto.DtoAssets;
@@ -8,6 +10,8 @@ import com.cms.entity.RootEntityResponse;
 
 public interface IAssetsController {
   RootEntityResponse<DtoAssets> createAssets(DtoAssetsIU dtoAssetsIU, MultipartFile file);
+
+  RootEntityResponse<List<DtoAssets>> createMultipleAssets(DtoAssetsIU dtoAssetsIU, List<MultipartFile> files);
 
   RootEntityResponse<DtoAssets> updateAssets(Long id, MultipartFile file);
 

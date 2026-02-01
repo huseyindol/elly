@@ -101,4 +101,25 @@ public class AssetsController extends BaseController implements IAssetsControlle
     return ok(dtoAssets);
   }
 
+  @Override
+  @GetMapping("/list")
+  public RootEntityResponse<List<DtoAssets>> getAllAssets() {
+    List<Assets> assets = assetsService.getAllAssets();
+    List<DtoAssets> dtoAssets = assets.stream().map(assetsMapper::toDtoAssets).collect(Collectors.toList());
+    return ok(dtoAssets);
+  }
+
+  @Override
+  @GetMapping("/list/paged")
+  public RootEntityResponse<com.cms.dto.PagedResponse<DtoAssets>> getAllAssetsPaged(
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    org.springframework.data.domain.Pageable pageable = createPageable(page, size, sort);
+    org.springframework.data.domain.Page<Assets> pageResult = assetsService.getAllAssetsPaged(pageable);
+    List<DtoAssets> dtoAssets = pageResult.getContent().stream().map(assetsMapper::toDtoAssets)
+        .collect(Collectors.toList());
+    return ok(com.cms.dto.PagedResponse.from(pageResult, dtoAssets));
+  }
+
 }

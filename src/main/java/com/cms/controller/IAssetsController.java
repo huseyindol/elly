@@ -6,6 +6,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.dto.DtoAssets;
 import com.cms.dto.DtoAssetsIU;
+import com.cms.dto.PagedResponse;
 import com.cms.entity.RootEntityResponse;
 
 public interface IAssetsController {
@@ -20,4 +21,8 @@ public interface IAssetsController {
   RootEntityResponse<DtoAssets> getAssetsById(Long id);
 
   RootEntityResponse<DtoAssets> getAssetsByName(String name);
+
+  RootEntityResponse<List<DtoAssets>> getAllAssets();
+
+  RootEntityResponse<PagedResponse<DtoAssets>> getAllAssetsPaged(int page, int size, String sort);
 }

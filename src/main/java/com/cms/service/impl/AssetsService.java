@@ -3,6 +3,8 @@ package com.cms.service.impl;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -73,6 +75,17 @@ public class AssetsService implements IAssetsService {
   public Assets getAssetsByName(String name) {
     return assetsRepository.findByName(name)
         .orElseThrow(() -> new ResourceNotFoundException("Assets", "name", name));
+  }
+
+  @Override
+  public List<Assets> getAllAssets() {
+    return assetsRepository.findAll();
+  }
+
+  @Override
+  public Page<Assets> getAllAssetsPaged(
+      Pageable pageable) {
+    return assetsRepository.findAll(pageable);
   }
 
 }

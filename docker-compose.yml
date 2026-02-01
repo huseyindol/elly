@@ -46,6 +46,9 @@ services:
       # Spring Configuration
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
       
+      # Tracing Configuration
+      ZIPKIN_URL: http://zipkin:9411
+      
       # JVM Options
       JAVA_OPTS: "-Xmx512m -Xms256m"
     ports:
@@ -60,6 +63,23 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  # Zipkin - Distributed Tracing
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: elly-zipkin
+    restart: unless-stopped
+    ports:
+      - "9411:9411"
+    networks:
+      - elly-network
+    environment:
+      - STORAGE_TYPE=mem
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9411/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Prometheus - Metrics Collection
   prometheus:

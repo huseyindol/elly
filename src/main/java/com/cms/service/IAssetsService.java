@@ -17,7 +17,17 @@ public interface IAssetsService {
 
   Assets getAssetsById(Long id);
 
-  Assets getAssetsByName(String name);
+  List<Assets> getAssetsByName(String name);
+
+  Page<Assets> getAssetsByNamePaged(String name, Pageable pageable);
+
+  List<Assets> getAssetsBySubFolder(String subFolder);
+
+  Page<Assets> getAssetsBySubFolderPaged(String subFolder, Pageable pageable);
+
+  Page<Assets> getAssetsBySubFolderAndNamePaged(String subFolder, String name, Pageable pageable);
+
+  List<String> getAllSubFolders();
 
   List<Assets> getAllAssets();
 

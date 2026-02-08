@@ -8,14 +8,16 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import jakarta.persistence.UniqueConstraint;
+
 @Entity
-@Table(name = "assets")
+@Table(name = "assets", uniqueConstraints = { @UniqueConstraint(columnNames = { "name", "subFolder" }) })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class Assets extends BaseEntity {
-  @Column(unique = true)
+  @Column(unique = false)
   private String name;
   private String path;
   private String type;

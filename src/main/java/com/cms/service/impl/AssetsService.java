@@ -2,6 +2,7 @@ package com.cms.service.impl;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,10 +28,25 @@ public class AssetsService implements IAssetsService {
   @Override
   @Transactional
   public Assets saveAssets(Assets assets, MultipartFile file) {
-    String path = fileService.saveFile(file, assets.getSubFolder());
-    assets.setPath(path);
-    Assets savedAssets = assetsRepository.save(assets);
-    return savedAssets;
+    // Check if asset already exists in this subfolder
+    Optional<Assets> existingAssetsOpt = assetsRepository.findByNameAndSubFolder(
+        file.getOriginalFilename(), assets.getSubFolder());
+
+    Assets assetToSave;
+    if (existingAssetsOpt.isPresent()) {
+      assetToSave = existingAssetsOpt.get();
+      // Update fields if needed (path will be updated below)
+      assetToSave.setType(file.getContentType());
+      assetToSave.setExtension(fileService.getFileExtension(file.getOriginalFilename()));
+      // Name and SubFolder are already same
+    } else {
+      assetToSave = assets;
+    }
+
+    String path = fileService.saveFile(file, assetToSave.getSubFolder());
+    assetToSave.setPath(path);
+
+    return assetsRepository.save(assetToSave);
   }
 
   @Override
@@ -38,14 +54,27 @@ public class AssetsService implements IAssetsService {
   public List<Assets> saveMultipleAssets(String subFolder, List<MultipartFile> files) {
     List<Assets> savedAssetsList = new ArrayList<>();
     for (MultipartFile file : files) {
-      Assets assets = new Assets();
-      assets.setName(file.getOriginalFilename());
-      assets.setType(file.getContentType());
-      assets.setSubFolder(subFolder);
-      assets.setExtension(fileService.getFileExtension(file.getOriginalFilename()));
+      // Check if asset already exists
+      Optional<Assets> existingAssetsOpt = assetsRepository.findByNameAndSubFolder(
+          file.getOriginalFilename(), subFolder);
+
+      Assets assetToSave;
+      if (existingAssetsOpt.isPresent()) {
+        assetToSave = existingAssetsOpt.get();
+        assetToSave.setType(file.getContentType());
+        assetToSave.setExtension(fileService.getFileExtension(file.getOriginalFilename()));
+      } else {
+        assetToSave = new Assets();
+        assetToSave.setName(file.getOriginalFilename());
+        assetToSave.setType(file.getContentType());
+        assetToSave.setSubFolder(subFolder);
+        assetToSave.setExtension(fileService.getFileExtension(file.getOriginalFilename()));
+      }
+
       String path = fileService.saveFile(file, subFolder);
-      assets.setPath(path);
-      Assets savedAssets = assetsRepository.save(assets);
+      assetToSave.setPath(path);
+
+      Assets savedAssets = assetsRepository.save(assetToSave);
       savedAssetsList.add(savedAssets);
     }
     return savedAssetsList;
@@ -72,14 +101,39 @@ public class AssetsService implements IAssetsService {
   }
 
   @Override
-  public Assets getAssetsByName(String name) {
-    return assetsRepository.findByName(name)
-        .orElseThrow(() -> new ResourceNotFoundException("Assets", "name", name));
+  public List<Assets> getAssetsByName(String name) {
+    return assetsRepository.findByNameContainingIgnoreCase(name);
+  }
+
+  @Override
+  public Page<Assets> getAssetsByNamePaged(String name, Pageable pageable) {
+    return assetsRepository.findByNameContainingIgnoreCase(name, pageable);
+  }
+
+  @Override
+  public List<Assets> getAssetsBySubFolder(String subFolder) {
+    return assetsRepository.findBySubFolder(subFolder);
+  }
+
+  @Override
+  public Page<Assets> getAssetsBySubFolderPaged(String subFolder, Pageable pageable) {
+    return assetsRepository.findBySubFolder(subFolder, pageable);
+  }
+
+  @Override
+  public Page<Assets> getAssetsBySubFolderAndNamePaged(String subFolder, String name, Pageable pageable) {
+    return assetsRepository.findBySubFolderAndNameContainingIgnoreCase(subFolder, name, pageable);
+  }
+
+  @Override
+  public List<String> getAllSubFolders() {
+    return assetsRepository.findDistinctSubFolders();
   }
 
   @Override
   public List<Assets> getAllAssets() {
-    return assetsRepository.findAll();
+    List<Assets> assets = assetsRepository.findAll();
+    return assets;
   }
 
   @Override

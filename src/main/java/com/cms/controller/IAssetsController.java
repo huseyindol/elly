@@ -20,7 +20,19 @@ public interface IAssetsController {
 
   RootEntityResponse<DtoAssets> getAssetsById(Long id);
 
-  RootEntityResponse<DtoAssets> getAssetsByName(String name);
+  RootEntityResponse<List<DtoAssets>> getAssetsByName(String name);
+
+  RootEntityResponse<PagedResponse<DtoAssets>> getAssetsByNamePaged(String name, int page, int size, String sort);
+
+  RootEntityResponse<List<DtoAssets>> getAssetsBySubFolder(String subFolder);
+
+  RootEntityResponse<PagedResponse<DtoAssets>> getAssetsBySubFolderPaged(String subFolder, int page, int size,
+      String sort);
+
+  RootEntityResponse<PagedResponse<DtoAssets>> getAssetsBySubFolderAndNamePaged(String subFolder, String name, int page,
+      int size, String sort);
+
+  RootEntityResponse<List<String>> getAllSubFolders();
 
   RootEntityResponse<List<DtoAssets>> getAllAssets();
 

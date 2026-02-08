@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -18,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.cms.controller.IAssetsController;
 import com.cms.dto.DtoAssets;
 import com.cms.dto.DtoAssetsIU;
+import com.cms.dto.PagedResponse;
 import com.cms.entity.Assets;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.AssetsMapper;
@@ -95,10 +98,68 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/{name}")
-  public RootEntityResponse<DtoAssets> getAssetsByName(@PathVariable String name) {
-    Assets assets = assetsService.getAssetsByName(name);
-    DtoAssets dtoAssets = assetsMapper.toDtoAssets(assets);
+  public RootEntityResponse<List<DtoAssets>> getAssetsByName(@PathVariable String name) {
+    List<Assets> assets = assetsService.getAssetsByName(name);
+    List<DtoAssets> dtoAssets = assets.stream().map(assetsMapper::toDtoAssets).collect(Collectors.toList());
     return ok(dtoAssets);
+  }
+
+  @Override
+  @GetMapping("/{name}/paged")
+  public RootEntityResponse<PagedResponse<DtoAssets>> getAssetsByNamePaged(
+      @PathVariable String name,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    Pageable pageable = createPageable(page, size, sort);
+    Page<Assets> pageResult = assetsService.getAssetsByNamePaged(name, pageable);
+    List<DtoAssets> dtoAssets = pageResult.getContent().stream().map(assetsMapper::toDtoAssets)
+        .collect(Collectors.toList());
+    return ok(PagedResponse.from(pageResult, dtoAssets));
+  }
+
+  @Override
+  @GetMapping("/sub-folders")
+  public RootEntityResponse<List<String>> getAllSubFolders() {
+    List<String> subFolders = assetsService.getAllSubFolders();
+    return ok(subFolders);
+  }
+
+  @Override
+  @GetMapping("/list/{subFolder}")
+  public RootEntityResponse<List<DtoAssets>> getAssetsBySubFolder(@PathVariable String subFolder) {
+    List<Assets> assets = assetsService.getAssetsBySubFolder(subFolder);
+    List<DtoAssets> dtoAssets = assets.stream().map(assetsMapper::toDtoAssets).collect(Collectors.toList());
+    return ok(dtoAssets);
+  }
+
+  @Override
+  @GetMapping("/list/{subFolder}/paged")
+  public RootEntityResponse<PagedResponse<DtoAssets>> getAssetsBySubFolderPaged(
+      @PathVariable String subFolder,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    Pageable pageable = createPageable(page, size, sort);
+    Page<Assets> pageResult = assetsService.getAssetsBySubFolderPaged(subFolder, pageable);
+    List<DtoAssets> dtoAssets = pageResult.getContent().stream().map(assetsMapper::toDtoAssets)
+        .collect(Collectors.toList());
+    return ok(PagedResponse.from(pageResult, dtoAssets));
+  }
+
+  @Override
+  @GetMapping("/{subFolder}/{name}/paged")
+  public RootEntityResponse<PagedResponse<DtoAssets>> getAssetsBySubFolderAndNamePaged(
+      @PathVariable String subFolder,
+      @PathVariable String name,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      @RequestParam(defaultValue = "id,asc") String sort) {
+    Pageable pageable = createPageable(page, size, sort);
+    Page<Assets> pageResult = assetsService.getAssetsBySubFolderAndNamePaged(subFolder, name, pageable);
+    List<DtoAssets> dtoAssets = pageResult.getContent().stream().map(assetsMapper::toDtoAssets)
+        .collect(Collectors.toList());
+    return ok(PagedResponse.from(pageResult, dtoAssets));
   }
 
   @Override

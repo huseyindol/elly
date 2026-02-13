@@ -32,6 +32,30 @@ import lombok.extern.slf4j.Slf4j;
 public class GlobalExceptionHandler {
 
   /**
+   * Handle FormValidationException with field-level errors
+   */
+  @ExceptionHandler(FormValidationException.class)
+  public ResponseEntity<ErrorResponse> handleFormValidationException(FormValidationException ex,
+      HttpServletRequest request) {
+    log.error("Form validation error: {}", ex.getMessage());
+
+    Map<String, String> validationErrors = new HashMap<>();
+    if (ex.getFieldErrors() != null) {
+      for (FormValidationException.FieldError fieldError : ex.getFieldErrors()) {
+        validationErrors.put(fieldError.getFieldId(), fieldError.getMessage());
+      }
+    }
+
+    ErrorResponse errorResponse = ErrorResponse.withValidationErrors(
+        HttpStatus.BAD_REQUEST.value(),
+        ex.getMessage(),
+        request.getRequestURI(),
+        validationErrors);
+
+    return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+  }
+
+  /**
    * Handle custom BaseException and its subclasses
    */
   @ExceptionHandler(BaseException.class)

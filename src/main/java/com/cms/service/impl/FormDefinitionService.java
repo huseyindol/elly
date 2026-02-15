@@ -15,6 +15,10 @@ import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.FormDefinitionRepository;
 import com.cms.service.IFormDefinitionService;
 
+import com.cms.entity.form.FormSchema;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -22,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 public class FormDefinitionService implements IFormDefinitionService {
 
   private final FormDefinitionRepository formDefinitionRepository;
+  private final ObjectMapper objectMapper;
 
   @Override
   @Transactional
@@ -30,7 +35,31 @@ public class FormDefinitionService implements IFormDefinitionService {
       @CacheEvict(value = "formSubmissions", allEntries = true)
   })
   public FormDefinition save(FormDefinition formDefinition) {
+    if (formDefinition.getId() == null) {
+      // New entity: set version to 1
+      formDefinition.setVersion(1);
+    } else {
+      // Existing entity: check if schema changed and auto-increment version
+      FormDefinition existing = formDefinitionRepository.findById(formDefinition.getId()).orElse(null);
+      if (existing != null && hasSchemaChanged(existing.getSchema(), formDefinition.getSchema())) {
+        formDefinition.setVersion(existing.getVersion() + 1);
+      }
+    }
     return formDefinitionRepository.save(formDefinition);
+  }
+
+  /**
+   * Compares two FormSchema objects for equality using JSON serialization.
+   */
+  private boolean hasSchemaChanged(FormSchema oldSchema, FormSchema newSchema) {
+    try {
+      String oldJson = objectMapper.writeValueAsString(oldSchema);
+      String newJson = objectMapper.writeValueAsString(newSchema);
+      return !oldJson.equals(newJson);
+    } catch (JsonProcessingException e) {
+      // If serialization fails, assume schema changed
+      return true;
+    }
   }
 
   @Override

@@ -20,4 +20,5 @@ import lombok.Setter;
 public class FormSchema implements Serializable {
   private Map<String, Object> config; // Form configuration (layout, styling, etc.)
   private List<FieldDefinition> fields; // List of field definitions
+  private List<StepDefinition> steps; // Step definitions for wizard/multi-step forms
 }

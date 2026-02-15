@@ -2,7 +2,8 @@ package com.cms.enums;
 
 public enum ComponentTypeEnum {
   BANNER,
-  WIDGET;
+  WIDGET,
+  FORM;
 
   public static ComponentTypeEnum fromString(String type) {
     return ComponentTypeEnum.valueOf(type.toUpperCase());

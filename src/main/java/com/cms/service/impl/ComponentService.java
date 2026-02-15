@@ -15,12 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.Banner;
 import com.cms.entity.Component;
+import com.cms.entity.FormDefinition;
 import com.cms.entity.Widget;
 import com.cms.enums.ComponentTypeEnum;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.exception.ValidationException;
 import com.cms.repository.BannerRepository;
 import com.cms.repository.ComponentRepository;
+import com.cms.repository.FormDefinitionRepository;
 import com.cms.repository.PageRepository;
 import com.cms.repository.WidgetRepository;
 import com.cms.service.IComponentService;
@@ -35,22 +37,37 @@ public class ComponentService implements IComponentService {
   private final BannerRepository bannerRepository;
   private final PageRepository pageRepository;
   private final WidgetRepository widgetRepository;
+  private final FormDefinitionRepository formDefinitionRepository;
 
   @Override
   @Transactional
   @Caching(evict = {
       @CacheEvict(value = "components", allEntries = true),
       @CacheEvict(value = "pages", allEntries = true),
-      @CacheEvict(value = "widgets", allEntries = true)
+      @CacheEvict(value = "widgets", allEntries = true),
+      @CacheEvict(value = "formDefinitions", allEntries = true)
   })
-  public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds) {
+  public Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds,
+      List<Long> formIds) {
     // ComponentTypeEnum validation
     ComponentTypeEnum componentType = component.getType();
     if (componentType == ComponentTypeEnum.BANNER && widgetIds != null && !widgetIds.isEmpty()) {
       throw new ValidationException("BANNER tipindeki component'e widget eklenemez");
     }
+    if (componentType == ComponentTypeEnum.BANNER && formIds != null && !formIds.isEmpty()) {
+      throw new ValidationException("BANNER tipindeki component'e form eklenemez");
+    }
     if (componentType == ComponentTypeEnum.WIDGET && bannerIds != null && !bannerIds.isEmpty()) {
       throw new ValidationException("WIDGET tipindeki component'e banner eklenemez");
+    }
+    if (componentType == ComponentTypeEnum.WIDGET && formIds != null && !formIds.isEmpty()) {
+      throw new ValidationException("WIDGET tipindeki component'e form eklenemez");
+    }
+    if (componentType == ComponentTypeEnum.FORM && bannerIds != null && !bannerIds.isEmpty()) {
+      throw new ValidationException("FORM tipindeki component'e banner eklenemez");
+    }
+    if (componentType == ComponentTypeEnum.FORM && widgetIds != null && !widgetIds.isEmpty()) {
+      throw new ValidationException("FORM tipindeki component'e widget eklenemez");
     }
 
     if (pageIds != null && !pageIds.isEmpty()) {
@@ -70,6 +87,12 @@ public class ComponentService implements IComponentService {
       component.setWidgets(widgets);
     } else {
       component.setWidgets(new HashSet<>());
+    }
+    if (formIds != null && !formIds.isEmpty()) {
+      Set<FormDefinition> forms = new HashSet<>(formDefinitionRepository.findAllById(formIds));
+      component.setForms(forms);
+    } else {
+      component.setForms(new HashSet<>());
     }
     return componentRepository.save(component);
   }

@@ -30,4 +30,5 @@ public class DtoComponentForPage {
   private Boolean status;
   private List<DtoBanner> banners;
   private List<DtoWidget> widgets;
+  private List<DtoFormDefinition> forms;
 }

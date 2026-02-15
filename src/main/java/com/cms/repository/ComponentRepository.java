@@ -15,12 +15,12 @@ import com.cms.entity.Component;
 
 public interface ComponentRepository extends JpaRepository<Component, Long> {
   @Override
-  @EntityGraph(attributePaths = { "pages", "banners", "widgets" })
+  @EntityGraph(attributePaths = { "pages", "banners", "widgets", "forms" })
   @NonNull
   Optional<Component> findById(@NonNull Long id);
 
   @Query("SELECT c FROM Component c")
-  @EntityGraph(attributePaths = { "pages", "banners", "widgets" })
+  @EntityGraph(attributePaths = { "pages", "banners", "widgets", "forms" })
   List<Component> findAllWithRelations();
 
   @Query("SELECT new com.cms.dto.DtoComponentSummary(c.id, c.name, c.status, c.type, c.orderIndex) FROM Component c")
@@ -28,7 +28,7 @@ public interface ComponentRepository extends JpaRepository<Component, Long> {
 
   // Paginated methods
   @Query("SELECT c FROM Component c")
-  @EntityGraph(attributePaths = { "pages", "banners", "widgets" })
+  @EntityGraph(attributePaths = { "pages", "banners", "widgets", "forms" })
   Page<Component> findAllWithRelationsPaged(Pageable pageable);
 
   @Query(value = "SELECT new com.cms.dto.DtoComponentSummary(c.id, c.name, c.status, c.type, c.orderIndex) FROM Component c", countQuery = "SELECT count(c) FROM Component c")

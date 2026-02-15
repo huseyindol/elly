@@ -9,7 +9,8 @@ import com.cms.dto.DtoComponentSummary;
 import com.cms.entity.Component;
 
 public interface IComponentService {
-  Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds);
+  Component saveComponent(Component component, List<Long> pageIds, List<Long> bannerIds, List<Long> widgetIds,
+      List<Long> formIds);
 
   Boolean deleteComponent(Long id);
 

@@ -24,4 +24,5 @@ public class DtoComponentIU {
   private List<Long> pageIds;
   private List<Long> bannerIds;
   private List<Long> widgetIds;
+  private List<Long> formIds;
 }

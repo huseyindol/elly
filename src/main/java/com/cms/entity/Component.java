@@ -60,13 +60,24 @@ public class Component extends BaseEntity {
   @BatchSize(size = 20)
   private Set<Widget> widgets = new LinkedHashSet<>();
 
+  @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+  @JoinTable(name = "component_forms", joinColumns = @JoinColumn(name = "component_id"), inverseJoinColumns = @JoinColumn(name = "form_definition_id"))
+  @OrderBy("title")
+  @BatchSize(size = 20)
+  private Set<FormDefinition> forms = new LinkedHashSet<>();
+
   @PrePersist
   @PreUpdate
   private void validateComponentType() {
     if (type == ComponentTypeEnum.BANNER) {
       this.widgets = null;
+      this.forms = null;
     } else if (type == ComponentTypeEnum.WIDGET) {
       this.banners = null;
+      this.forms = null;
+    } else if (type == ComponentTypeEnum.FORM) {
+      this.banners = null;
+      this.widgets = null;
     }
   }
 }

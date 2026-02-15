@@ -28,4 +28,5 @@ public class DtoComponent {
   private List<DtoPageSummary> pages;
   private List<DtoBanner> banners;
   private List<DtoWidget> widgets;
+  private List<DtoFormDefinition> forms;
 }

@@ -16,11 +16,13 @@ import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoComponent;
 import com.cms.dto.DtoComponentForPage;
 import com.cms.dto.DtoComponentIU;
+import com.cms.dto.DtoFormDefinition;
 import com.cms.dto.DtoPageSummary;
 import com.cms.dto.DtoPost;
 import com.cms.dto.DtoWidget;
 import com.cms.entity.Banner;
 import com.cms.entity.Component;
+import com.cms.entity.FormDefinition;
 import com.cms.entity.Page;
 import com.cms.entity.Widget;
 
@@ -30,6 +32,7 @@ public interface ComponentMapper {
   @Mapping(target = "pages", ignore = true)
   @Mapping(target = "banners", ignore = true)
   @Mapping(target = "widgets", ignore = true)
+  @Mapping(target = "forms", ignore = true)
   DtoComponent toDtoComponent(Component component);
 
   @Named("toDtoComponentSimple")
@@ -37,6 +40,7 @@ public interface ComponentMapper {
   @Mapping(target = "pages", ignore = true)
   @Mapping(target = "banners", ignore = true)
   @Mapping(target = "widgets", ignore = true)
+  @Mapping(target = "forms", ignore = true)
   DtoComponent toDtoComponentSimple(Component component);
 
   @AfterMapping
@@ -78,6 +82,14 @@ public interface ComponentMapper {
           .map(this::widgetToDtoWidget)
           .collect(Collectors.toList());
       dtoComponent.setWidgets(widgets);
+    }
+
+    // Map forms
+    if (component.getForms() != null && !component.getForms().isEmpty()) {
+      List<DtoFormDefinition> forms = component.getForms().stream()
+          .map(this::formDefinitionToDtoFormDefinition)
+          .collect(Collectors.toList());
+      dtoComponent.setForms(forms);
     }
   }
 
@@ -142,11 +154,13 @@ public interface ComponentMapper {
   @Mapping(target = "pages", ignore = true)
   @Mapping(target = "banners", ignore = true)
   @Mapping(target = "widgets", ignore = true)
+  @Mapping(target = "forms", ignore = true)
   Component toComponent(DtoComponentIU dtoComponentIU);
 
   @Mapping(target = "pages", ignore = true)
   @Mapping(target = "banners", ignore = true)
   @Mapping(target = "widgets", ignore = true)
+  @Mapping(target = "forms", ignore = true)
   void updateComponentFromDto(DtoComponentIU dtoComponentIU, @MappingTarget Component component);
 
   @Named("toDtoComponentList")
@@ -196,6 +210,28 @@ public interface ComponentMapper {
       dto.setWidgets(widgets);
     }
 
+    // Map forms
+    if (component.getForms() != null && !component.getForms().isEmpty()) {
+      List<DtoFormDefinition> forms = component.getForms().stream()
+          .map(this::formDefinitionToDtoFormDefinition)
+          .collect(Collectors.toList());
+      dto.setForms(forms);
+    }
+
+    return dto;
+  }
+
+  default DtoFormDefinition formDefinitionToDtoFormDefinition(FormDefinition formDefinition) {
+    if (formDefinition == null)
+      return null;
+    DtoFormDefinition dto = new DtoFormDefinition();
+    dto.setId(formDefinition.getId());
+    dto.setTitle(formDefinition.getTitle());
+    dto.setVersion(formDefinition.getVersion());
+    dto.setSchema(formDefinition.getSchema());
+    dto.setActive(formDefinition.getActive());
+    dto.setCreatedAt(formDefinition.getCreatedAt());
+    dto.setUpdatedAt(formDefinition.getUpdatedAt());
     return dto;
   }
 

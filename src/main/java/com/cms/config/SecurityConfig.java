@@ -31,6 +31,7 @@ public class SecurityConfig {
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
   private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
   private final CustomOAuth2UserService customOAuth2UserService;
+  private final com.cms.filter.ApiKeyFilter apiKeyFilter;
 
   @Bean
   public PasswordEncoder passwordEncoder() {
@@ -129,6 +130,7 @@ public class SecurityConfig {
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/v1/auth/**").permitAll()
+            .requestMatchers("/api/v1/emails/**").permitAll() // API Key filter handles security
             .requestMatchers("/oauth2/**").permitAll()
             .requestMatchers("/login/oauth2/**").permitAll()
             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
@@ -150,6 +152,7 @@ public class SecurityConfig {
             }));
 
     http.authenticationProvider(authenticationProvider());
+    http.addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class);
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
     return http.build();

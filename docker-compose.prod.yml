@@ -48,6 +48,41 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # RabbitMQ - Message Queue (Production)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: elly-rabbitmq-prod
+    restart: always
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - elly-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # Spring Boot Application
   app:
     build:
@@ -61,6 +96,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     environment:
       # Database Configuration
       DB_HOST: postgres
@@ -73,6 +110,24 @@ services:
       # Spring Configuration
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8080
+      
+      # RabbitMQ Configuration
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      
+      # Mail Configuration (Gmail SMTP for production)
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_SMTP_AUTH: "true"
+      MAIL_SMTP_STARTTLS: "true"
+      
+      # Email API Key
+      EMAIL_API_KEY: ${EMAIL_API_KEY}
       
       # Logging
       LOGGING_LEVEL_ROOT: INFO
@@ -158,6 +213,9 @@ volumes:
   app_logs:
     driver: local
     name: elly-app-logs-prod
+  rabbitmq_data:
+    driver: local
+    name: elly-rabbitmq-data-prod
 
 # Networks
 networks:
@@ -167,4 +225,5 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/16
+
 

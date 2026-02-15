@@ -24,6 +24,38 @@ services:
       timeout: 5s
       retries: 5
 
+  # RabbitMQ - Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: elly-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - elly-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Mailpit - Email Testing (Dev only)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: elly-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - elly-network
+
   # Spring Boot Application
   app:
     build:
@@ -33,6 +65,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     environment:
       # Database Configuration
@@ -48,6 +82,24 @@ services:
       
       # Tracing Configuration
       ZIPKIN_URL: http://zipkin:9411
+      
+      # RabbitMQ Configuration
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      
+      # Mail Configuration (Mailpit in dev)
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      MAIL_FROM: ${MAIL_FROM:-noreply@elly.com}
+      MAIL_SMTP_AUTH: "false"
+      MAIL_SMTP_STARTTLS: "false"
+      
+      # Email API Key
+      EMAIL_API_KEY: ${EMAIL_API_KEY:-dev-api-key-change-me}
       
       # JVM Options
       JAVA_OPTS: "-Xmx512m -Xms256m"
@@ -130,6 +182,9 @@ volumes:
   app_assets:
     driver: local
     name: elly-app-assets
+  rabbitmq_data:
+    driver: local
+    name: elly-rabbitmq-data
   prometheus_data:
     driver: local
     name: elly-prometheus-data
@@ -142,4 +197,5 @@ networks:
   elly-network:
     driver: bridge
     name: elly-network
+
 

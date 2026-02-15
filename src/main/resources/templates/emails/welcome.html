@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hoş Geldiniz</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f7fa;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .email-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      padding: 30px;
+      text-align: center;
+    }
+    .email-header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .email-body {
+      padding: 30px;
+      color: #333333;
+      line-height: 1.6;
+    }
+    .email-body h2 {
+      color: #667eea;
+      margin-top: 0;
+    }
+    .email-footer {
+      background-color: #f8f9fa;
+      padding: 20px 30px;
+      text-align: center;
+      font-size: 12px;
+      color: #999999;
+      border-top: 1px solid #eee;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 30px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 25px;
+      font-weight: 600;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1>Hoş Geldiniz! 🎉</h1>
+    </div>
+    <div class="email-body">
+      <h2>Merhaba, <span th:text="${name}">Kullanıcı</span>!</h2>
+      <p>Elly CMS ailesine katıldığınız için teşekkür ederiz. Platformumuzda size en iyi deneyimi sunmak için buradayız.</p>
+      <p th:if="${message}" th:text="${message}">Ek mesaj burada görünecektir.</p>
+      <p style="text-align: center;">
+        <a href="#" class="btn" th:href="${actionUrl}" th:text="${actionText}">Başlayın</a>
+      </p>
+      <p>Herhangi bir sorunuz varsa, bize her zaman ulaşabilirsiniz.</p>
+      <p>Saygılarımızla,<br><strong>Elly CMS Ekibi</strong></p>
+    </div>
+    <div class="email-footer">
+      <p>&copy; 2026 Elly CMS. Tüm hakları saklıdır.</p>
+    </div>
+  </div>
+</body>
+</html>

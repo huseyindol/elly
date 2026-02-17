@@ -1,5 +1,7 @@
 package com.cms.exception;
 
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 
 public class ResourceNotFoundException extends BaseException {
@@ -10,6 +12,12 @@ public class ResourceNotFoundException extends BaseException {
 
   public ResourceNotFoundException(String resourceName, Long id) {
     super(String.format("%s with id %d not found", resourceName, id),
+        HttpStatus.NOT_FOUND,
+        "RESOURCE_NOT_FOUND");
+  }
+
+  public ResourceNotFoundException(String resourceName, UUID id) {
+    super(String.format("%s with id %s not found", resourceName, id),
         HttpStatus.NOT_FOUND,
         "RESOURCE_NOT_FOUND");
   }

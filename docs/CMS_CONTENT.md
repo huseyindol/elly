@@ -9,21 +9,29 @@ The core requirement is to handle highly variable content structures (e.g., a "D
 - PostgreSQL (using the `jsonb` data type)
 - Spring Data JPA (Hibernate 6)
 - Lombok
-- Maven
+- Mavenru
 
 ### Database Schema Requirement
-Create a single table named `cms_contents`.
+Create two tables: `cms_basic_infos` and `cms_contents`.
+
+#### cms_basic_infos:
 - `id`: UUID (Primary Key)
 - `section_key`: String (e.g., "homepage_hero", "resume_experience", "services_grid") - used for fetching grouped data.
-- `content_type`: String (e.g., "treatment_card", "experience_item", "testimonial") - used by the frontend to decide which component to render.
 - `title`: String (Common field for searching/admin listing).
+- `description`: String.
 - `is_active`: Boolean.
 - `sort_order`: Integer.
+
+#### cms_contents:
+- `id`: UUID (Primary Key)
+- `basic_info_id`: UUID (Foreign Key to cms_basic_infos)
+- `content_type`: String (e.g., "treatment_card", "experience_item", "testimonial") - used by the frontend to decide which component to render.
 - `metadata`: JSONB (This is the critical part. It should map to `Map<String, Object>` in Java and store all variable fields like icons, descriptions, arrays, ratings, etc.)
 
 ### Implementation Details
-1. **Entity:** Create the `CmsContent` entity. 
-   - Use `@JdbcTypeCode(SqlTypes.JSON)` from Hibernate 6 to handle the `metadata` field as a `Map<String, Object>`. Do not use the deprecated `vladmihalcea` library if Hibernate 6 native support is sufficient.
+1. **Entity:** Create the `CmsBasicInfo` and `CmsContent` entities. 
+   - `CmsContent` should map `@ManyToOne` to `CmsBasicInfo`.
+   - Use `@JdbcTypeCode(SqlTypes.JSON)` from Hibernate 6 in `CmsContent` to handle the `metadata` field as a `Map<String, Object>`. Do not use the deprecated `vladmihalcea` library.
 2. **Repository:** Create a `CmsContentRepository`.
    - Add a method to find content by `sectionKey`, ordered by `sortOrder`.
    - Add a method to find active content only.

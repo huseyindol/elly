@@ -16,12 +16,65 @@ import com.cms.repository.CmsContentRepository;
 import com.cms.service.ICmsContentService;
 
 import lombok.RequiredArgsConstructor;
+import com.cms.entity.CmsBasicInfo;
+import com.cms.service.ICmsBasicInfoService;
 
 @Service
 @RequiredArgsConstructor
 public class CmsContentService implements ICmsContentService {
 
   private final CmsContentRepository cmsContentRepository;
+  private final ICmsBasicInfoService cmsBasicInfoService;
+
+  @Override
+  @Transactional
+  @CacheEvict(value = "cmsContents", allEntries = true)
+  public CmsContent createCmsContent(CmsContent content, UUID basicInfoId, CmsBasicInfo newBasicInfo) {
+    if (basicInfoId != null) {
+      CmsBasicInfo basicInfo = cmsBasicInfoService.getCmsBasicInfoById(basicInfoId);
+      content.setBasicInfo(basicInfo);
+    } else if (newBasicInfo != null) {
+      CmsBasicInfo basicInfo = cmsBasicInfoService.saveCmsBasicInfo(newBasicInfo);
+      content.setBasicInfo(basicInfo);
+    } else {
+      throw new IllegalArgumentException("Either basicInfoId or basicInfo must be provided");
+    }
+    return cmsContentRepository.save(content);
+  }
+
+  @Override
+  @Transactional
+  @CacheEvict(value = "cmsContents", allEntries = true)
+  public CmsContent updateCmsContent(UUID id, CmsContent contentUpdate, UUID basicInfoId,
+      CmsBasicInfo updateBasicInfo) {
+    CmsContent content = getCmsContentById(id);
+
+    // Update fields except basicInfo
+    content.setContentType(contentUpdate.getContentType());
+    content.setMetadata(contentUpdate.getMetadata());
+
+    if (basicInfoId != null) {
+      CmsBasicInfo basicInfo = cmsBasicInfoService.getCmsBasicInfoById(basicInfoId);
+      content.setBasicInfo(basicInfo);
+    } else if (updateBasicInfo != null) {
+      if (content.getBasicInfo() != null) {
+        // Update existing Basic Info
+        CmsBasicInfo existing = content.getBasicInfo();
+        existing.setSectionKey(updateBasicInfo.getSectionKey());
+        existing.setTitle(updateBasicInfo.getTitle());
+        existing.setDescription(updateBasicInfo.getDescription());
+        existing.setIsActive(updateBasicInfo.getIsActive());
+        existing.setSortOrder(updateBasicInfo.getSortOrder());
+        cmsBasicInfoService.saveCmsBasicInfo(existing);
+      } else {
+        // Create new
+        CmsBasicInfo basicInfo = cmsBasicInfoService.saveCmsBasicInfo(updateBasicInfo);
+        content.setBasicInfo(basicInfo);
+      }
+    }
+
+    return cmsContentRepository.save(content);
+  }
 
   @Override
   @Transactional
@@ -57,13 +110,14 @@ public class CmsContentService implements ICmsContentService {
   @Override
   @Cacheable(value = "cmsContents", key = "'section_' + #sectionKey")
   public List<CmsContent> getCmsContentsBySectionKey(String sectionKey) {
-    return cmsContentRepository.findBySectionKeyOrderBySortOrderAsc(sectionKey);
+    return cmsContentRepository.findByBasicInfo_SectionKeyOrderByBasicInfo_SortOrderAsc(sectionKey);
   }
 
   @Override
   @Cacheable(value = "cmsContents", key = "'section_active_' + #sectionKey")
   public List<CmsContent> getActiveCmsContentsBySectionKey(String sectionKey) {
-    return cmsContentRepository.findBySectionKeyAndIsActiveTrueOrderBySortOrderAsc(sectionKey);
+    return cmsContentRepository
+        .findByBasicInfo_SectionKeyAndBasicInfo_IsActiveTrueOrderByBasicInfo_SortOrderAsc(sectionKey);
   }
 
   @Override

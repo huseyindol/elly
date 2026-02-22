@@ -9,9 +9,9 @@ import com.cms.entity.CmsContent;
 
 public interface CmsContentRepository extends JpaRepository<CmsContent, UUID> {
 
-  List<CmsContent> findBySectionKeyOrderBySortOrderAsc(String sectionKey);
+  List<CmsContent> findByBasicInfo_SectionKeyOrderByBasicInfo_SortOrderAsc(String sectionKey);
 
-  List<CmsContent> findBySectionKeyAndIsActiveTrueOrderBySortOrderAsc(String sectionKey);
+  List<CmsContent> findByBasicInfo_SectionKeyAndBasicInfo_IsActiveTrueOrderByBasicInfo_SortOrderAsc(String sectionKey);
 
-  List<CmsContent> findByIsActiveTrue();
+  List<CmsContent> findByBasicInfo_IsActiveTrue();
 }

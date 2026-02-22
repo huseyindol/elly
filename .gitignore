@@ -51,4 +51,4 @@ logs/
 Makefile
 
 # Markdown files
-**/*.md
+# **/*.md

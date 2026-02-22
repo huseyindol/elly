@@ -10,6 +10,11 @@ import com.cms.entity.CmsContent;
 
 public interface ICmsContentService {
 
+  CmsContent createCmsContent(CmsContent content, UUID basicInfoId, com.cms.entity.CmsBasicInfo newBasicInfo);
+
+  CmsContent updateCmsContent(UUID id, CmsContent content, UUID basicInfoId,
+      com.cms.entity.CmsBasicInfo updateBasicInfo);
+
   CmsContent saveCmsContent(CmsContent cmsContent);
 
   CmsContent getCmsContentById(UUID id);

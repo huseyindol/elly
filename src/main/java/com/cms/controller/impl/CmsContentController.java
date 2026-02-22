@@ -75,7 +75,14 @@ public class CmsContentController extends BaseController implements ICmsContentC
   @PostMapping
   public RootEntityResponse<DtoCmsContent> createContent(@Valid @RequestBody DtoCmsContentIU dtoCmsContentIU) {
     CmsContent cmsContent = cmsContentMapper.toCmsContent(dtoCmsContentIU);
-    CmsContent savedContent = cmsContentService.saveCmsContent(cmsContent);
+
+    com.cms.entity.CmsBasicInfo basicInfoPayload = null;
+    if (dtoCmsContentIU.getBasicInfo() != null) {
+      basicInfoPayload = new com.cms.mapper.CmsBasicInfoMapperImpl().toCmsBasicInfo(dtoCmsContentIU.getBasicInfo());
+    }
+
+    CmsContent savedContent = cmsContentService.createCmsContent(cmsContent, dtoCmsContentIU.getBasicInfoId(),
+        basicInfoPayload);
     DtoCmsContent dtoCmsContent = cmsContentMapper.toDtoCmsContent(savedContent);
     return ok(dtoCmsContent);
   }
@@ -84,9 +91,15 @@ public class CmsContentController extends BaseController implements ICmsContentC
   @PutMapping("/{id}")
   public RootEntityResponse<DtoCmsContent> updateContent(@PathVariable UUID id,
       @Valid @RequestBody DtoCmsContentIU dtoCmsContentIU) {
-    CmsContent cmsContent = cmsContentService.getCmsContentById(id);
-    cmsContentMapper.updateCmsContentFromDto(dtoCmsContentIU, cmsContent);
-    CmsContent savedContent = cmsContentService.saveCmsContent(cmsContent);
+    CmsContent contentUpdate = cmsContentMapper.toCmsContent(dtoCmsContentIU);
+
+    com.cms.entity.CmsBasicInfo basicInfoPayload = null;
+    if (dtoCmsContentIU.getBasicInfo() != null) {
+      basicInfoPayload = new com.cms.mapper.CmsBasicInfoMapperImpl().toCmsBasicInfo(dtoCmsContentIU.getBasicInfo());
+    }
+
+    CmsContent savedContent = cmsContentService.updateCmsContent(id, contentUpdate, dtoCmsContentIU.getBasicInfoId(),
+        basicInfoPayload);
     DtoCmsContent dtoCmsContent = cmsContentMapper.toDtoCmsContent(savedContent);
     return ok(dtoCmsContent);
   }

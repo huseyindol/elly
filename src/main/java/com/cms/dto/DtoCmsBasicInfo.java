@@ -1,7 +1,6 @@
 package com.cms.dto;
 
 import java.util.Date;
-import java.util.Map;
 import java.util.UUID;
 
 import lombok.AllArgsConstructor;
@@ -13,11 +12,13 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class DtoCmsContent {
+public class DtoCmsBasicInfo {
   private UUID id;
-  private DtoCmsBasicInfo basicInfo;
-  private String contentType;
-  private Map<String, Object> metadata;
+  private String sectionKey;
+  private String title;
+  private String description;
+  private Boolean isActive;
+  private Integer sortOrder;
   private Date createdAt;
   private Date updatedAt;
 }

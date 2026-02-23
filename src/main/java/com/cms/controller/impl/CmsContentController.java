@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.controller.ICmsContentController;
 import com.cms.dto.DtoCmsContent;
 import com.cms.dto.DtoCmsContentIU;
+import com.cms.dto.DtoCmsContentBulkRequest;
 import com.cms.dto.PagedResponse;
 import com.cms.entity.CmsContent;
 import com.cms.entity.RootEntityResponse;
@@ -85,6 +86,28 @@ public class CmsContentController extends BaseController implements ICmsContentC
         basicInfoPayload);
     DtoCmsContent dtoCmsContent = cmsContentMapper.toDtoCmsContent(savedContent);
     return ok(dtoCmsContent);
+  }
+
+  @Override
+  @PostMapping("/bulk")
+  public RootEntityResponse<List<DtoCmsContent>> createBulkContents(
+      @Valid @RequestBody DtoCmsContentBulkRequest request) {
+    com.cms.entity.CmsBasicInfo basicInfoPayload = null;
+    if (request.getBasicInfo() != null) {
+      basicInfoPayload = new com.cms.mapper.CmsBasicInfoMapperImpl().toCmsBasicInfo(request.getBasicInfo());
+    }
+
+    List<CmsContent> contentsToSave = request.getContents().stream().map(item -> {
+      CmsContent content = new CmsContent();
+      content.setContentType(item.getContentType());
+      content.setMetadata(item.getMetadata());
+      return content;
+    }).toList();
+
+    List<CmsContent> savedContents = cmsContentService.createBulkCmsContents(request.getBasicInfoId(), basicInfoPayload,
+        contentsToSave);
+    List<DtoCmsContent> dtoContents = cmsContentMapper.toDtoCmsContentList(savedContents);
+    return ok(dtoContents);
   }
 
   @Override

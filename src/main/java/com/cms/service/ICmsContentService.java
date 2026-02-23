@@ -12,6 +12,9 @@ public interface ICmsContentService {
 
   CmsContent createCmsContent(CmsContent content, UUID basicInfoId, com.cms.entity.CmsBasicInfo newBasicInfo);
 
+  List<CmsContent> createBulkCmsContents(UUID basicInfoId, com.cms.entity.CmsBasicInfo newBasicInfo,
+      List<CmsContent> contents);
+
   CmsContent updateCmsContent(UUID id, CmsContent content, UUID basicInfoId,
       com.cms.entity.CmsBasicInfo updateBasicInfo);
 

@@ -45,6 +45,29 @@ public class CmsContentService implements ICmsContentService {
   @Override
   @Transactional
   @CacheEvict(value = "cmsContents", allEntries = true)
+  public List<CmsContent> createBulkCmsContents(UUID basicInfoId, CmsBasicInfo newBasicInfo,
+      List<CmsContent> contents) {
+    CmsBasicInfo basicInfo;
+
+    if (basicInfoId != null) {
+      basicInfo = cmsBasicInfoService.getCmsBasicInfoById(basicInfoId);
+    } else if (newBasicInfo != null) {
+      basicInfo = cmsBasicInfoService.saveCmsBasicInfo(newBasicInfo);
+    } else {
+      throw new IllegalArgumentException("Either basicInfoId or basicInfo must be provided");
+    }
+
+    for (CmsContent content : contents) {
+      content.setBasicInfo(basicInfo);
+    }
+
+    return cmsContentRepository.saveAll(contents);
+  }
+
+  @Override
+
+  @Transactional
+  @CacheEvict(value = "cmsContents", allEntries = true)
   public CmsContent updateCmsContent(UUID id, CmsContent contentUpdate, UUID basicInfoId,
       CmsBasicInfo updateBasicInfo) {
     CmsContent content = getCmsContentById(id);

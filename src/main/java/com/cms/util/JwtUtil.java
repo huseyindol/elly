@@ -70,6 +70,17 @@ public class JwtUtil {
     return claims.get("tokenVersion", Long.class);
   }
 
+  /**
+   * JWT token'dan tenantId claim'ini çıkarır.
+   *
+   * @param token JWE encrypted token
+   * @return tenant identifier veya null
+   */
+  public String extractTenantId(String token) {
+    Claims claims = extractAllClaims(token);
+    return claims.get("tenantId", String.class);
+  }
+
   public Date extractExpiration(String token) {
     return extractClaim(token, Claims::getExpiration);
   }
@@ -92,10 +103,11 @@ public class JwtUtil {
     return extractExpiration(token).before(new Date());
   }
 
-  public String generateToken(Long userId, String username, Long tokenVersion) {
+  public String generateToken(Long userId, String username, Long tokenVersion, String tenantId) {
     Map<String, Object> claims = new HashMap<>();
     claims.put("userId", userId);
     claims.put("tokenVersion", tokenVersion);
+    claims.put("tenantId", tenantId);
     return createToken(claims, username);
   }
 
@@ -126,10 +138,11 @@ public class JwtUtil {
     }
   }
 
-  public String generateRefreshToken(Long userId, String username) {
+  public String generateRefreshToken(Long userId, String username, String tenantId) {
     Map<String, Object> claims = new HashMap<>();
     claims.put("userId", userId);
     claims.put("type", "refresh");
+    claims.put("tenantId", tenantId);
     return createRefreshToken(claims, username);
   }
 
@@ -155,5 +168,41 @@ public class JwtUtil {
     } catch (Exception e) {
       return false;
     }
+  }
+
+  // ==========================================
+  // Tenant JWT Methods
+  // ==========================================
+
+  /**
+   * Tenant ID'yi içeren basit bir JWT token üretir.
+   * Bu token X-Tenant-ID header'ında gönderilir.
+   * Kullanıcı auth token'ından bağımsızdır.
+   *
+   * @param tenantId tenant identifier
+   * @return encrypted JWT string
+   */
+  public String generateTenantToken(String tenantId) {
+    Map<String, Object> claims = new HashMap<>();
+    claims.put("tenantId", tenantId);
+    claims.put("type", "tenant");
+
+    return Jwts.builder()
+        .claims(claims)
+        .subject(tenantId)
+        .issuedAt(new java.util.Date(System.currentTimeMillis()))
+        .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
+        .compact();
+  }
+
+  /**
+   * Tenant JWT token'ından tenantId'ı çıkarır.
+   *
+   * @param tenantToken encrypted tenant JWT
+   * @return tenant identifier veya null
+   */
+  public String extractTenantIdFromTenantToken(String tenantToken) {
+    Claims claims = extractAllClaims(tenantToken);
+    return claims.get("tenantId", String.class);
   }
 }

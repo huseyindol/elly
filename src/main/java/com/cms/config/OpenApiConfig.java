@@ -14,6 +14,7 @@ public class OpenApiConfig {
         @Bean
         public OpenAPI customOpenAPI() {
                 final String securitySchemeName = "bearerAuth";
+                final String tenantSchemeName = "tenantAuth";
 
                 return new OpenAPI()
                                 .info(new Info()
@@ -27,7 +28,8 @@ public class OpenApiConfig {
                                                 .url("http://localhost:8080")
                                                 .description("Local Development"))
                                 .addSecurityItem(new SecurityRequirement()
-                                                .addList(securitySchemeName))
+                                                .addList(securitySchemeName)
+                                                .addList(tenantSchemeName))
                                 .components(new Components()
                                                 .addSecuritySchemes(securitySchemeName,
                                                                 new SecurityScheme()
@@ -36,6 +38,13 @@ public class OpenApiConfig {
                                                                                 .scheme("bearer")
                                                                                 .bearerFormat("JWT")
                                                                                 .description(
-                                                                                                "JWT token authentication. Login endpoint'inden token alıp buraya ekleyin.")));
+                                                                                                "JWT token authentication. Login endpoint'inden token alıp buraya ekleyin."))
+                                                .addSecuritySchemes(tenantSchemeName,
+                                                                new SecurityScheme()
+                                                                                .name("X-Tenant-ID")
+                                                                                .type(SecurityScheme.Type.APIKEY)
+                                                                                .in(SecurityScheme.In.HEADER)
+                                                                                .description(
+                                                                                                "Tenant JWT token. /api/v1/tenants/token endpoint'inden alıp buraya ekleyin. Boş bırakılırsa default tenant kullanılır.")));
         }
 }

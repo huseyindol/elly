@@ -1,25 +1,48 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
-  postgres:
+  # PostgreSQL Database - Tenant 1 (Default)
+  postgres-tenant1:
     image: postgres:16-alpine
-    container_name: elly-postgres
+    container_name: elly-postgres-tenant1
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-postgres}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-123456}
+      POSTGRES_DB: ${TENANT1_DB_NAME:-elly_tenant1}
+      POSTGRES_USER: ${TENANT1_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${TENANT1_DB_PASSWORD:-123456}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_tenant1_data:/var/lib/postgresql/data
       - ./docker/init-db.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
     networks:
       - elly-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${TENANT1_DB_USER:-postgres} -d ${TENANT1_DB_NAME:-elly_tenant1}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Database - Tenant 2
+  postgres-tenant2:
+    image: postgres:16-alpine
+    container_name: elly-postgres-tenant2
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${TENANT2_DB_NAME:-elly_tenant2}
+      POSTGRES_USER: ${TENANT2_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${TENANT2_DB_PASSWORD:-123456}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_tenant2_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    networks:
+      - elly-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TENANT2_DB_USER:-postgres} -d ${TENANT2_DB_NAME:-elly_tenant2}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,16 +55,33 @@ services:
     container_name: elly-app
     restart: unless-stopped
     depends_on:
-      postgres:
+      postgres-tenant1:
+        condition: service_healthy
+      postgres-tenant2:
         condition: service_healthy
     environment:
-      # Database Configuration
-      DB_HOST: postgres
+      # Common DB Configuration
+      DB_HOST: postgres-tenant1
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-postgres}
-      DB_SCHEMA: ${DB_SCHEMA:-elly}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-123456}
+      
+      # Multi-Tenancy Configuration
+      DEFAULT_TENANT: tenant1
+      
+      # Tenant 1 DB
+      TENANT1_DB_HOST: postgres-tenant1
+      TENANT1_DB_PORT: 5432
+      TENANT1_DB_NAME: ${TENANT1_DB_NAME:-elly_tenant1}
+      TENANT1_DB_USER: ${TENANT1_DB_USER:-postgres}
+      TENANT1_DB_PASSWORD: ${TENANT1_DB_PASSWORD:-123456}
+      TENANT1_DB_SCHEMA: ${TENANT1_DB_SCHEMA:-elly}
+      
+      # Tenant 2 DB (farklı container)
+      TENANT2_DB_HOST: postgres-tenant2
+      TENANT2_DB_PORT: 5432
+      TENANT2_DB_NAME: ${TENANT2_DB_NAME:-elly_tenant2}
+      TENANT2_DB_USER: ${TENANT2_DB_USER:-postgres}
+      TENANT2_DB_PASSWORD: ${TENANT2_DB_PASSWORD:-123456}
+      TENANT2_DB_SCHEMA: ${TENANT2_DB_SCHEMA:-sally}
       
       # Spring Configuration
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
@@ -124,9 +164,12 @@ services:
 
 # Volumes
 volumes:
-  postgres_data:
+  postgres_tenant1_data:
     driver: local
-    name: elly-postgres-data
+    name: elly-postgres-tenant1-data
+  postgres_tenant2_data:
+    driver: local
+    name: elly-postgres-tenant2-data
   app_assets:
     driver: local
     name: elly-app-assets

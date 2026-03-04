@@ -60,8 +60,10 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     user = userRepository.save(user);
 
     // JWT token oluştur (güncel version ile)
-    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion());
-    String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion(),
+        TenantContext.getTenantId());
+    String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),
+        TenantContext.getTenantId());
 
     // Refresh token kaydet
     RefreshToken refreshToken = refreshTokenRepository.findByUserId(user.getId())

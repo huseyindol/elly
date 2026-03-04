@@ -27,6 +27,7 @@ import com.cms.repository.UserRepository;
 import com.cms.service.IAuthService;
 import com.cms.util.JwtUtil;
 import com.cms.util.UserUtil;
+import com.cms.config.TenantContext;
 
 @Service
 @RequiredArgsConstructor
@@ -76,10 +77,12 @@ public class AuthService implements IAuthService {
     savedUser = userRepository.save(savedUser);
 
     // JWT token oluştur (güncel version ile)
-    String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername(), savedUser.getTokenVersion());
+    String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername(), savedUser.getTokenVersion(),
+        TenantContext.getTenantId());
 
     // Refresh token oluştur ve kaydet
-    String refreshTokenString = jwtUtil.generateRefreshToken(savedUser.getId(), savedUser.getUsername());
+    String refreshTokenString = jwtUtil.generateRefreshToken(savedUser.getId(), savedUser.getUsername(),
+        TenantContext.getTenantId());
     RefreshToken refreshToken = createRefreshTokenEntity(savedUser, refreshTokenString);
     refreshTokenRepository.save(refreshToken);
 
@@ -122,10 +125,12 @@ public class AuthService implements IAuthService {
     userRepository.updateTokenVersion(user.getId(), newTokenVersion);
 
     // JWT token oluştur (güncel version ile)
-    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), newTokenVersion);
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), newTokenVersion,
+        TenantContext.getTenantId());
 
     // Refresh token oluştur
-    String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+    String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),
+        TenantContext.getTenantId());
 
     // Refresh token'ı upsert (INSERT veya UPDATE - tek sorgu)
     Date expiryDate = new Date(System.currentTimeMillis() + refreshTokenExpiration);
@@ -182,14 +187,16 @@ public class AuthService implements IAuthService {
     user = userRepository.save(user);
 
     // Yeni access token oluştur (güncel version ile)
-    String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion());
+    String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion(),
+        TenantContext.getTenantId());
 
     // Eski refresh token'ı iptal et (Token Rotation için)
     refreshToken.setIsRevoked(true);
     refreshTokenRepository.save(refreshToken);
 
     // Yeni refresh token oluştur (Token Rotation)
-    String newRefreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+    String newRefreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),
+        TenantContext.getTenantId());
 
     // Kullanıcının tüm eski refresh token'larını sil (unique constraint ihlalini
     // önlemek için)

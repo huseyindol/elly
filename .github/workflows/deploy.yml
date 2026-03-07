@@ -26,6 +26,11 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false
 
+# GITHUB_TOKEN'a GHCR yazma izni ver
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}

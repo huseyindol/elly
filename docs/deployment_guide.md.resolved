@@ -1,0 +1,280 @@
+# 🚀 Elly CMS — Sunucuya Deploy Rehberi
+
+Bu rehber projeyi GitHub'a push edip, CI/CD pipeline ile GCP sunucunuza otomatik deploy etmeyi adım adım anlatır.
+
+---
+
+## Aşama 1: GitHub Personal Access Token (PAT) Oluşturma
+
+GHCR'a Docker image push etmek ve sunucunun image çekmesi için bir PAT gereklidir.
+
+1. GitHub'a gidin → **Profil fotoğrafı** (sağ üst) → **Settings**
+2. Sol menüde en altta → **Developer settings**
+3. **Personal access tokens** → **Tokens (classic)** → **Generate new token (classic)**
+4. Ayarlar:
+   - **Note:** `elly-deploy`
+   - **Expiration:** 90 days (veya No expiration)
+   - **Scopes:** Aşağıdakileri işaretleyin:
+     - ✅ `write:packages` (image push)
+     - ✅ `read:packages` (image pull)
+     - ✅ `delete:packages` (opsiyonel, temizlik için)
+5. **Generate token** → Çıkan token'ı **hemen kopyalayın** (bir daha göremezsiniz!)
+
+> [!IMPORTANT]
+> Bu token'ı bir yere kaydedin. Hem GitHub Secrets'a hem sunucu kurulumunda kullanacaksınız.
+
+---
+
+## Aşama 2: GitHub Secrets Ekleme (Adım Adım)
+
+### Nereye Eklenir?
+
+1. GitHub'da repo sayfanıza gidin: `https://github.com/huseyindol/elly`
+2. **Settings** sekmesine tıklayın (üst menüde)
+3. Sol menüde **Secrets and variables** → **Actions** 
+4. **New repository secret** butonuna tıklayın
+
+### Eklenecek Secret'lar
+
+Her bir secret için **New repository secret** butonuna tıklayın, **Name** ve **Secret** alanlarını doldurun, **Add secret** butonuna basın.
+
+#### 🖥️ Sunucu Bağlantı Bilgileri
+
+| # | Name | Secret Değeri | Açıklama |
+|---|------|---------------|----------|
+| 1 | `SERVER_HOST` | Sunucunuzun **External IP** adresi | GCP Console → VM instances → External IP |
+| 2 | `SERVER_USER` | Sunucudaki SSH kullanıcı adınız | Genellikle GCP kullanıcı adınız |
+| 3 | `SERVER_SSH_KEY` | SSH **private** key'inizin içeriği | Aşağıda nasıl alacağınız var |
+
+**SSH Private Key nasıl alınır:**
+
+Terminalinizde şu komutu çalıştırın:
+```bash
+cat ~/.ssh/id_ecdsa
+```
+Çıktının **tamamını** (`-----BEGIN EC PRIVATE KEY-----` dahil, `-----END EC PRIVATE KEY-----` dahil) kopyalayıp `SERVER_SSH_KEY` secret'ına yapıştırın.
+
+> [!CAUTION]
+> Private key'inizi **asla** başka biriyle paylaşmayın! Sadece GitHub Secrets'a ekleyin.
+
+#### 🗄️ Veritabanı Bilgileri
+
+| # | Name | Secret Değeri | Açıklama |
+|---|------|---------------|----------|
+| 4 | `TENANT1_DB_USER` | `postgres` | Tenant 1 DB kullanıcı |
+| 5 | `TENANT1_DB_PASSWORD` | Güçlü bir şifre belirleyin | Tenant 1 DB şifre |
+| 6 | `TENANT2_DB_USER` | `postgres` | Tenant 2 DB kullanıcı |
+| 7 | `TENANT2_DB_PASSWORD` | Güçlü bir şifre belirleyin | Tenant 2 DB şifre |
+
+> [!WARNING]
+> Production'da `123456` gibi şifreler kullanmayın! En az 16 karakterli, karışık bir şifre seçin.  
+> Örnek: `openssl rand -base64 24` komutu ile güçlü şifre üretebilirsiniz.
+
+#### 🔐 JWT ve Güvenlik
+
+| # | Name | Secret Değeri | Açıklama |
+|---|------|---------------|----------|
+| 8 | `JWT_SECRET` | Min 32 karakter rastgele string | JWT imzalama anahtarı |
+| 9 | `JWT_ENCRYPTION_SECRET` | Min 32 karakter rastgele string | JWT şifreleme anahtarı |
+
+**Güçlü secret üretmek için:**
+```bash
+openssl rand -base64 48
+```
+
+#### 🌐 OAuth2 Social Login (Opsiyonel)
+
+Henüz OAuth2 ayarlamadıysanız, geçici placeholder değerler koyabilirsiniz:
+
+| # | Name | Secret Değeri |
+|---|------|---------------|
+| 10 | `GOOGLE_CLIENT_ID` | `placeholder` |
+| 11 | `GOOGLE_CLIENT_SECRET` | `placeholder` |
+| 12 | `FACEBOOK_CLIENT_ID` | `placeholder` |
+| 13 | `FACEBOOK_CLIENT_SECRET` | `placeholder` |
+| 14 | `GITHUB_CLIENT_ID` | `placeholder` |
+| 15 | `GH_OAUTH_CLIENT_SECRET` | `placeholder` |
+
+#### 📧 Email
+
+| # | Name | Secret Değeri |
+|---|------|---------------|
+| 16 | `EMAIL_API_KEY` | `dev-api-key-change-me` (sonra değiştirin) |
+
+### GitHub Environment Oluşturma
+
+CI/CD pipeline `production` environment kullanıyor. Oluşturmanız gerekli:
+
+1. Repo **Settings** → **Environments** → **New environment**
+2. Name: `production` → **Configure environment**
+3. (Opsiyonel) **Required reviewers** ekleyerek deploy onayı isteyebilirsiniz
+4. **Save protection rules**
+
+---
+
+## Aşama 3: Proje Dosyalarını Düzeltme
+
+Bu adımları ben sizin için otomatik yapacağım. Düzeltilecekler:
+
+1. [k8s/2a-app-deployment.yaml](file:///Users/huseyindol/Documents/huseyin_server/java_workspace/elly/k8s/2a-app-deployment.yaml) → `OWNER` → `huseyindol`
+2. [deploy.yml](file:///Users/huseyindol/Documents/huseyin_server/java_workspace/elly/.github/workflows/deploy.yml) → İlk deploy desteği ekleme
+3. Domain/IP güncellemesi (şimdilik IP ile çalışacak)
+
+---
+
+## Aşama 4: Git'e Commit & Push
+
+Dosya düzeltmeleri yapıldıktan sonra:
+
+```bash
+cd /Users/huseyindol/Documents/huseyin_server/java_workspace/elly
+
+# Tüm yeni dosyaları ekle
+git add .github/ k8s/ Makefile docs/ scripts/ .gitignore
+
+# Commit
+git commit -m "feat: add K8s manifests, CI/CD pipeline, and deployment docs"
+
+# Push
+git push origin main
+```
+
+> [!IMPORTANT]
+> Push yapmadan **önce** Aşama 2'deki tüm GitHub Secrets'ların eklenmiş olduğundan emin olun!
+
+---
+
+## Aşama 5: Sunucu İlk Kurulumu (Tek Seferlik)
+
+CI/CD pipeline image günceller ama **ilk kurulum** için sunucuda K8s manifest'leri manuel uygulamanız gerekir.
+
+### 5.1 — Sunucuya bağlanın
+
+```bash
+gcloud compute ssh instance-20260304-002714 \
+  --zone=us-central1-c \
+  --project=gen-lang-client-0485675916
+```
+
+### 5.2 — GHCR ImagePullSecret oluşturun
+
+Sunucudaki terminalde:
+
+```bash
+# GitHub PAT'ınızı kullanarak secret oluşturun
+sudo kubectl create namespace elly
+
+sudo kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=huseyindol \
+  --docker-password=BURAYA_PAT_TOKENINIZI_YAZIN \
+  --docker-email=your-email@example.com \
+  -n elly
+```
+
+### 5.3 — K8s dosyalarını sunucuya kopyalayın
+
+Mac terminalinizden (sunucuya değil, kendi bilgisayarınızdan):
+
+```bash
+# Sadece k8s/ klasörünü sunucuya kopyala
+scp -r /Users/huseyindol/Documents/huseyin_server/java_workspace/elly/k8s/ KULLANICI@SUNUCU_IP:~/k8s/
+```
+
+> [!NOTE]
+> Kaynak kodun sunucuda olmasına gerek yok. Sadece ilk K8s kurulumu için YAML dosyaları gerekli. Kurulum bittikten sonra `rm -rf ~/k8s` ile silebilirsiniz.
+
+### 5.4 — Secret YAML'ı oluşturun
+
+Sunucuda, production secret değerlerini içeren [k8s/1-secret.yaml](file:///Users/huseyindol/Documents/huseyin_server/java_workspace/elly/k8s/1-secret.yaml) dosyasını oluşturun:
+
+```bash
+# Template'i kopyalayıp düzenleyin
+cp k8s/1-secret.template.yaml k8s/1-secret.yaml
+
+# Değerleri base64 encode edip dosyaya yazın (örnek):
+# echo -n 'postgres' | base64  → cG9zdGdyZXM=
+# echo -n 'your-strong-password' | base64  → eW91ci1zdHJvbmctcGFzc3dvcmQ=
+
+nano k8s/1-secret.yaml
+# Base64 değerlerini gerçek değerlerle değiştirin
+```
+
+### 5.5 — Tüm K8s manifest'leri uygulayın
+
+```bash
+# Sırasıyla uygulayın
+sudo kubectl apply -f k8s/0-namespace.yaml
+sudo kubectl apply -f k8s/1-configmap.yaml
+sudo kubectl apply -f k8s/1-secret.yaml
+sudo kubectl apply -f k8s/2c-postgres.yaml
+sudo kubectl apply -f k8s/3-service.yaml
+
+# PostgreSQL'in hazır olmasını bekleyin (~30 saniye)
+sleep 30
+sudo kubectl get pods -n elly
+
+# App deployment'ı uygulayın
+sudo kubectl apply -f k8s/2a-app-deployment.yaml
+sudo kubectl apply -f k8s/4-ingress.yaml
+
+# Durumu kontrol edin
+sudo kubectl get pods -n elly -w
+```
+
+### 5.6 — Kontrol
+
+```bash
+# Pod durumları (Running olmalı)
+sudo kubectl get pods -n elly
+
+# Logları izleyin
+sudo kubectl logs -f deployment/elly-app -n elly
+
+# Service durumu
+sudo kubectl get svc -n elly
+```
+
+---
+
+## Aşama 6: DNS Yönlendirme
+
+Domain'inizi sunucunuza yönlendirmek için:
+
+1. **Sunucu IP'nizi öğrenin:**
+   ```bash
+   # GCP Console'da VM instances → External IP
+   # veya sunucuda:
+   curl ifconfig.me
+   ```
+
+2. **Domain sağlayıcınızın DNS paneline** gidin
+
+3. **A kayıtları ekleyin:**
+   | Type | Name | Value | TTL |
+   |------|------|-------|-----|
+   | A | `@` (root) | `SUNUCU_IP` | 300 |
+   | A | `api` | `SUNUCU_IP` | 300 |
+
+4. **DNS'in yayılmasını bekleyin** (5 dakika — 48 saat arası)
+
+5. **Test edin:**
+   ```bash
+   # DNS kontrolü
+   nslookup your-domain.com
+   
+   # API testi (domain yayıldıktan sonra)
+   curl https://your-domain.com/actuator/health
+   ```
+
+---
+
+## 🔄 Sonraki Deploylar
+
+İlk kurulumdan sonra, her `git push origin main` yaptığınızda CI/CD pipeline otomatik çalışacak:
+
+1. Maven build & test
+2. Docker image build → GHCR'a push
+3. SSH ile sunucuya bağlanıp rolling update
+
+Pipeline durumunu GitHub repo sayfanızda **Actions** sekmesinden takip edebilirsiniz.

@@ -50,8 +50,8 @@ spring.security.oauth2.client.registration.facebook.client-id=YOUR_FACEBOOK_APP_
 spring.security.oauth2.client.registration.facebook.client-secret=YOUR_FACEBOOK_APP_SECRET
 
 # GitHub OAuth2
-spring.security.oauth2.client.registration.github.client-id=YOUR_GITHUB_CLIENT_ID
-spring.security.oauth2.client.registration.github.client-secret=YOUR_GITHUB_CLIENT_SECRET
+spring.security.oauth2.client.registration.github.client-id=YOUR_GH_OAUTH_CLIENT_ID
+spring.security.oauth2.client.registration.github.client-secret=YOUR_GH_OAUTH_CLIENT_SECRET
 ```
 
 **Veya environment variables kullanarak:**
@@ -61,8 +61,8 @@ export GOOGLE_CLIENT_ID=your_google_client_id
 export GOOGLE_CLIENT_SECRET=your_google_client_secret
 export FACEBOOK_CLIENT_ID=your_facebook_app_id
 export FACEBOOK_CLIENT_SECRET=your_facebook_app_secret
-export GITHUB_CLIENT_ID=your_github_client_id
-export GITHUB_CLIENT_SECRET=your_github_client_secret
+export GH_OAUTH_CLIENT_ID=your_github_client_id
+export GH_OAUTH_CLIENT_SECRET=your_github_client_secret
 ```
 
 ### 3. Frontend Redirect URI

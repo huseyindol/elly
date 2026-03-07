@@ -59,11 +59,11 @@ chmod +x scripts/server-setup.sh
 | `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
 | `FACEBOOK_CLIENT_ID` | Facebook App ID |
 | `FACEBOOK_CLIENT_SECRET` | Facebook App Secret |
-| `GITHUB_CLIENT_ID` | GitHub OAuth Client ID |
+| `GH_OAUTH_CLIENT_ID` | GitHub OAuth Client ID |
 | `GH_OAUTH_CLIENT_SECRET` | GitHub OAuth Client Secret |
 | `EMAIL_API_KEY` | Email API key |
 
-> **Not:** `GITHUB_TOKEN` otomatik sağlanır, tanımlamaya gerek yok. GitHub'da `GITHUB_CLIENT_SECRET` reserved olduğu için `GH_OAUTH_CLIENT_SECRET` kullanıyoruz.
+> **Not:** `GITHUB_TOKEN` otomatik sağlanır, tanımlamaya gerek yok. GitHub'da `GITHUB_` prefix'i reserved olduğu için `GH_OAUTH_CLIENT_ID` ve `GH_OAUTH_CLIENT_SECRET` kullanıyoruz.
 
 ---
 

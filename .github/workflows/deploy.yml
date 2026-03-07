@@ -13,7 +13,7 @@
 #   JWT_SECRET, JWT_ENCRYPTION_SECRET,
 #   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 #   FACEBOOK_CLIENT_ID, FACEBOOK_CLIENT_SECRET,
-#   GITHUB_CLIENT_ID, GH_OAUTH_CLIENT_SECRET,
+#   GH_OAUTH_CLIENT_ID, GH_OAUTH_CLIENT_SECRET,
 #   EMAIL_API_KEY
 name: 🚀 Build & Deploy
 
@@ -101,7 +101,7 @@ jobs:
           export GOOGLE_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_SECRET }}" | base64)
           export FACEBOOK_CLIENT_ID_B64=$(echo -n "${{ secrets.FACEBOOK_CLIENT_ID }}" | base64)
           export FACEBOOK_CLIENT_SECRET_B64=$(echo -n "${{ secrets.FACEBOOK_CLIENT_SECRET }}" | base64)
-          export GITHUB_CLIENT_ID_B64=$(echo -n "${{ secrets.GITHUB_CLIENT_ID }}" | base64)
+          export GH_OAUTH_CLIENT_ID_B64=$(echo -n "${{ secrets.GH_OAUTH_CLIENT_ID }}" | base64)
           export GH_OAUTH_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GH_OAUTH_CLIENT_SECRET }}" | base64)
           export EMAIL_API_KEY_B64=$(echo -n "${{ secrets.EMAIL_API_KEY }}" | base64)
 

@@ -28,35 +28,20 @@ metadata:
     # CORS ayarları (Frontend farklı domain'den geliyorsa)
     traefik.ingress.kubernetes.io/router.middlewares: elly-cors@kubernetescrd
 
-    # SSL Redirect - HTTP → HTTPS yönlendirmesi
-    traefik.ingress.kubernetes.io/router.tls: "true"
-
-    # cert-manager ile otomatik SSL sertifikası (opsiyonel)
+    # SSL - şimdilik devre dışı, cert-manager kurulunca aktif edilecek
+    # traefik.ingress.kubernetes.io/router.tls: "true"
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
-  ingressClassName: traefik   # K3s default. NGINX kullanıyorsan "nginx" yap.
-  # ============================================
-  # TLS/SSL Konfigürasyonu
-  # ============================================
-  # Seçenek 1: cert-manager ile otomatik (önerilir)
-  # Seçenek 2: Manuel sertifika (aşağıdaki Secret'ı oluşturun)
-  #   kubectl create secret tls elly-tls-secret \
-  #     --cert=path/to/tls.crt \
-  #     --key=path/to/tls.key \
-  #     -n elly
-  tls:
-    - hosts:
-        - your-domain.com          # ← Kendi domain'inizi yazın
-        - api.your-domain.com      # ← API subdomain (opsiyonel)
-      secretName: elly-tls-secret  # TLS sertifika Secret'ı
+  ingressClassName: traefik
+  # TLS şimdilik devre dışı - cert-manager kurulunca aktif edilecek
+  # tls:
+  #   - hosts:
+  #       - api.huseyindol.site
+  #     secretName: elly-tls-secret
   rules:
-    # ============================================
-    # Ana Domain - API Trafiği
-    # ============================================
-    - host: your-domain.com        # ← Kendi domain'inizi yazın
+    - host: api.huseyindol.site
       http:
         paths:
-          # API istekleri → Spring Boot
           - path: /api
             pathType: Prefix
             backend:
@@ -64,7 +49,6 @@ spec:
                 name: elly-app-service
                 port:
                   number: 8080
-          # Swagger UI
           - path: /swagger-ui
             pathType: Prefix
             backend:
@@ -72,7 +56,6 @@ spec:
                 name: elly-app-service
                 port:
                   number: 8080
-          # API Docs
           - path: /api-docs
             pathType: Prefix
             backend:
@@ -80,7 +63,6 @@ spec:
                 name: elly-app-service
                 port:
                   number: 8080
-          # Actuator (monitoring için)
           - path: /actuator
             pathType: Prefix
             backend:
@@ -88,7 +70,6 @@ spec:
                 name: elly-app-service
                 port:
                   number: 8080
-          # OAuth2 callback
           - path: /login/oauth2
             pathType: Prefix
             backend:
@@ -96,7 +77,6 @@ spec:
                 name: elly-app-service
                 port:
                   number: 8080
-          # OAuth2 redirect
           - path: /oauth2
             pathType: Prefix
             backend:
@@ -104,7 +84,6 @@ spec:
                 name: elly-app-service
                 port:
                   number: 8080
-          # Asset dosyaları
           - path: /assets
             pathType: Prefix
             backend:
@@ -112,7 +91,6 @@ spec:
                 name: elly-app-service
                 port:
                   number: 8080
-          # Fallback: Tüm diğer istekler
           - path: /
             pathType: Prefix
             backend:

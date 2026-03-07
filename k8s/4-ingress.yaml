@@ -28,16 +28,16 @@ metadata:
     # CORS ayarları - middleware oluşturulunca aktif edilecek
     # traefik.ingress.kubernetes.io/router.middlewares: elly-cors@kubernetescrd
 
-    # SSL - şimdilik devre dışı, cert-manager kurulunca aktif edilecek
-    # traefik.ingress.kubernetes.io/router.tls: "true"
-    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # SSL - cert-manager ile otomatik SSL sertifikası
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: traefik
-  # TLS şimdilik devre dışı - cert-manager kurulunca aktif edilecek
-  # tls:
-  #   - hosts:
-  #       - api.huseyindol.site
-  #     secretName: elly-tls-secret
+  # TLS Config for cert-manager
+  tls:
+    - hosts:
+        - api.huseyindol.site
+      secretName: elly-tls-secret
   rules:
     - host: api.huseyindol.site
       http:

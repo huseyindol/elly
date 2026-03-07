@@ -1,0 +1,18 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Let's Encrypt üretim API'si
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Sertifika bildirimleri için email adresiniz
+    email: admin@huseyindol.site # Bunu kendi emailiniz ile değiştirebilirsiniz
+    # Let's Encrypt hesap anahtarının saklanacağı secret
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    # Hangi challenge mekanizmasının kullanılacağı
+    solvers:
+      - http01:
+          ingress:
+            class: traefik

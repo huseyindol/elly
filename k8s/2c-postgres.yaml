@@ -1,0 +1,178 @@
+# ============================================
+# STATEFULSET - PostgreSQL Tenant 1
+# ============================================
+# StatefulSet kullanılır çünkü veritabanları stateful'dır ve
+# her pod'un kendi kalıcı volume'u olmalıdır.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-tenant1
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: database
+    tenant: tenant1
+spec:
+  serviceName: postgres-tenant1
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elly-cms
+      component: database
+      tenant: tenant1
+  template:
+    metadata:
+      labels:
+        app: elly-cms
+        component: database
+        tenant: tenant1
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - configMapRef:
+                name: postgres-tenant1-config
+            - secretRef:
+                name: postgres-tenant1-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - elly_tenant1
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - elly_tenant1
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: postgres-tenant1-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+      volumes:
+        - name: init-sql
+          configMap:
+            name: postgres-tenant1-config
+            items:
+              - key: init.sql
+                path: init.sql
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-tenant1-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi
+
+---
+# ============================================
+# STATEFULSET - PostgreSQL Tenant 2
+# ============================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-tenant2
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: database
+    tenant: tenant2
+spec:
+  serviceName: postgres-tenant2
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elly-cms
+      component: database
+      tenant: tenant2
+  template:
+    metadata:
+      labels:
+        app: elly-cms
+        component: database
+        tenant: tenant2
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - configMapRef:
+                name: postgres-tenant2-config
+            - secretRef:
+                name: postgres-tenant2-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - elly_tenant2
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - elly_tenant2
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: postgres-tenant2-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+      volumes:
+        - name: init-sql
+          configMap:
+            name: postgres-tenant2-config
+            items:
+              - key: init.sql
+                path: init.sql
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-tenant2-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi

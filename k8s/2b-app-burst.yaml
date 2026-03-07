@@ -1,0 +1,108 @@
+# ============================================
+# DEPLOYMENT - Burst Pod'lar (Yoğun Trafik İçin)
+# ============================================
+# HPA tarafından yönetilir. Normalde 0 replika çalışır.
+# CPU %70'i geçince HPA bu Deployment'ı 1→3 pod'a ölçekler.
+# Base pod'lardan daha hafif: 512MB limit (daha az JVM heap).
+#
+# envFrom ile env değişkenleri base ile aynı ConfigMap/Secret'tan gelir.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elly-app-burst
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: backend
+    tier: burst
+spec:
+  replicas: 0   # HPA yönetir, normalde 0 pod
+  selector:
+    matchLabels:
+      app: elly-cms
+      component: backend
+      tier: burst
+  template:
+    metadata:
+      labels:
+        app: elly-cms
+        component: backend
+        tier: burst
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      terminationGracePeriodSeconds: 15
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: elly-app
+          image: ghcr.io/huseyindol/elly:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # Base ile aynı ConfigMap/Secret — envFrom ile tek satırda
+          envFrom:
+            - configMapRef:
+                name: elly-config
+            - secretRef:
+                name: elly-secret
+
+          # Burst pod'lar için daha az JVM heap
+          env:
+            - name: JAVA_OPTS
+              value: >-
+                -Xmx384m
+                -Xms128m
+                -XX:+UseG1GC
+                -XX:MaxGCPauseMillis=200
+                -Dspring.jmx.enabled=false
+                -Djava.security.egd=file:/dev/./urandom
+
+          # Burst pod'lar: daha az kaynak
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          volumeMounts:
+            - name: app-assets
+              mountPath: /app/assets
+
+      volumes:
+        - name: app-assets
+          persistentVolumeClaim:
+            claimName: elly-assets-pvc

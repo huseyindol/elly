@@ -47,8 +47,5 @@ logs/
 *.log
 
 
-# Makefile
-Makefile
-
-# Markdown files
-# **/*.md
+# Kubernetes secrets (hassas bilgiler - Git'e gönderilmez)
+k8s/1-secret.yaml

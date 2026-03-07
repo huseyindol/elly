@@ -1,0 +1,9 @@
+# ============================================
+# NAMESPACE
+# ============================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: elly
+  labels:
+    app: elly-cms

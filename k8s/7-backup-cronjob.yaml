@@ -1,0 +1,166 @@
+# ============================================
+# CRONJOB - PostgreSQL Otomatik Backup
+# ============================================
+# Her gece 03:00'da (Europe/Istanbul) her iki tenant DB'sini yedekler.
+# Backup'lar gzip ile sıkıştırılır.
+# 3 günden eski backup'lar otomatik silinir.
+#
+# Manuel backup almak istersen:
+#   kubectl create job --from=cronjob/postgres-backup manual-backup-$(date +%s) -n elly
+#
+# Backup'ları görmek:
+#   kubectl exec -it <backup-pod> -n elly -- ls -la /backups/
+#
+# Backup'tan geri yüklemek:
+#   kubectl cp elly/<backup-pod>:/backups/tenant1-2026-03-05.sql.gz ./restore.sql.gz
+#   gunzip restore.sql.gz
+#   kubectl exec -i postgres-tenant1-0 -n elly -- psql -U postgres -d elly_tenant1 < restore.sql
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: backup
+spec:
+  # Her gece 03:00 (UTC+3 = 00:00 UTC)
+  schedule: "0 0 * * *"
+  # Aynı anda birden fazla backup job'u çalışmasın
+  concurrencyPolicy: Forbid
+  # Son 3 başarılı ve 1 başarısız job'u tut (debug için)
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  # 100 saniye içinde başlatılamazsa atla (VM yoğunsa)
+  startingDeadlineSeconds: 100
+  jobTemplate:
+    spec:
+      # Job 10 dakikada bitmezse timeout
+      activeDeadlineSeconds: 600
+      # Başarısız olursa 1 kez daha dene
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: elly-cms
+            component: backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "=========================================="
+                  echo "Backup başlatılıyor: $(date)"
+                  echo "=========================================="
+
+                  DATE=$(date +%Y-%m-%d_%H%M)
+
+                  # --- Tenant 1 Backup ---
+                  echo "[1/4] Tenant 1 backup alınıyor..."
+                  pg_dump \
+                    -h postgres-tenant1 \
+                    -U "$TENANT1_DB_USER" \
+                    -d "$TENANT1_DB_NAME" \
+                    --no-owner \
+                    --no-privileges \
+                    | gzip > /backups/tenant1-${DATE}.sql.gz
+
+                  TENANT1_SIZE=$(du -h /backups/tenant1-${DATE}.sql.gz | cut -f1)
+                  echo "    ✅ Tenant 1 tamamlandı: tenant1-${DATE}.sql.gz ($TENANT1_SIZE)"
+
+                  # --- Tenant 2 Backup ---
+                  echo "[2/4] Tenant 2 backup alınıyor..."
+                  pg_dump \
+                    -h postgres-tenant2 \
+                    -U "$TENANT2_DB_USER" \
+                    -d "$TENANT2_DB_NAME" \
+                    --no-owner \
+                    --no-privileges \
+                    | gzip > /backups/tenant2-${DATE}.sql.gz
+
+                  TENANT2_SIZE=$(du -h /backups/tenant2-${DATE}.sql.gz | cut -f1)
+                  echo "    ✅ Tenant 2 tamamlandı: tenant2-${DATE}.sql.gz ($TENANT2_SIZE)"
+
+                  # --- 3 Günden Eski Backup'ları Sil ---
+                  echo "[3/4] 3 günden eski backup'lar siliniyor..."
+                  DELETED=$(find /backups/ -name "*.sql.gz" -mtime +3 -print -delete | wc -l)
+                  echo "    🗑️  $DELETED eski backup silindi"
+
+                  # --- Durum Raporu ---
+                  echo "[4/4] Mevcut backup'lar:"
+                  ls -lh /backups/*.sql.gz 2>/dev/null || echo "    Backup bulunamadı!"
+                  TOTAL_SIZE=$(du -sh /backups/ | cut -f1)
+                  echo ""
+                  echo "=========================================="
+                  echo "Backup tamamlandı: $(date)"
+                  echo "Toplam backup boyutu: $TOTAL_SIZE"
+                  echo "=========================================="
+              env:
+                # pg_dump şifre soruyor diye PGPASSWORD ayarla
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: elly-secret
+                      key: TENANT1_DB_PASSWORD
+                - name: TENANT1_DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: elly-secret
+                      key: TENANT1_DB_USER
+                - name: TENANT1_DB_NAME
+                  valueFrom:
+                    configMapKeyRef:
+                      name: elly-config
+                      key: TENANT1_DB_NAME
+                - name: TENANT2_DB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: elly-secret
+                      key: TENANT2_DB_USER
+                - name: TENANT2_DB_NAME
+                  valueFrom:
+                    configMapKeyRef:
+                      name: elly-config
+                      key: TENANT2_DB_NAME
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "64Mi"
+                limits:
+                  cpu: "200m"
+                  memory: "128Mi"
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backups
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: postgres-backup-pvc
+
+---
+# ============================================
+# PVC - Backup Depolama Alanı
+# ============================================
+# 3 günlük backup için yeterli alan.
+# DB boyutu büyürse storage'ı artırabilirsin:
+#   kubectl edit pvc postgres-backup-pvc -n elly
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backup-pvc
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi   # 3 günlük sıkıştırılmış backup için fazlasıyla yeterli

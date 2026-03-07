@@ -1,0 +1,106 @@
+# ============================================
+# SERVICE - Spring Boot Application (ClusterIP)
+# ============================================
+# ClusterIP: Cluster içinden erişilebilir. Dış dünyadan erişim Ingress üzerinden yapılır.
+# Bu service, Ingress'ten gelen trafiği TÜM app pod'larına dağıtır (base + burst).
+# Selector: app=elly-cms, component=backend → hem base hem burst pod'ları yakalar.
+apiVersion: v1
+kind: Service
+metadata:
+  name: elly-app-service
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: backend
+  annotations:
+    # Prometheus Service Discovery için
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/actuator/prometheus"
+spec:
+  type: ClusterIP
+  selector:
+    app: elly-cms
+    component: backend
+  ports:
+    - name: http
+      port: 8080           # Service portu (cluster içinde erişim)
+      targetPort: http      # Pod'daki containerPort ismi
+      protocol: TCP
+
+---
+# ============================================
+# SERVICE - PostgreSQL Tenant 1 (Headless)
+# ============================================
+# Headless Service (clusterIP: None): StatefulSet pod'larına doğrudan DNS ile erişim sağlar.
+# Pod DNS formatı: postgres-tenant1-0.postgres-tenant1.elly.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-tenant1
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: database
+    tenant: tenant1
+spec:
+  type: ClusterIP
+  clusterIP: None   # Headless service
+  selector:
+    app: elly-cms
+    component: database
+    tenant: tenant1
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+
+---
+# ============================================
+# SERVICE - PostgreSQL Tenant 2 (Headless)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-tenant2
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: database
+    tenant: tenant2
+spec:
+  type: ClusterIP
+  clusterIP: None   # Headless service
+  selector:
+    app: elly-cms
+    component: database
+    tenant: tenant2
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+
+---
+# ============================================
+# SERVICE - Zipkin (ClusterIP)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: zipkin
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: tracing
+spec:
+  type: ClusterIP
+  selector:
+    app: elly-cms
+    component: tracing
+  ports:
+    - name: http
+      port: 9411
+      targetPort: 9411
+      protocol: TCP

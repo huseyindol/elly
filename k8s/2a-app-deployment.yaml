@@ -1,0 +1,146 @@
+# ============================================
+# DEPLOYMENT - Spring Boot Application (Base Pod'lar)
+# ============================================
+# Multi-tenant, stateless (JWT), her zaman 2 replika çalışır.
+# Tek VM (K3s) üzerinde çalışır.
+#
+# envFrom ile tüm env değişkenleri ConfigMap/Secret'tan otomatik çekilir.
+# Tek tek yazmaya gerek yok — ConfigMap/Secret'taki tüm key'ler env olur.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elly-app
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: elly-cms
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: elly-cms
+        component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      # Tek Node (K3s VM) olduğu için podAntiAffinity kullanılmıyor.
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: elly-app
+          image: ghcr.io/huseyindol/elly:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # ============================================
+          # ENV - ConfigMap ve Secret'tan otomatik inject
+          # ============================================
+          # envFrom: ConfigMap/Secret'taki TÜM key'leri env olarak ekler.
+          # Tek tek valueFrom yazmaya gerek kalmaz!
+          envFrom:
+            - configMapRef:
+                name: elly-config       # Tüm config key'leri → env var olur
+            - secretRef:
+                name: elly-secret       # Tüm secret key'leri → env var olur
+
+          # Sadece ConfigMap/Secret'ta olmayan değişkenler burada tanımlanır
+          env:
+            - name: JAVA_OPTS
+              value: >-
+                -Xmx768m
+                -Xms256m
+                -XX:+UseG1GC
+                -XX:MaxGCPauseMillis=200
+                -XX:+HeapDumpOnOutOfMemoryError
+                -XX:HeapDumpPath=/app/logs/
+                -Dspring.jmx.enabled=false
+                -Djava.security.egd=file:/dev/./urandom
+
+          # ============================================
+          # RESOURCE LIMITS (Base Pod'lar - 4GB VM)
+          # ============================================
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "384Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+
+          # ============================================
+          # HEALTH PROBES
+          # ============================================
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          volumeMounts:
+            - name: app-assets
+              mountPath: /app/assets
+            - name: app-logs
+              mountPath: /app/logs
+
+      volumes:
+        - name: app-assets
+          persistentVolumeClaim:
+            claimName: elly-assets-pvc
+        - name: app-logs
+          emptyDir: {}
+
+---
+# ============================================
+# PVC - Asset Dosyaları İçin Kalıcı Depolama
+# ============================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elly-assets-pvc
+  namespace: elly
+  labels:
+    app: elly-cms
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi

@@ -1,0 +1,122 @@
+# ============================================
+# INGRESS - Dış Trafik Yönlendirmesi
+# ============================================
+# K3s varsayılan olarak Traefik Ingress Controller ile gelir.
+# Ekstra kurulum gerekmez!
+#
+# Eğer NGINX Ingress tercih edersen:
+#   1. K3s'i Traefik olmadan kur: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable=traefik" sh -
+#   2. NGINX Ingress kur: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/baremetal/deploy.yaml
+#   3. Aşağıdaki ingressClassName'i "nginx" olarak değiştir
+#
+# TLS/SSL için cert-manager önerilir:
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.4/cert-manager.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: elly-ingress
+  namespace: elly
+  labels:
+    app: elly-cms
+  annotations:
+    # Traefik Ingress Controller ayarları (K3s default)
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+
+    # Rate limiting - Traefik middleware ile yapılır (aşağıda tanımlı)
+    # DDoS koruması için Traefik middleware oluşturabilirsin.
+
+    # CORS ayarları (Frontend farklı domain'den geliyorsa)
+    traefik.ingress.kubernetes.io/router.middlewares: elly-cors@kubernetescrd
+
+    # SSL Redirect - HTTP → HTTPS yönlendirmesi
+    traefik.ingress.kubernetes.io/router.tls: "true"
+
+    # cert-manager ile otomatik SSL sertifikası (opsiyonel)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: traefik   # K3s default. NGINX kullanıyorsan "nginx" yap.
+  # ============================================
+  # TLS/SSL Konfigürasyonu
+  # ============================================
+  # Seçenek 1: cert-manager ile otomatik (önerilir)
+  # Seçenek 2: Manuel sertifika (aşağıdaki Secret'ı oluşturun)
+  #   kubectl create secret tls elly-tls-secret \
+  #     --cert=path/to/tls.crt \
+  #     --key=path/to/tls.key \
+  #     -n elly
+  tls:
+    - hosts:
+        - your-domain.com          # ← Kendi domain'inizi yazın
+        - api.your-domain.com      # ← API subdomain (opsiyonel)
+      secretName: elly-tls-secret  # TLS sertifika Secret'ı
+  rules:
+    # ============================================
+    # Ana Domain - API Trafiği
+    # ============================================
+    - host: your-domain.com        # ← Kendi domain'inizi yazın
+      http:
+        paths:
+          # API istekleri → Spring Boot
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          # Swagger UI
+          - path: /swagger-ui
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          # API Docs
+          - path: /api-docs
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          # Actuator (monitoring için)
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          # OAuth2 callback
+          - path: /login/oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          # OAuth2 redirect
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          # Asset dosyaları
+          - path: /assets
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          # Fallback: Tüm diğer istekler
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080

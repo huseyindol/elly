@@ -7,7 +7,7 @@ spec:
     # Let's Encrypt üretim API'si
     server: https://acme-v02.api.letsencrypt.org/directory
     # Sertifika bildirimleri için email adresiniz
-    email: admin@huseyindol.site # Bunu kendi emailiniz ile değiştirebilirsiniz
+    email: huseyindol@gmail.com
     # Let's Encrypt hesap anahtarının saklanacağı secret
     privateKeySecretRef:
       name: letsencrypt-prod-account-key

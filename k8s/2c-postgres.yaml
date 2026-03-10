@@ -176,3 +176,92 @@ spec:
         resources:
           requests:
             storage: 8Gi
+
+---
+# ============================================
+# STATEFULSET - PostgreSQL BaseDB
+# ============================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-basedb
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: database
+    tenant: basedb
+spec:
+  serviceName: postgres-basedb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elly-cms
+      component: database
+      tenant: basedb
+  template:
+    metadata:
+      labels:
+        app: elly-cms
+        component: database
+        tenant: basedb
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - configMapRef:
+                name: postgres-basedb-config
+            - secretRef:
+                name: postgres-basedb-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - elly_basedb
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - elly_basedb
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: postgres-basedb-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d/init.sql
+              subPath: init.sql
+      volumes:
+        - name: init-sql
+          configMap:
+            name: postgres-basedb-config
+            items:
+              - key: init.sql
+                path: init.sql
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-basedb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 8Gi

@@ -22,6 +22,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
 
 @Component
 @RequiredArgsConstructor
@@ -31,6 +32,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final UserDetailsService userDetailsService;
   private final UserRepository userRepository;
   private final ObjectMapper objectMapper;
+
+  @Value("${app.tenants.default-tenant:basedb}")
+  private String defaultTenant;
 
   @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
@@ -61,13 +65,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     // Username çıkarıldıysa ve henüz authentication yapılmadıysa
     if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
       try {
-        // User'ı veritabanından bul (tokenVersion için)
-        final String finalUsername = username; // Lambda için final
-        User user = userRepository.findByUsername(finalUsername)
-            .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
-                "User not found: " + finalUsername));
+        // Authentication for the user MUST be done in defaultTenant (basedb)
+        // because all users are centrally located there.
+        String originalTenant = TenantContext.getTenantId();
+        User user = null;
+        UserDetails userDetails = null;
 
-        UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+        try {
+          TenantContext.setTenantId(defaultTenant); // Switch to basedb
+
+          // User'ı veritabanından bul (tokenVersion için)
+          final String finalUsername = username; // Lambda için final
+          user = userRepository.findByUsername(finalUsername)
+              .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
+                  "User not found: " + finalUsername));
+
+          userDetails = this.userDetailsService.loadUserByUsername(username);
+
+        } finally {
+          // Geri dön
+          TenantContext.setTenantId(originalTenant);
+        }
 
         // Token'ı validate et (tokenVersion kontrolü ile)
         Long currentTokenVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;

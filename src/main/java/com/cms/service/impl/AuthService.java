@@ -13,6 +13,8 @@ import com.cms.config.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
@@ -68,6 +70,10 @@ public class AuthService implements IAuthService {
     user.setProvider("local"); // Local kayıt için
     user.setIsActive(true);
 
+    if (dtoRegister.getManagedTenants() != null && !dtoRegister.getManagedTenants().isEmpty()) {
+      user.setManagedTenants(dtoRegister.getManagedTenants());
+    }
+
     User savedUser = userRepository.save(user);
 
     // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
@@ -95,6 +101,15 @@ public class AuthService implements IAuthService {
     response.setEmail(savedUser.getEmail());
     response.setUserCode(userUtil.generateUserCode(savedUser));
     response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
+
+    // Tenant token'larını üret ve response'a ekle
+    Map<String, String> tenantTokens = new HashMap<>();
+    if (savedUser.getManagedTenants() != null) {
+      savedUser.getManagedTenants().forEach(tId -> {
+        tenantTokens.put(tId, jwtUtil.generateTenantToken(tId));
+      });
+    }
+    response.setTenantTokens(tenantTokens);
 
     return response;
   }

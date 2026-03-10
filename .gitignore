@@ -37,6 +37,8 @@ assets/
 .env
 .env.local
 .env.*.local
+.env.remote
+.env.*.remote
 backups/
 docker/postgres.conf
 docker/nginx.conf

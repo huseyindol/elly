@@ -44,8 +44,7 @@ metadata:
     component: database
     tenant: tenant1
 spec:
-  type: ClusterIP
-  clusterIP: None   # Headless service
+  type: NodePort
   selector:
     app: elly-cms
     component: database
@@ -54,6 +53,7 @@ spec:
     - name: postgres
       port: 5432
       targetPort: 5432
+      nodePort: 31433
       protocol: TCP
 
 ---
@@ -70,8 +70,7 @@ metadata:
     component: database
     tenant: tenant2
 spec:
-  type: ClusterIP
-  clusterIP: None   # Headless service
+  type: NodePort
   selector:
     app: elly-cms
     component: database
@@ -80,6 +79,7 @@ spec:
     - name: postgres
       port: 5432
       targetPort: 5432
+      nodePort: 31434
       protocol: TCP
 
 ---
@@ -103,4 +103,30 @@ spec:
     - name: http
       port: 9411
       targetPort: 9411
+      protocol: TCP
+
+---
+# ============================================
+# SERVICE - PostgreSQL BaseDB (NodePort)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-basedb
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: database
+    tenant: basedb
+spec:
+  type: NodePort
+  selector:
+    app: elly-cms
+    component: database
+    tenant: basedb
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      nodePort: 31432
       protocol: TCP

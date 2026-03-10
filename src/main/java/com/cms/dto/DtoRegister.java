@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.util.List;
 
 @Getter
 @Setter
@@ -27,4 +28,5 @@ public class DtoRegister {
 
   private String firstName;
   private String lastName;
+  private List<String> managedTenants;
 }

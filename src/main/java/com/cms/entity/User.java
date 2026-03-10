@@ -5,10 +5,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "users", indexes = {
@@ -49,4 +55,9 @@ public class User extends BaseEntity {
 
   @Column(name = "token_version", nullable = false)
   private Long tokenVersion = 0L; // Token versioning için - yeni token alındığında artırılır
+
+  @ElementCollection(fetch = FetchType.EAGER)
+  @CollectionTable(name = "user_tenants", joinColumns = @JoinColumn(name = "user_id"))
+  @Column(name = "tenant_id")
+  private List<String> managedTenants = new ArrayList<>();
 }

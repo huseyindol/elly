@@ -19,17 +19,23 @@ data:
   # --- Default Tenant ---
   DEFAULT_TENANT: "tenant1"
 
+  # --- Base Database ---
+  BASEDB_HOST: "postgres-basedb"
+  BASEDB_PORT: "5432"
+  BASEDB_NAME: "elly_basedb"
+  BASEDB_SCHEMA: "public"
+
   # --- Tenant 1 Database ---
   TENANT1_DB_HOST: "postgres-tenant1"
   TENANT1_DB_PORT: "5432"
   TENANT1_DB_NAME: "elly_tenant1"
-  TENANT1_DB_SCHEMA: "elly"
+  TENANT1_DB_SCHEMA: "public"
 
   # --- Tenant 2 Database ---
   TENANT2_DB_HOST: "postgres-tenant2"
   TENANT2_DB_PORT: "5432"
   TENANT2_DB_NAME: "elly_tenant2"
-  TENANT2_DB_SCHEMA: "sally"
+  TENANT2_DB_SCHEMA: "public"
 
   # --- Zipkin Tracing ---
   ZIPKIN_URL: "http://zipkin:9411"
@@ -66,7 +72,7 @@ data:
   POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
   # PostgreSQL ilk açılışta bu SQL'i otomatik çalıştırır
   init.sql: |
-    CREATE SCHEMA IF NOT EXISTS elly;
+    CREATE SCHEMA IF NOT EXISTS public;
 
 ---
 # ============================================
@@ -87,4 +93,24 @@ data:
   POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
   # PostgreSQL ilk açılışta bu SQL'i otomatik çalıştırır
   init.sql: |
-    CREATE SCHEMA IF NOT EXISTS sally;
+    CREATE SCHEMA IF NOT EXISTS public;
+
+---
+# ============================================
+# CONFIGMAP - PostgreSQL BaseDB
+# ============================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-basedb-config
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: database
+    tenant: basedb
+data:
+  POSTGRES_DB: "elly_basedb"
+  PGDATA: "/var/lib/postgresql/data/pgdata"
+  POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+  init.sql: |
+    CREATE SCHEMA IF NOT EXISTS public;

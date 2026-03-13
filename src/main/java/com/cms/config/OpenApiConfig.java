@@ -22,7 +22,7 @@ public class OpenApiConfig {
                                                 .version("1.0")
                                                 .description("API documentation for Elly CMS"))
                                 .addServersItem(new io.swagger.v3.oas.models.servers.Server()
-                                                .url("https://api.huseyindol.site")
+                                                .url("https://api.huseyindol.com")
                                                 .description("Production (HTTPS)"))
                                 .addServersItem(new io.swagger.v3.oas.models.servers.Server()
                                                 .url("http://localhost:8080")

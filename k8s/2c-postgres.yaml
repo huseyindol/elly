@@ -55,6 +55,7 @@ spec:
                 - elly_tenant1
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command:
@@ -65,6 +66,7 @@ spec:
                 - elly_tenant1
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 5
           volumeMounts:
             - name: postgres-tenant1-data
               mountPath: /var/lib/postgresql/data
@@ -144,6 +146,7 @@ spec:
                 - elly_tenant2
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command:
@@ -154,6 +157,7 @@ spec:
                 - elly_tenant2
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 5
           volumeMounts:
             - name: postgres-tenant2-data
               mountPath: /var/lib/postgresql/data
@@ -233,6 +237,7 @@ spec:
                 - elly_basedb
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command:
@@ -243,6 +248,7 @@ spec:
                 - elly_basedb
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 5
           volumeMounts:
             - name: postgres-basedb-data
               mountPath: /var/lib/postgresql/data

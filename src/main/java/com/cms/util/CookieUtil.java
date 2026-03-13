@@ -60,7 +60,7 @@ public class CookieUtil {
         || java.util.Arrays.asList(activeProfiles).contains("dev");
 
     // Local ortamda SameSite=None kullan (cross-origin çalışması için)
-    // Production ortamda domain belirt (.huseyindol.site) ve SameSite=Lax/Strict
+    // Production ortamda domain belirt (.huseyindol.com) ve SameSite=Lax/Strict
     // kullan
 
     StringBuilder cookieBuilder = new StringBuilder();
@@ -69,7 +69,7 @@ public class CookieUtil {
         expiration.format(DateTimeFormatter.RFC_1123_DATE_TIME)));
 
     if (!isLocal) {
-      cookieBuilder.append("; Domain=.huseyindol.site");
+      cookieBuilder.append("; Domain=.huseyindol.com");
     }
 
     if (httpOnly) {

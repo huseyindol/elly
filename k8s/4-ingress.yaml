@@ -36,10 +36,10 @@ spec:
   # TLS Config for cert-manager
   tls:
     - hosts:
-        - api.huseyindol.site
+        - api.huseyindol.com
       secretName: elly-tls-secret
   rules:
-    - host: api.huseyindol.site
+    - host: api.huseyindol.com
       http:
         paths:
           - path: /api

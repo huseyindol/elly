@@ -33,7 +33,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
   // Login optimizasyonu: INSERT veya UPDATE tek sorguda (PostgreSQL native query)
   @Modifying
   @Query(value = """
-      INSERT INTO elly.refresh_tokens (user_id, token, expiry_date, is_revoked, created_at, updated_at)
+      INSERT INTO refresh_tokens (user_id, token, expiry_date, is_revoked, created_at, updated_at)
       VALUES (:userId, :token, :expiryDate, false, NOW(), NOW())
       ON CONFLICT (user_id) DO UPDATE SET
         token = :token,

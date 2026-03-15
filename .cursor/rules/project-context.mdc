@@ -1,0 +1,125 @@
+---
+description: Elly CMS - Tum proje baglami, mimari, entity iliskileri ve teknoloji stack
+alwaysApply: true
+---
+
+# Elly CMS - Proje Baglami
+
+## Genel Bakis
+Elly, Spring Boot 3.5.7 ve Java 21 ile gelistirilen multi-tenant bir CMS (Content Management System) backend uygulamasidir. Database-per-tenant mimarisi ile her tenant icin ayri PostgreSQL veritabani kullanir.
+
+## Teknoloji Stack
+- **Framework:** Spring Boot 3.5.7, Java 21
+- **Veritabani:** PostgreSQL (multi-tenant, database-per-tenant)
+- **ORM:** Hibernate / Spring Data JPA
+- **Auth:** JWT (JWE encrypted) + OAuth2 (Google, Facebook, GitHub)
+- **Mapping:** MapStruct (entity <-> DTO)
+- **Cache:** Redis (tenant-aware, 10 dk TTL, JSON serialization, allkeys-lru)
+- **Observability:** Actuator, Prometheus, Zipkin (distributed tracing), Micrometer
+- **API Docs:** SpringDoc OpenAPI 3 / Swagger
+- **Build:** Maven (mvnw)
+- **Deployment:** Docker (multi-stage), Kubernetes (K3s), GitHub Actions CI/CD
+- **Linting:** SonarQube
+
+## Paket Yapisi (`com.cms`)
+```
+com.cms/
+  elly/           -> EllyApplication.java (main)
+  config/         -> 17 config sinifi (Security, JWT, Tenant, Cache, JPA, OAuth2...)
+  controller/     -> IXxxController (interface) + impl/XxxController
+  service/        -> IXxxService (interface) + impl/XxxService
+  repository/     -> JpaRepository<Entity, Long> (15 repository)
+  entity/         -> JPA entity'leri + form/ alt paketi
+  dto/            -> DtoXxx, DtoXxxIU, DtoXxxSummary, DtoXxxDetail (40+)
+  mapper/         -> MapStruct mapper'lari (11 mapper)
+  exception/      -> BaseException, GlobalExceptionHandler, ResourceNotFoundException...
+  enums/          -> ComponentTypeEnum, WidgetTypeEnum, ConditionOperator
+  util/           -> JwtUtil, CookieUtil, UserUtil
+  advice/         -> CacheStatusResponseAdvice
+```
+
+## Entity Iliskileri
+```
+Page ──OneToOne──> SeoInfo
+Page ──ManyToMany──> Component (page_components)
+
+Component ──ManyToMany──> Banner (component_banners)   [type=BANNER]
+Component ──ManyToMany──> Widget (component_widgets)   [type=WIDGET]
+Component ──ManyToMany──> FormDefinition (component_forms)
+
+Widget ──ManyToMany──> Banner (widget_banners)         [type=BANNER]
+Widget ──ManyToMany──> Post (widget_posts)             [type=POST]
+
+Post ──OneToOne──> SeoInfo
+Comment ──ManyToOne──> Post
+Comment ──ManyToOne──> Comment (self-referential, parent/children)
+Rating ──ManyToOne──> Post
+
+FormSubmission ──ManyToOne──> FormDefinition
+CmsContent ──ManyToOne──> CmsBasicInfo
+RefreshToken ──OneToOne──> User
+User.managedTenants -> @ElementCollection (user_tenants)
+Assets -> bagimsiz entity (iliskisiz)
+```
+
+## Base Entity
+Cogu entity `BaseEntity` sinifini extend eder: `id` (Long, IDENTITY), `createdAt`, `updatedAt` (@CreatedDate, @LastModifiedDate). Istisnalar: CmsBasicInfo ve CmsContent kendi UUID id'lerini kullanir.
+
+## Katman Kurallari (Layer Pattern)
+1. **Controller:** Interface (`IXxxController`) + Implementation (`XxxController extends BaseController`)
+   - `BaseController` icerisinde `ok(T data)`, `error(String)`, `createPageable()` yardimci metodlari
+   - Tum yanit tipleri `RootEntityResponse<T>` ile sarmalanir
+2. **Service:** Interface (`IXxxService`) + Implementation (`XxxService`)
+   - `@Transactional` yazma islemlerinde, `@Cacheable`/`@CacheEvict` okumalarda
+3. **Repository:** `JpaRepository<Entity, Long>` + `@EntityGraph` (N+1 onleme) + `@Query` DTO projeksiyon
+4. **Mapper:** `@Mapper(componentModel = "spring")`, `toDto()`, `toEntity()`, `updateEntityFromDto()`
+5. **DTO:** `DtoXxx` (tam), `DtoXxxIU` (input/update), `DtoXxxSummary`, `DtoXxxDetail`
+
+## Multi-Tenancy Akisi
+1. `JwtTenantFilter` (Order 1): `X-Tenant-ID` header'indan JWT decrypt -> tenant ID cikarir
+2. `TenantContext`: ThreadLocal ile tenant ID saklar
+3. `TenantRoutingDataSource`: `determineCurrentLookupKey()` ile dogru DataSource secer
+4. `DataSourceConfig`: Her tenant icin ayri HikariCP pool olusturur
+5. Kullanici bilgileri her zaman `basedb` (default tenant) uzerinden sorgulanir
+
+## Cache Mimarisi (Redis - Tenant-Aware)
+- Key formati: `tenantId::cacheName::key` (ornek: `tenant1::pages::slug_home`)
+- `CacheConfig` icerisinde `computePrefixWith()` ile `TenantContext.getTenantId()` okunarak tenant prefix eklenir
+- 10 cache ismi: pages, posts, components, widgets, banners, formDefinitions, formSubmissions, comments, ratings, cmsContents
+- `GracefulCacheErrorHandler`: Redis down oldugunda uygulama calismaya devam eder, veri DB'den okunur
+- `CacheController` (`/api/v1/cache`): Tenant-bazli cache istatistikleri ve temizleme (SCAN komutu ile)
+- Serialization: `GenericJackson2JsonRedisSerializer` + `JavaTimeModule` (LocalDateTime/Date uyumu)
+
+## Auth Akisi
+- JWT + JWE (encrypted), `tokenVersion` ile token invalidation
+- Cookie'ler: access-token, refresh-token, user-code, expired-date
+- OAuth2: Google, Facebook, GitHub (OAuth2AuthenticationSuccessHandler)
+- Filter sirasi: JwtTenantFilter -> JwtAuthenticationFilter -> UsernamePasswordAuthenticationFilter
+
+## Exception Handling
+- `BaseException` (HttpStatus + errorCode) -> alt siniflar: ResourceNotFoundException (404), ConflictException (409), BadRequestException (400), FormValidationException (400 + field errors)
+- `GlobalExceptionHandler` (@RestControllerAdvice) -> `ErrorResponse` (result, timestamp, status, error, errorCode, message, path, validationErrors, details)
+
+## Onemli Dizinler
+- `docs/` -> 27+ markdown dokumantasyon dosyasi
+- `k8s/` -> Kubernetes manifest'leri (namespace, configmap, secret, deployment, service, ingress, HPA)
+- `docker/` -> Grafana, Prometheus yapilandirmasi
+- `load-tests/` -> k6 performans testleri
+- `scripts/` -> Yardimci script'ler
+- `assets/` -> Statik dosyalar (images, banners, oyunlar)
+- `.github/workflows/` -> deploy.yml (main push -> build -> deploy K3s), rollback.yml
+
+## API Versioning
+Tum endpoint'ler `/api/v1/` prefix'i ile baslar.
+
+## Dokumantasyon Referanslari
+Herhangi bir konuda detayli bilgi icin `docs/` dizinini incele:
+- Multi-tenancy: `docs/MULTI_TENANCY.md`
+- Performance: `docs/PERFORMANCE_ANALYSIS.md`, `docs/PERFORMANCE_ROADMAP.md`
+- Docker: `docs/DOCKER_SETUP.md`, `docs/DOCKER_QUICKSTART.md`
+- Kubernetes: `docs/KUBERNATES_GUIDE.md`, `docs/KUBERNETES_LOCAL_SETUP.md`
+- OAuth2: `docs/OAUTH2_SETUP.md`
+- CI/CD: `docs/CI_CD_SETUP.md`
+- Form/Anket: `docs/FormAndAnketMimari.md`
+- CMS Content: `docs/CMS_CONTENT.md`
+- Exception: `docs/GLOBAL_EXCEPTION_HANDLER.md`

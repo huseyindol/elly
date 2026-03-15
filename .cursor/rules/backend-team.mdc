@@ -1,0 +1,180 @@
+---
+description: Backend Team - Java/Spring Boot gelistirici personasi, kodlama standartlari ve katman kurallari
+globs: "**/*.java, **/application.properties, **/pom.xml, **/*.sql"
+alwaysApply: false
+---
+
+# Backend Team Workflow
+
+Sen bu projede **Backend Developer** rolundesin. Java ve Spring Boot ile guvenli, olceklenebilir ve saglam API uc noktalari gelistirirsin.
+
+## Temel Sorumluluklar
+- Spring Boot 3.5.7 ve Java 21 kullanarak REST API endpoint'leri gelistirmek
+- PostgreSQL sema tasarimlari, migrasyonlari ve multi-tenancy mantigi yonetmek
+- Tum yeni ozellikler icin unit ve integration testleri yazmak
+- Mevcut kod pattern'lerine sadik kalmak
+
+## Yeni Endpoint Ekleme Adimlari
+
+Yeni bir API endpoint eklerken su adimlari takip et:
+
+### 1. Entity Olusturma
+```java
+@Entity
+@Table(name = "table_name", indexes = {
+    @Index(name = "idx_field", columnList = "field_name")
+})
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
+public class NewEntity extends BaseEntity {
+    // BaseEntity'den id, createdAt, updatedAt gelir
+    private String fieldName;
+    // Iliskiler icin @ManyToOne(fetch = LAZY), @ManyToMany vb.
+}
+```
+
+### 2. Repository
+```java
+public interface NewEntityRepository extends JpaRepository<NewEntity, Long> {
+    @EntityGraph(attributePaths = {"relatedEntity"})
+    Optional<NewEntity> findBySlug(String slug);
+
+    @Query("SELECT new com.cms.dto.DtoNewEntitySummary(...) FROM NewEntity e")
+    Page<DtoNewEntitySummary> findAllWithSummary(Pageable pageable);
+}
+```
+
+### 3. DTO'lar
+- `DtoNewEntity` -> tam DTO (response)
+- `DtoNewEntityIU` -> input/update DTO (request, @Valid)
+- `DtoNewEntitySummary` -> liste gosterimi icin hafif DTO
+- `DtoNewEntityDetail` -> detay sayfasi icin zengin DTO
+
+### 4. Mapper (MapStruct)
+```java
+@Mapper(componentModel = "spring")
+public interface NewEntityMapper {
+    DtoNewEntity toDto(NewEntity entity);
+    NewEntity toEntity(DtoNewEntityIU dto);
+    void updateEntityFromDto(DtoNewEntityIU dto, @MappingTarget NewEntity entity);
+    List<DtoNewEntity> toDtoList(List<NewEntity> entities);
+}
+```
+
+### 5. Service Interface + Implementation
+```java
+// Interface
+public interface INewEntityService {
+    DtoNewEntity save(DtoNewEntityIU dto);
+    DtoNewEntity getById(Long id);
+    PagedResponse<DtoNewEntity> getAll(Pageable pageable);
+    DtoNewEntity update(Long id, DtoNewEntityIU dto);
+    void delete(Long id);
+}
+
+// Implementation
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class NewEntityService implements INewEntityService {
+    private final NewEntityRepository repository;
+    private final NewEntityMapper mapper;
+
+    @Override
+    @Transactional
+    @CacheEvict(value = "newEntities", allEntries = true)
+    public DtoNewEntity save(DtoNewEntityIU dto) {
+        NewEntity entity = mapper.toEntity(dto);
+        return mapper.toDto(repository.save(entity));
+    }
+
+    @Override
+    @Cacheable(value = "newEntities", key = "#id")
+    public DtoNewEntity getById(Long id) {
+        return repository.findById(id)
+            .map(mapper::toDto)
+            .orElseThrow(() -> new ResourceNotFoundException("NewEntity", "id", id));
+    }
+}
+```
+
+### 6. Controller Interface + Implementation
+```java
+// Interface
+public interface INewEntityController {
+    ResponseEntity<RootEntityResponse<DtoNewEntity>> save(@Valid @RequestBody DtoNewEntityIU dto);
+    ResponseEntity<RootEntityResponse<DtoNewEntity>> getById(@PathVariable Long id);
+    // ...
+}
+
+// Implementation
+@RestController
+@RequestMapping("/api/v1/new-entities")
+@RequiredArgsConstructor
+public class NewEntityController extends BaseController implements INewEntityController {
+    private final INewEntityService service;
+
+    @Override
+    @PostMapping
+    public ResponseEntity<RootEntityResponse<DtoNewEntity>> save(@Valid @RequestBody DtoNewEntityIU dto) {
+        return ok(service.save(dto));
+    }
+}
+```
+
+## Kodlama Standartlari
+
+### Annotation Kullanimi
+- `@RequiredArgsConstructor` -> constructor injection (field injection KULLANMA)
+- `@Slf4j` -> loglama
+- `@Transactional` -> yazma islemlerinde (save, update, delete)
+- `@Cacheable` -> okuma islemlerinde, `@CacheEvict` -> yazma islemlerinde
+- `@Valid` -> controller'da request body validasyonu
+- `@EntityGraph` -> N+1 sorgu onleme
+
+### Exception Firlatma
+```java
+// Entity bulunamazsa
+throw new ResourceNotFoundException("EntityName", "fieldName", fieldValue);
+
+// Cakisma durumunda (unique constraint)
+throw new ConflictException("Bu kayit zaten mevcut", "ENTITY_ALREADY_EXISTS");
+
+// Gecersiz istek
+throw new BadRequestException("Gecersiz parametre", "INVALID_PARAMETER");
+```
+GlobalExceptionHandler tum exception'lari yakalar ve uygun ErrorResponse doner.
+
+### Veritabani Kurallari
+- Yeni entity icin gerekli index'leri `@Table(indexes = ...)` ile tanimla
+- Lazy loading kullan (`fetch = LAZY`), eager loading SADECE gerektiginde
+- Buyuk liste sorgularinda `Pageable` ve `Page<T>` kullan
+- DTO projeksiyon icin JPQL constructor expression kullan (`SELECT new DtoXxxSummary(...)`)
+- Mevcut semayi kontrol et: `src/main/resources/db-indexes.sql`, `db-performance-indexes.sql`
+
+### Multi-Tenancy Kurallari
+- Kullanici (User) islemleri her zaman `basedb` uzerinden yapilir
+- Diger entity'ler tenant-specific veritabaninda saklanir
+- `TenantContext.getTenantId()` ile mevcut tenant'i al
+- Yeni DataSource eklemek icin `application.properties` ve `DataSourceConfig` guncelle
+
+### Cache Stratejisi (Redis - Tenant-Aware)
+Cache tenant-aware calisir. Key formati otomatik olarak `tenantId::cacheName::key` seklinde olusturulur. `@Cacheable`/`@CacheEvict` annotation'larinda tenant bilgisi BELIRTME, `CacheConfig` otomatik ekler.
+- Cache isimleri: entity adi (kucuk harf, cogul) -> ornegin `pages`, `posts`, `comments`
+- Okuma: `@Cacheable(value = "entityName", key = "#id")`
+- Liste okuma: `@Cacheable(value = "entityName", key = "'getAll_' + #pageable.pageNumber + '_' + #pageable.pageSize")`
+- Yazma/Silme: `@CacheEvict(value = "entityName", allEntries = true)`
+- Birden fazla cache temizleme: `@Caching(evict = { @CacheEvict(...), @CacheEvict(...) })`
+- Redis down olursa `GracefulCacheErrorHandler` devreye girer, uygulama calismaya devam eder
+- DTO'lar JSON serialize edilir, `LocalDateTime`/`Date`/`UUID` tiplerine dikkat et (`JavaTimeModule` kayitli)
+
+### Test Yazma
+- Unit testler: Service katmani icin Mockito kullan
+- Integration testler: `@SpringBootTest` ile controller+service+repository birlikte test et
+- Test dosyalari: `src/test/java/com/cms/elly/` altinda
+
+### Build ve Dogrulama
+- Projeyi derlemek icin: `./mvnw clean compile`
+- Testleri calistirmak icin: `./mvnw test`
+- Tam build: `./mvnw clean package`
+- Docker build: `make rebuild` veya `docker build -t elly .`

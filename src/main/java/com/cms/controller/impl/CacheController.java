@@ -1,84 +1,134 @@
 package com.cms.controller.impl;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Properties;
+import java.util.Set;
 
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.caffeine.CaffeineCache;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cms.config.TenantContext;
 import com.cms.dto.DtoCacheInfo;
-import com.github.benmanes.caffeine.cache.stats.CacheStats;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/api/v1/cache")
 @RequiredArgsConstructor
+@Slf4j
 public class CacheController {
 
-  private final CacheManager cacheManager;
+  private static final String[] CACHE_NAMES = {
+      "pages", "posts", "components", "widgets", "banners",
+      "formDefinitions", "formSubmissions", "comments", "ratings", "cmsContents"
+  };
+
+  private final RedisTemplate<String, Object> redisTemplate;
 
   @GetMapping
   public List<DtoCacheInfo> getCacheStats() {
+    String tenantId = resolveTenantId();
     List<DtoCacheInfo> cacheInfos = new ArrayList<>();
 
-    cacheManager.getCacheNames().forEach(cacheName -> {
-      Cache cache = cacheManager.getCache(cacheName);
-      if (cache instanceof CaffeineCache) {
-        CaffeineCache caffeineCache = (CaffeineCache) cache;
-        com.github.benmanes.caffeine.cache.Cache<Object, Object> nativeCache = caffeineCache.getNativeCache();
+    for (String cacheName : CACHE_NAMES) {
+      String pattern = tenantId + "::" + cacheName + "::*";
+      Set<String> keys = scanKeys(pattern);
 
-        CacheStats stats = nativeCache.stats();
-        List<String> keys = nativeCache.asMap().keySet().stream()
-            .map(Object::toString)
-            .collect(Collectors.toList());
-
-        cacheInfos.add(DtoCacheInfo.builder()
-            .name(cacheName)
-            .size(nativeCache.estimatedSize())
-            .estimatedSize(nativeCache.estimatedSize())
-            .stats(String.format("Hit: %d, Miss: %d, HitRate: %.2f",
-                stats.hitCount(), stats.missCount(), stats.hitRate()))
-            .keys(keys)
-            .build());
-      } else {
-        cacheInfos.add(DtoCacheInfo.builder()
-            .name(cacheName)
-            .stats("N/A - Not a Caffeine Cache")
-            .keys(Collections.emptyList())
-            .build());
-      }
-    });
+      cacheInfos.add(DtoCacheInfo.builder()
+          .tenantId(tenantId)
+          .name(cacheName)
+          .keyCount(keys.size())
+          .stats(buildRedisStats())
+          .keys(new ArrayList<>(keys))
+          .build());
+    }
 
     return cacheInfos;
   }
 
   @DeleteMapping("/{name}")
   public String clearCache(@PathVariable String name) {
-    Cache cache = cacheManager.getCache(name);
-    if (cache != null) {
-      cache.clear();
-      return name + " cache temizlendi!";
+    String tenantId = resolveTenantId();
+    String pattern = tenantId + "::" + name + "::*";
+    Set<String> keys = scanKeys(pattern);
+
+    if (!keys.isEmpty()) {
+      redisTemplate.delete(keys);
+      log.info("Cache temizlendi [tenant={}, cache={}, keys={}]", tenantId, name, keys.size());
+      return name + " cache temizlendi! (" + keys.size() + " key silindi, tenant: " + tenantId + ")";
     }
-    return "Cache bulunamadı: " + name;
+    return "Cache boş veya bulunamadı: " + name + " (tenant: " + tenantId + ")";
   }
 
   @DeleteMapping
   public String clearAllCaches() {
-    cacheManager.getCacheNames().forEach(name -> {
-      Cache cache = cacheManager.getCache(name);
-      if (cache != null) {
-        cache.clear();
+    String tenantId = resolveTenantId();
+    String pattern = tenantId + "::*";
+    Set<String> keys = scanKeys(pattern);
+
+    if (!keys.isEmpty()) {
+      redisTemplate.delete(keys);
+      log.info("Tüm cacheler temizlendi [tenant={}, keys={}]", tenantId, keys.size());
+    }
+    return "Tüm cacheler temizlendi! (" + keys.size() + " key silindi, tenant: " + tenantId + ")";
+  }
+
+  @DeleteMapping("/all-tenants")
+  public String clearAllTenantsCache() {
+    Set<String> keys = scanKeys("*");
+
+    if (!keys.isEmpty()) {
+      redisTemplate.delete(keys);
+      log.info("Tüm tenant cache'leri temizlendi [keys={}]", keys.size());
+    }
+    return "Tüm tenant cache'leri temizlendi! (" + keys.size() + " key silindi)";
+  }
+
+  private Set<String> scanKeys(String pattern) {
+    Set<String> keys = new HashSet<>();
+    ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
+
+    try (Cursor<byte[]> cursor = redisTemplate.executeWithStickyConnection(
+        (RedisConnection connection) -> connection.keyCommands().scan(options))) {
+      if (cursor != null) {
+        while (cursor.hasNext()) {
+          keys.add(new String(cursor.next()));
+        }
       }
-    });
-    return "Tüm cacheler temizlendi!";
+    }
+    return keys;
+  }
+
+  private String buildRedisStats() {
+    try {
+      var connectionFactory = redisTemplate.getConnectionFactory();
+      if (connectionFactory == null) {
+        return "N/A - ConnectionFactory not available";
+      }
+      Properties info = connectionFactory.getConnection().serverCommands().info("stats");
+      if (info != null) {
+        return String.format("Hits: %s, Misses: %s",
+            info.getProperty("keyspace_hits", "N/A"),
+            info.getProperty("keyspace_misses", "N/A"));
+      }
+    } catch (Exception e) {
+      log.debug("Redis stats alınamadı: {}", e.getMessage());
+    }
+    return "N/A";
+  }
+
+  private String resolveTenantId() {
+    String tenantId = TenantContext.getTenantId();
+    return (tenantId != null && !tenantId.isBlank()) ? tenantId : "default";
   }
 }

@@ -13,9 +13,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class DtoCacheInfo {
 
+  private String tenantId;
   private String name;
-  private long size;
-  private long estimatedSize;
+  private long keyCount;
   private String stats;
   private List<String> keys;
 

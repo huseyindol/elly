@@ -298,15 +298,106 @@ spec:
       targetPort: 3000
       name: http
 
+---
 # ============================================
-# GRAFANA DASHBOARD KURULUM
+# DEPLOYMENT - RedisInsight (Redis Web Dashboard)
+# ============================================
+# Redis key'lerini görsel olarak yönetmek için web UI.
+# Tenant bazlı cache key'lerini izlemek için kullanılır.
+# Erişim: kubectl port-forward svc/redisinsight 5540:5540 -n elly
+#         http://localhost:5540
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redisinsight
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: monitoring
+    tier: redisinsight
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elly-cms
+      component: monitoring
+      tier: redisinsight
+  template:
+    metadata:
+      labels:
+        app: elly-cms
+        component: monitoring
+        tier: redisinsight
+    spec:
+      containers:
+        - name: redisinsight
+          image: redis/redisinsight:latest
+          ports:
+            - containerPort: 5540
+              name: http
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: redisinsight-data
+              mountPath: /data
+      volumes:
+        - name: redisinsight-data
+          emptyDir: {}
+
+---
+# ============================================
+# SERVICE - RedisInsight
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: redisinsight
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: monitoring
+spec:
+  selector:
+    app: elly-cms
+    component: monitoring
+    tier: redisinsight
+  ports:
+    - port: 5540
+      targetPort: 5540
+      nodePort: 31540
+      name: http
+
+# ============================================
+# MONITORING DASHBOARD ERİŞİM REHBERİ
 # ============================================
 #
-# 1. Grafana erişimi:
+# 1. Grafana:
 #    kubectl port-forward svc/grafana 3000:3000 -n elly &
 #    http://localhost:3000 (admin / admin123)
 #
-# 2. Önerilen Dashboard'lar (Import → ID):
+# 2. RedisInsight:
+#    kubectl port-forward svc/redisinsight 5540:5540 -n elly &
+#    http://localhost:5540
+#    Bağlantı: Host=redis, Port=6379, Password=<REDIS_PASSWORD>
+#
+# 3. Önerilen Grafana Dashboard'lar (Import → ID):
 #
 #    | Dashboard                      | ID    |
 #    |--------------------------------|-------|
@@ -314,4 +405,4 @@ spec:
 #    | JVM (Micrometer)               | 4701  |
 #    | HikariCP Connection Pool       | 6083  |
 #
-# 3. Import: Grafana → "+" → Import → ID gir → Load → Prometheus seç → Import
+# 4. Import: Grafana → "+" → Import → ID gir → Load → Prometheus seç → Import

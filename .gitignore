@@ -51,3 +51,5 @@ logs/
 
 # Kubernetes secrets (hassas bilgiler - Git'e gönderilmez)
 k8s/1-secret.yaml
+k8s/1-secret.local.yaml
+k8s/1-secret.remote.yaml

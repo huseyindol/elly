@@ -37,6 +37,10 @@ data:
   TENANT2_DB_NAME: "elly_tenant2"
   TENANT2_DB_SCHEMA: "public"
 
+  # --- Redis Cache ---
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+
   # --- Zipkin Tracing ---
   ZIPKIN_URL: "http://zipkin:9411"
 

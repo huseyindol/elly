@@ -107,6 +107,32 @@ spec:
 
 ---
 # ============================================
+# SERVICE - Redis (Headless for StatefulSet)
+# ============================================
+# Headless Service: StatefulSet pod'larına doğrudan DNS ile erişim sağlar.
+# Pod DNS: redis-0.redis.elly.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: cache
+spec:
+  clusterIP: None
+  selector:
+    app: elly-cms
+    component: cache
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      nodePort: 31379
+      protocol: TCP
+
+---
+# ============================================
 # SERVICE - PostgreSQL BaseDB (NodePort)
 # ============================================
 apiVersion: v1

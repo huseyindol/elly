@@ -38,6 +38,9 @@ spec:
     - hosts:
         - api.huseyindol.com
         - redis.huseyindol.com
+        - grafana.huseyindol.com
+        - prometheus.huseyindol.com
+        - zipkin.huseyindol.com
       secretName: elly-tls-secret
   rules:
     - host: redis.huseyindol.com
@@ -50,6 +53,36 @@ spec:
                 name: redisinsight
                 port:
                   number: 5540
+    - host: grafana.huseyindol.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
+    - host: prometheus.huseyindol.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus
+                port:
+                  number: 9090
+    - host: zipkin.huseyindol.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: zipkin
+                port:
+                  number: 9411
     - host: api.huseyindol.com
       http:
         paths:

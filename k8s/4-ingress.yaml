@@ -37,8 +37,19 @@ spec:
   tls:
     - hosts:
         - api.huseyindol.com
+        - redis.huseyindol.com
       secretName: elly-tls-secret
   rules:
+    - host: redis.huseyindol.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: redisinsight
+                port:
+                  number: 5540
     - host: api.huseyindol.com
       http:
         paths:

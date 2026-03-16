@@ -381,7 +381,6 @@ spec:
   ports:
     - port: 5540
       targetPort: 5540
-      nodePort: 31540
       name: http
 
 # ============================================

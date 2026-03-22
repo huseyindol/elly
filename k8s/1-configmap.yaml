@@ -17,7 +17,7 @@ data:
   APP_TIMEZONE: "Europe/Istanbul"
 
   # --- Default Tenant ---
-  DEFAULT_TENANT: "tenant1"
+  DEFAULT_TENANT: "basedb"
 
   # --- Base Database ---
   BASEDB_HOST: "postgres-basedb"

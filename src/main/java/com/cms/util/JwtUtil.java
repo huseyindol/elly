@@ -81,6 +81,11 @@ public class JwtUtil {
     return claims.get("tenantId", String.class);
   }
 
+  public String extractLoginSource(String token) {
+    Claims claims = extractAllClaims(token);
+    return claims.get("loginSource", String.class);
+  }
+
   public Date extractExpiration(String token) {
     return extractClaim(token, Claims::getExpiration);
   }
@@ -103,11 +108,12 @@ public class JwtUtil {
     return extractExpiration(token).before(new Date());
   }
 
-  public String generateToken(Long userId, String username, Long tokenVersion, String tenantId) {
+  public String generateToken(Long userId, String username, Long tokenVersion, String tenantId, String loginSource) {
     Map<String, Object> claims = new HashMap<>();
     claims.put("userId", userId);
     claims.put("tokenVersion", tokenVersion);
     claims.put("tenantId", tenantId);
+    claims.put("loginSource", loginSource);
     return createToken(claims, username);
   }
 
@@ -138,11 +144,12 @@ public class JwtUtil {
     }
   }
 
-  public String generateRefreshToken(Long userId, String username, String tenantId) {
+  public String generateRefreshToken(Long userId, String username, String tenantId, String loginSource) {
     Map<String, Object> claims = new HashMap<>();
     claims.put("userId", userId);
     claims.put("type", "refresh");
     claims.put("tenantId", tenantId);
+    claims.put("loginSource", loginSource);
     return createRefreshToken(claims, username);
   }
 

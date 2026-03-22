@@ -151,13 +151,10 @@ public class SecurityConfig {
             }));
 
     http.authenticationProvider(authenticationProvider());
-    // Filter sırası: JwtTenantFilter → JwtAuthenticationFilter →
-    // UsernamePasswordAuthenticationFilter
-    // Önce tenant context set edilir, sonra JWT auth yapılır
-    // Her iki filter da standart UsernamePasswordAuthenticationFilter'dan önce
-    // eklenir
-    http.addFilterBefore(jwtTenantFilter, UsernamePasswordAuthenticationFilter.class);
+    // Filter sırası: JwtTenantFilter → JwtAuthenticationFilter → UsernamePasswordAuthenticationFilter
+    // JwtTenantFilter açıkça JwtAuthenticationFilter'ın hemen önüne konumlandırılıyor
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+    http.addFilterBefore(jwtTenantFilter, JwtAuthenticationFilter.class);
 
     return http.build();
   }

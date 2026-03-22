@@ -16,4 +16,7 @@ public class DtoLogin {
 
   @NotBlank(message = "Password is required")
   private String password;
+
+  private String tenantId; // optional
+  private String loginType; // "admin" veya "tenant" (default: "tenant")
 }

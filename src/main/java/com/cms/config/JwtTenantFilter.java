@@ -7,7 +7,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -15,20 +14,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * X-Tenant-ID header'ından tenant JWT'sini okuyup TenantContext'e set eden
- * filtre.
- * 
+ * Authorization header'ındaki main JWT'den tenantId claim'ini okuyup
+ * TenantContext'e set eden filtre.
+ *
  * Bu filtre JwtAuthenticationFilter'dan ÖNCE çalışır.
- * - X-Tenant-ID header'ından JWT token'ı alır
+ * - Authorization Bearer token'ını alır
  * - JwtUtil ile decrypt ederek tenantId claim'ini çıkarır
  * - TenantContext'e set eder
  * - finally bloğunda TenantContext.clear() ile memory leak önler
- * 
- * Header yoksa veya geçersizse default tenant kullanılır.
- * 
- * Örnek kullanım:
- * GET /api/v1/pages/home
- * X-Tenant-ID: eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0...
+ *
+ * Token yoksa veya tenantId claim'i null ise TenantContext boş kalır,
+ * routing datasource default tenant'ı (basedb) kullanır.
  */
 @Component
 @RequiredArgsConstructor
@@ -36,53 +32,58 @@ import java.io.IOException;
 @Order(1)
 public class JwtTenantFilter extends OncePerRequestFilter {
 
-  private static final String TENANT_HEADER = "X-Tenant-ID";
-
   private final JwtUtil jwtUtil;
-
-  @Value("${app.tenants.default-tenant:tenant1}")
-  private String defaultTenant;
 
   @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
     try {
       String tenantId = resolveTenantId(request);
-      TenantContext.setTenantId(tenantId);
+      if (tenantId != null) {
+        TenantContext.setTenantId(tenantId);
+      }
       log.debug("Tenant resolved: {} for URI: {}", tenantId, request.getRequestURI());
 
       filterChain.doFilter(request, response);
     } finally {
-      // Memory leak önleme - ThreadLocal her zaman temizlenmeli
       TenantContext.clear();
     }
   }
 
   /**
-   * X-Tenant-ID header'ındaki JWT'den tenantId'yi çıkarır.
-   * Header yoksa veya JWT geçersizse default tenant kullanılır.
+   * Authorization Bearer token'ından tenantId claim'ini çıkarır.
+   * loginSource="admin" ve auth/user path'lerinde null döner → basedb kullanılır.
+   * loginSource="tenant" veya diğer path'lerde tenantId döner → tenantX kullanılır.
    */
   private String resolveTenantId(HttpServletRequest request) {
-    String tenantHeader = request.getHeader(TENANT_HEADER);
+    String authHeader = request.getHeader("Authorization");
 
-    if (tenantHeader == null || tenantHeader.isBlank()) {
-      log.debug("No X-Tenant-ID header, using default tenant: {}", defaultTenant);
-      return defaultTenant;
+    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+      return null;
     }
 
     try {
-      String tenantId = jwtUtil.extractTenantIdFromTenantToken(tenantHeader.trim());
+      String jwt = authHeader.substring(7);
+      String tenantId = jwtUtil.extractTenantId(jwt);
+      String loginSource = jwtUtil.extractLoginSource(jwt);
+      String path = request.getRequestURI();
 
-      if (tenantId != null && !tenantId.isBlank()) {
-        log.debug("Tenant from JWT: {}", tenantId);
-        return tenantId;
+      boolean isAuthOrUserPath = path.startsWith("/api/v1/auth/") || path.startsWith("/api/v1/user/");
+
+      // Admin login: auth ve user endpointleri her zaman basedb kullanır
+      if ("admin".equals(loginSource) && isAuthOrUserPath) {
+        log.debug("Admin login source, forcing basedb for path: {}", path);
+        return null;
       }
 
-      log.debug("No tenantId in JWT, using default tenant: {}", defaultTenant);
-      return defaultTenant;
+      if (tenantId != null && !tenantId.isBlank()) {
+        log.debug("Tenant from JWT: {} for path: {}", tenantId, path);
+        return tenantId;
+      }
+      return null;
     } catch (Exception e) {
-      log.warn("Failed to decode tenant JWT: {}, using default tenant: {}", e.getMessage(), defaultTenant);
-      return defaultTenant;
+      log.debug("Could not extract tenantId from JWT: {}", e.getMessage());
+      return null;
     }
   }
 }

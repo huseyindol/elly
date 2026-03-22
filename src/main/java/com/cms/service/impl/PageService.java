@@ -48,27 +48,27 @@ public class PageService implements IPageService {
   }
 
   @Override
-  @Cacheable(value = "pages", key = "#slug")
+  @Cacheable(value = "pages", key = "T(com.cms.config.TenantContext).getTenantId() + ':slug:' + #slug")
   public Page getPageBySlug(String slug) {
     return pageRepository.findBySlug(slug)
         .orElseThrow(() -> new ResourceNotFoundException("Page", "slug", slug));
   }
 
   @Override
-  @Cacheable(value = "pages", key = "#id")
+  @Cacheable(value = "pages", key = "T(com.cms.config.TenantContext).getTenantId() + ':id:' + #id")
   public Page getPageById(Long id) {
     return pageRepository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("Page", id));
   }
 
   @Override
-  @Cacheable(value = "pages", key = "'getAllPages'")
+  @Cacheable(value = "pages", key = "T(com.cms.config.TenantContext).getTenantId() + ':getAllPages'")
   public List<Page> getAllPages() {
     return pageRepository.findAllWithRelations();
   }
 
   @Override
-  @Cacheable(value = "pages", key = "'getAllPageSummary'")
+  @Cacheable(value = "pages", key = "T(com.cms.config.TenantContext).getTenantId() + ':getAllPageSummary'")
   public List<DtoPageSummary> getAllPageSummary() {
     List<DtoPageSummary> pageSummary = pageRepository.findAllWithSummary();
     return pageSummary;
@@ -76,13 +76,13 @@ public class PageService implements IPageService {
 
   // Paginated methods
   @Override
-  @Cacheable(value = "pages", key = "'getAllPagesPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  @Cacheable(value = "pages", key = "T(com.cms.config.TenantContext).getTenantId() + ':getAllPagesPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
   public org.springframework.data.domain.Page<Page> getAllPagesPaged(Pageable pageable) {
     return pageRepository.findAllWithRelationsPaged(pageable);
   }
 
   @Override
-  @Cacheable(value = "pages", key = "'getAllPageSummaryPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+  @Cacheable(value = "pages", key = "T(com.cms.config.TenantContext).getTenantId() + ':getAllPageSummaryPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
   public org.springframework.data.domain.Page<DtoPageSummary> getAllPageSummaryPaged(Pageable pageable) {
     return pageRepository.findAllWithSummaryPaged(pageable);
   }

@@ -9,12 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.config.CustomUserDetailsService;
+import com.cms.config.DataSourceConfig;
 
 import lombok.RequiredArgsConstructor;
 
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
@@ -24,6 +23,8 @@ import com.cms.entity.RefreshToken;
 import com.cms.entity.User;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
+import com.cms.exception.ForbiddenException;
+import com.cms.exception.UnauthorizedException;
 import com.cms.repository.RefreshTokenRepository;
 import com.cms.repository.UserRepository;
 import com.cms.service.IAuthService;
@@ -41,6 +42,7 @@ public class AuthService implements IAuthService {
   private final UserUtil userUtil;
   private final AuthenticationManager authenticationManager;
   private final RefreshTokenRepository refreshTokenRepository;
+  private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
 
   @Value("${jwt.refresh.expiration:3600000}")
   private Long refreshTokenExpiration;
@@ -84,11 +86,11 @@ public class AuthService implements IAuthService {
 
     // JWT token oluştur (güncel version ile)
     String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername(), savedUser.getTokenVersion(),
-        TenantContext.getTenantId());
+        null, "tenant");
 
     // Refresh token oluştur ve kaydet
     String refreshTokenString = jwtUtil.generateRefreshToken(savedUser.getId(), savedUser.getUsername(),
-        TenantContext.getTenantId());
+        null, "tenant");
     RefreshToken refreshToken = createRefreshTokenEntity(savedUser, refreshTokenString);
     refreshTokenRepository.save(refreshToken);
 
@@ -102,26 +104,37 @@ public class AuthService implements IAuthService {
     response.setUserCode(userUtil.generateUserCode(savedUser));
     response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
 
-    // Tenant token'larını üret ve response'a ekle
-    Map<String, String> tenantTokens = new HashMap<>();
-    if (savedUser.getManagedTenants() != null) {
-      savedUser.getManagedTenants().forEach(tId -> {
-        tenantTokens.put(tId, jwtUtil.generateTenantToken(tId));
-      });
-    }
-    response.setTenantTokens(tenantTokens);
-
     return response;
   }
 
   @Override
   @Transactional
   public DtoAuthResponse login(DtoLogin dtoLogin) {
+    String tenantId = dtoLogin.getTenantId();
+    boolean isAdminLogin = "admin".equalsIgnoreCase(dtoLogin.getLoginType());
+
+    // Tenant varlık kontrolü
+    if (tenantId != null && !tenantId.isBlank()) {
+      if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+        throw new BadRequestException("Tenant not found: " + tenantId);
+      }
+    }
+
+    // Site login: authentication tenant DB'sinde yapılır
+    if (!isAdminLogin && tenantId != null && !tenantId.isBlank()) {
+      TenantContext.setTenantId(tenantId);
+    }
+
     // Authentication işlemi (BCrypt - kasıtlı yavaş)
-    Authentication authentication = authenticationManager.authenticate(
-        new UsernamePasswordAuthenticationToken(
-            dtoLogin.getUsernameOrEmail(),
-            dtoLogin.getPassword()));
+    Authentication authentication;
+    try {
+      authentication = authenticationManager.authenticate(
+          new UsernamePasswordAuthenticationToken(
+              dtoLogin.getUsernameOrEmail(),
+              dtoLogin.getPassword()));
+    } catch (org.springframework.security.authentication.BadCredentialsException e) {
+      throw new UnauthorizedException("Invalid username/email or password");
+    }
 
     // User bilgilerini authentication'dan al (tekrar sorgu yapmadan)
     CustomUserDetailsService.CustomUserPrincipal principal = (CustomUserDetailsService.CustomUserPrincipal) authentication
@@ -133,19 +146,26 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("User account is deactivated");
     }
 
+    // Admin login: tenant yetki kontrolü (managedTenants)
+    if (isAdminLogin && tenantId != null && !tenantId.isBlank()) {
+      if (user.getManagedTenants() == null || !user.getManagedTenants().contains(tenantId)) {
+        throw new ForbiddenException("User is not authorized for tenant: " + tenantId);
+      }
+    }
+
     // Token version'ı artır
     Long newTokenVersion = (user.getTokenVersion() != null ? user.getTokenVersion() : 0L) + 1;
 
     // Native query ile token_version'ı güncelle (tam entity update yerine)
     userRepository.updateTokenVersion(user.getId(), newTokenVersion);
 
+    String loginSource = isAdminLogin ? "admin" : "tenant";
+
     // JWT token oluştur (güncel version ile)
-    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), newTokenVersion,
-        TenantContext.getTenantId());
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), newTokenVersion, tenantId, loginSource);
 
     // Refresh token oluştur
-    String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),
-        TenantContext.getTenantId());
+    String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(), tenantId, loginSource);
 
     // Refresh token'ı upsert (INSERT veya UPDATE - tek sorgu)
     Date expiryDate = new Date(System.currentTimeMillis() + refreshTokenExpiration);
@@ -201,9 +221,13 @@ public class AuthService implements IAuthService {
     user.setTokenVersion(currentVersion + 1);
     user = userRepository.save(user);
 
+    // Tenant ve loginSource bilgilerini mevcut refresh token'dan al
+    String tenantId = jwtUtil.extractTenantId(refreshTokenString);
+    String loginSource = jwtUtil.extractLoginSource(refreshTokenString);
+
     // Yeni access token oluştur (güncel version ile)
     String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion(),
-        TenantContext.getTenantId());
+        tenantId, loginSource);
 
     // Eski refresh token'ı iptal et (Token Rotation için)
     refreshToken.setIsRevoked(true);
@@ -211,7 +235,7 @@ public class AuthService implements IAuthService {
 
     // Yeni refresh token oluştur (Token Rotation)
     String newRefreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),
-        TenantContext.getTenantId());
+        tenantId, loginSource);
 
     // Kullanıcının tüm eski refresh token'larını sil (unique constraint ihlalini
     // önlemek için)

@@ -107,10 +107,11 @@ spec:
 
 ---
 # ============================================
-# SERVICE - Redis (Headless for StatefulSet)
+# SERVICE - Redis (NodePort for external access)
 # ============================================
-# Headless Service: StatefulSet pod'larına doğrudan DNS ile erişim sağlar.
-# Pod DNS: redis-0.redis.elly.svc.cluster.local
+# NodePort: Sunucudan localhost:31379 üzerinden erişim sağlar.
+# SSH tunnel ile local'den bağlanılabilir.
+# Pod DNS (cluster içi): redis-0.redis.elly.svc.cluster.local
 apiVersion: v1
 kind: Service
 metadata:
@@ -120,7 +121,7 @@ metadata:
     app: elly-cms
     component: cache
 spec:
-  clusterIP: None
+  type: NodePort
   selector:
     app: elly-cms
     component: cache
@@ -128,6 +129,7 @@ spec:
     - name: redis
       port: 6379
       targetPort: 6379
+      nodePort: 31379
       protocol: TCP
 
 ---

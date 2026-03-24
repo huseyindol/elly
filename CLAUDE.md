@@ -51,3 +51,25 @@ kubectl rollout restart deployment/elly-app -n elly  # Yeniden başlat
 - Multi-tenant sorgularda her zaman tenant context'e göre filtrele
 - `@Autowired` field injection kullanma, constructor injection kullan (`@RequiredArgsConstructor`)
 - Entity'yi doğrudan controller'dan döndürme, MapStruct mapper kullan
+
+## Agent Teams
+Agent Teams aktif (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Büyük görevlerde paralel çalışma için takım kurulabilir.
+
+**Mevcut Agent'lar:**
+| Agent | Rol | Model | Araçlar |
+|-------|-----|-------|---------|
+| `team-lead` | Orchestrator, görev dağıtımı | opus | Agent, Read, Glob, Grep, Write, Edit, Bash |
+| `java-architect` | Mimari tasarım, Spring Boot | sonnet | Read, Glob, Grep, Write, Edit, Agent(code-reviewer) |
+| `code-reviewer` | Kod kalitesi, pattern uyumu | sonnet | Read, Glob, Grep |
+| `devops-engineer` | K8s, Docker, CI/CD | sonnet | Read, Glob, Grep, Bash, Write, Edit |
+| `security-guard` | Güvenlik analizi | sonnet | Read, Glob, Grep |
+
+**Kullanım:**
+```
+# Takım başlatma
+"Bu özelliği agent team ile geliştir: java-architect tasarımı yapsın, code-reviewer kontrol etsin"
+
+# Tek agent çağırma
+@"java-architect (agent)" bu entity tasarımını incele
+```
+

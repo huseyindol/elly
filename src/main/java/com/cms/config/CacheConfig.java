@@ -45,7 +45,8 @@ public class CacheConfig implements CachingConfigurer {
   private ObjectMapper createRedisObjectMapper() {
     Hibernate6Module hibernateModule = new Hibernate6Module();
     hibernateModule.configure(Hibernate6Module.Feature.FORCE_LAZY_LOADING, false);
-    hibernateModule.configure(Hibernate6Module.Feature.SERIALIZE_IDENTIFIER_FOR_LAZY_NOT_LOADED_OBJECTS, true);
+    hibernateModule.configure(Hibernate6Module.Feature.SERIALIZE_IDENTIFIER_FOR_LAZY_NOT_LOADED_OBJECTS, false);
+    hibernateModule.configure(Hibernate6Module.Feature.REPLACE_PERSISTENT_COLLECTIONS, true);
 
     ObjectMapper mapper = new ObjectMapper();
     mapper.registerModule(new JavaTimeModule());
@@ -66,8 +67,8 @@ public class CacheConfig implements CachingConfigurer {
 
   @Bean
   public RedisCacheConfiguration redisCacheConfiguration() {
-    GenericJackson2JsonRedisSerializer jsonSerializer =
-        new GenericJackson2JsonRedisSerializer(createRedisObjectMapper());
+    GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(
+        createRedisObjectMapper());
 
     return RedisCacheConfiguration.defaultCacheConfig()
         .entryTtl(Duration.ofMinutes(10))
@@ -95,8 +96,8 @@ public class CacheConfig implements CachingConfigurer {
 
   @Bean
   public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
-    GenericJackson2JsonRedisSerializer jsonSerializer =
-        new GenericJackson2JsonRedisSerializer(createRedisObjectMapper());
+    GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(
+        createRedisObjectMapper());
     RedisTemplate<String, Object> template = new RedisTemplate<>();
     template.setConnectionFactory(connectionFactory);
     template.setKeySerializer(new StringRedisSerializer());

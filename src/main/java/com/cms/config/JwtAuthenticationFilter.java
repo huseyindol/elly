@@ -2,6 +2,7 @@ package com.cms.config;
 
 import com.cms.entity.User;
 import com.cms.repository.UserRepository;
+import com.cms.config.CustomUserDetailsService.CustomUserPrincipal;
 import com.cms.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -13,8 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -29,7 +28,6 @@ import org.springframework.beans.factory.annotation.Value;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
   private final JwtUtil jwtUtil;
-  private final UserDetailsService userDetailsService;
   private final UserRepository userRepository;
   private final ObjectMapper objectMapper;
 
@@ -69,18 +67,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // because all users are centrally located there.
         String originalTenant = TenantContext.getTenantId();
         User user = null;
-        UserDetails userDetails = null;
+        CustomUserPrincipal userDetails = null;
 
         try {
           TenantContext.setTenantId(defaultTenant); // Switch to basedb
 
-          // User'ı veritabanından bul (tokenVersion için)
+          // User'ı veritabanından bul ve doğrudan UserDetails oluştur (tek DB sorgusu)
           final String finalUsername = username; // Lambda için final
           user = userRepository.findByUsername(finalUsername)
               .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
                   "User not found: " + finalUsername));
 
-          userDetails = this.userDetailsService.loadUserByUsername(username);
+          userDetails = new CustomUserPrincipal(user);
 
         } finally {
           // Geri dön

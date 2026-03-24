@@ -19,6 +19,7 @@ import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.dto.DtoTenantTokenResponse;
 import com.cms.entity.RefreshToken;
 import com.cms.entity.User;
 import com.cms.exception.BadRequestException;
@@ -258,6 +259,15 @@ public class AuthService implements IAuthService {
     response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
 
     return response;
+  }
+
+  @Override
+  public DtoTenantTokenResponse getPublicToken(String tenantId) {
+    if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+      throw new BadRequestException("Unknown tenant: " + tenantId);
+    }
+    String token = jwtUtil.generateTenantToken(tenantId);
+    return new DtoTenantTokenResponse(token, "Bearer", tenantId);
   }
 
   private RefreshToken createRefreshTokenEntity(User user, String tokenString) {

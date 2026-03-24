@@ -53,3 +53,9 @@ logs/
 k8s/1-secret.yaml
 k8s/1-secret.local.yaml
 k8s/1-secret.remote.yaml
+
+# Claude - kişisel dosyalar (repo'da olmasın)
+.claude/
+
+# Claude - proje kuralları (repo'da kalsın, ignore ETMEYİN)
+# CLAUDE.md

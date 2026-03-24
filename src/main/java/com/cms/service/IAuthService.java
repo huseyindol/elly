@@ -4,6 +4,7 @@ import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.dto.DtoTenantTokenResponse;
 
 public interface IAuthService {
   DtoAuthResponse register(DtoRegister dtoRegister);
@@ -11,4 +12,6 @@ public interface IAuthService {
   DtoAuthResponse login(DtoLogin dtoLogin);
 
   DtoAuthResponse refreshToken(DtoRefreshToken dtoRefreshToken);
+
+  DtoTenantTokenResponse getPublicToken(String tenantId);
 }

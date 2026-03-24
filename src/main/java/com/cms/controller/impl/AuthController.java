@@ -2,6 +2,7 @@ package com.cms.controller.impl;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -14,6 +15,7 @@ import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.dto.DtoTenantTokenResponse;
 import com.cms.entity.RootEntityResponse;
 import com.cms.entity.User;
 import com.cms.repository.UserRepository;
@@ -48,6 +50,11 @@ public class AuthController extends BaseController implements IAuthController {
 
   @Value("${cookie.user-code.expiration:360}")
   private Integer userCodeCookieExpiration; // Saniye cinsinden
+
+  @GetMapping("/public-token/{tenantId}")
+  public RootEntityResponse<DtoTenantTokenResponse> getPublicToken(@PathVariable String tenantId) {
+    return ok(authService.getPublicToken(tenantId));
+  }
 
   @GetMapping("/decode")
   public RootEntityResponse<Map<String, Object>> decodeToken(

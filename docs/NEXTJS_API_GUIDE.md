@@ -6,46 +6,72 @@ Base URL: `http://localhost:8080`
 
 ## Authentication
 
+> **Kullanıcı Depolama Mimarisi:**
+> - **Admin kullanıcılar** → `basedb`'de tutulur. `loginSource: "admin"` token ile `/auth/...` ve `/user/...` endpoint'leri her zaman basedb'ye gider.
+> - **Tenant kullanıcılar** → kendi `tenantX` DB'lerinde tutulur. `loginSource: "tenant"` token ile tüm endpoint'ler (auth dahil) tenantX'e gider.
+>
+> **JWT Claim'leri:** Her access token şu bilgileri içerir:
+> - `loginSource`: `"admin"` veya `"tenant"` — hangi DB'de işlem yapılacağını belirler
+> - `tenantId`: Kullanıcının hangi DB'ye yönlendirileceği (ör. `"tenant1"`)
+>
+> Panel'de admin işlemleri için `loginSource: "admin"` olan token gerekir.
+
+---
+
 ### POST /api/v1/auth/register
 Yeni kullanıcı kaydı.
 
 **Body:**
 ```json
 {
-  "username": "string",      // zorunlu, min 3, max 50 karakter
-  "email": "string",         // zorunlu, geçerli email
-  "password": "string",      // zorunlu, min 6 karakter
-  "firstName": "string",     // opsiyonel
-  "lastName": "string"       // opsiyonel
+  "username": "string",           // zorunlu, min 3, max 50 karakter
+  "email": "string",              // zorunlu, geçerli email
+  "password": "string",           // zorunlu, min 6 karakter
+  "firstName": "string",          // opsiyonel
+  "lastName": "string",           // opsiyonel
+  "managedTenants": ["tenant1"]   // opsiyonel, admin kullanıcılar için yönetilen tenant listesi
 }
 ```
 
 ---
 
 ### POST /api/v1/auth/login
-Kullanıcı girişi.
+Kullanıcı girişi. İki farklı akış desteklenir:
 
-**Body:**
+#### Tenant Login (panel/uygulama kullanıcıları)
 ```json
 {
   "usernameOrEmail": "string",  // zorunlu
-  "password": "string"          // zorunlu
+  "password": "string",         // zorunlu
+  "tenantId": "tenant1",        // zorunlu — hangi tenant DB'sine giriş yapılacak
+  "loginType": "tenant"         // opsiyonel, default "tenant"
 }
 ```
+Token'da `loginSource: "tenant"` ve `tenantId: "tenant1"` bulunur.
 
-**Response:**
+#### Admin Login (tüm tenant'ları yöneten yönetici)
+```json
+{
+  "usernameOrEmail": "string",  // zorunlu
+  "password": "string",         // zorunlu
+  "loginType": "admin"          // zorunlu — tenantId gönderme
+}
+```
+Token'da `loginSource: "admin"` bulunur. Kullanıcı `managedTenants` listesinde yetkili olmalıdır.
+
+**Response (her iki akış için):**
 ```json
 {
   "result": true,
   "data": {
-    "token": "string",
-    "refreshToken": "string",
+    "token": "string",           // JWT access token (24 saat geçerli)
+    "refreshToken": "string",    // JWT refresh token (7 gün geçerli)
     "type": "Bearer",
     "userId": 1,
     "username": "string",
     "email": "string",
-    "userCode": "string",
-    "expiredDate": 1735516528560
+    "userCode": "string",        // firstName + lastName baş harfleri
+    "expiredDate": 1735516528560 // access token bitiş zamanı (ms)
   }
 }
 ```
@@ -53,7 +79,7 @@ Kullanıcı girişi.
 ---
 
 ### POST /api/v1/auth/refresh
-Token yenileme.
+Token yenileme. Refresh token rotasyonu uygulanır (eski token geçersiz olur).
 
 **Body:**
 ```json
@@ -61,6 +87,84 @@ Token yenileme.
   "refreshToken": "string"  // zorunlu
 }
 ```
+
+**Response:** Login response ile aynı yapı — yeni `token` ve `refreshToken` döner.
+
+---
+
+### GET /api/v1/auth/decode
+Mevcut token'ın claim'lerini çözer. Token geçerliliğini ve içeriğini kontrol etmek için kullanılır.
+
+**Header:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "username": "string",
+    "userId": 1,
+    "tenantId": "tenant1",       // null olabilir (admin token'larında)
+    "tokenVersion": 3,
+    "expiration": 1735516528560  // ms
+  }
+}
+```
+
+---
+
+### GET /api/v1/auth/public-token/{tenantId}
+Login gerektirmeyen public içerik erişimi için tenant token üretir.
+Next.js app startup'ta bir kez çağrılır; alınan token tüm public isteklerde `Authorization: Bearer` olarak gönderilir.
+
+**Path Parameters:**
+- `tenantId`: Tenant adı (`basedb`, `tenant1`, `tenant2`, ...)
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "token": "string",     // Authorization: Bearer <token> olarak kullan
+    "type": "Bearer",
+    "tenantId": "tenant1"
+  }
+}
+```
+
+**Next.js Kullanımı:**
+```ts
+// lib/tenantClient.ts — uygulama başlarken bir kez çağır
+const res = await fetch(`${API_BASE}/api/v1/auth/public-token/${TENANT_ID}`);
+const { data } = await res.json();
+const tenantToken = data.token;
+
+// Tüm public fetch'lerde
+fetch(`${API_BASE}/api/v1/pages/list`, {
+  headers: { Authorization: `Bearer ${tenantToken}` }
+});
+```
+
+> Token kullanıcı bilgisi içermez; yalnızca `tenantId` ve `type: "tenant"` claim'leri bulunur.
+> Bilinmeyen tenant ID ile istek gönderilirse `400 Bad Request` döner.
+
+---
+
+### OAuth2 Login (Google / Facebook / GitHub)
+Sosyal giriş akışı redirect tabanlıdır.
+
+**Başlatma:** Kullanıcıyı şu URL'ye yönlendir:
+```
+GET /oauth2/authorize/{provider}?redirect_uri=<callback-url>
+```
+`provider`: `google`, `facebook`, `github`, `x`
+
+**Callback:** Başarılı girişten sonra `redirect_uri`'ye şu query param'larla dönülür:
+```
+<callback-url>?token=...&refreshToken=...&userId=...&username=...&email=...
+```
+
+Token'da `loginSource: "admin"` bulunur (OAuth2 kullanıcıları admin akışını kullanır).
 
 ---
 

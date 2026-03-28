@@ -60,7 +60,8 @@ public class JpaConfig {
 
     Map<String, Object> properties = new HashMap<>();
     properties.put("hibernate.hbm2ddl.auto", "update");
-    properties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+    // properties.put("hibernate.dialect",
+    // "org.hibernate.dialect.PostgreSQLDialect");
     properties.put("hibernate.format_sql", "true");
     // Spring Boot'un default naming strategy - camelCase -> snake_case
     properties.put("hibernate.physical_naming_strategy",

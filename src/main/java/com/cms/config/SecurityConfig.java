@@ -54,6 +54,7 @@ public class SecurityConfig {
   // Tüm domainler (GET isteği için)
   private static final java.util.List<String> ALL_DOMAINS = Arrays.asList(
       "http://localhost:3000",
+      "http://localhost:3333",
       "http://localhost:8080",
       "http://localhost:5173",
       "http://elly-639969822644.europe-west1.run.app",
@@ -61,6 +62,7 @@ public class SecurityConfig {
       "http://api.huseyindol.com",
       "http://www.huseyindol.com",
       "https://localhost:3000",
+      "https://localhost:3333",
       "https://localhost:8080",
       "https://localhost:5173",
       "https://elly-639969822644.europe-west1.run.app",
@@ -74,11 +76,13 @@ public class SecurityConfig {
   private static final java.util.List<String> WRITE_DOMAINS = Arrays.asList(
       "http://localhost:8080",
       "http://localhost:3000",
+      "http://localhost:3333",
       "http://localhost:5173",
       "http://api.huseyindol.com",
       "http://www.huseyindol.com",
       "https://localhost:8080",
       "https://localhost:3000",
+      "https://localhost:3333",
       "https://localhost:5173",
       "https://api.huseyindol.com",
       "https://www.huseyindol.com");
@@ -151,8 +155,10 @@ public class SecurityConfig {
             }));
 
     http.authenticationProvider(authenticationProvider());
-    // Filter sırası: JwtTenantFilter → JwtAuthenticationFilter → UsernamePasswordAuthenticationFilter
-    // JwtTenantFilter açıkça JwtAuthenticationFilter'ın hemen önüne konumlandırılıyor
+    // Filter sırası: JwtTenantFilter → JwtAuthenticationFilter →
+    // UsernamePasswordAuthenticationFilter
+    // JwtTenantFilter açıkça JwtAuthenticationFilter'ın hemen önüne
+    // konumlandırılıyor
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
     http.addFilterBefore(jwtTenantFilter, JwtAuthenticationFilter.class);
 

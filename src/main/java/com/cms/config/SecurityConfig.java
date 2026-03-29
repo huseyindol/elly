@@ -61,6 +61,7 @@ public class SecurityConfig {
       "http://elly-bw5r3k32la-ew.a.run.app",
       "http://api.huseyindol.com",
       "http://www.huseyindol.com",
+      "http://admin.huseyindol.com",
       "https://localhost:3000",
       "https://localhost:3333",
       "https://localhost:8080",
@@ -68,7 +69,8 @@ public class SecurityConfig {
       "https://elly-639969822644.europe-west1.run.app",
       "https://elly-bw5r3k32la-ew.a.run.app",
       "https://api.huseyindol.com",
-      "https://www.huseyindol.com");
+      "https://www.huseyindol.com",
+      "https://admin.huseyindol.com");
 
   // Sadece yazma yetkisi olan domainler (POST, PUT, DELETE)
   // TODO: Burayı ihtiyacınıza göre düzenleyin, şu an örnek olarak localhost:3000
@@ -80,12 +82,14 @@ public class SecurityConfig {
       "http://localhost:5173",
       "http://api.huseyindol.com",
       "http://www.huseyindol.com",
+      "http://admin.huseyindol.com",
       "https://localhost:8080",
       "https://localhost:3000",
       "https://localhost:3333",
       "https://localhost:5173",
       "https://api.huseyindol.com",
-      "https://www.huseyindol.com");
+      "https://www.huseyindol.com",
+      "https://admin.huseyindol.com");
 
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {

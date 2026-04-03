@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import com.cms.config.DataSourceConfig.TenantDataSourceConfig;
+import com.cms.config.DataSourceConfig.TenantDataSourceProperties;
 import com.cms.config.RabbitMQConfig;
 import com.cms.config.TenantContext;
 import com.cms.dto.EmailMessage;
@@ -38,11 +40,13 @@ public class EmailQueueService implements IEmailQueueService {
   private final TemplateEngine templateEngine;
   private final ObjectMapper objectMapper;
   private final RabbitTemplate rabbitTemplate;
+  private final TenantDataSourceProperties tenantDataSourceProperties;
 
   private static final int MAX_RETRY_COUNT = 3;
 
+  /** Global fallback — tenant'a özgü mailFrom set edilmezse kullanılır. */
   @Value("${mail.from:noreply@elly.com}")
-  private String mailFrom;
+  private String defaultMailFrom;
 
   @RabbitListener(queues = RabbitMQConfig.EMAIL_QUEUE)
   @Override
@@ -80,14 +84,18 @@ public class EmailQueueService implements IEmailQueueService {
         context.setVariables(dynamicData);
         String htmlContent = templateEngine.process("emails/" + emailLog.getTemplateName(), context);
 
-        // 3. SMTP üzerinden gönder
-        sendHtmlEmail(emailLog.getRecipient(), emailLog.getSubject(), htmlContent);
+        // 3. Tenant'a özgü from adresini belirle, yoksa global default'a düş
+        String fromAddress = resolveMailFrom(message.getTenantId());
 
-        // 4. SENT olarak güncelle
+        // 4. SMTP üzerinden gönder
+        sendHtmlEmail(emailLog.getRecipient(), emailLog.getSubject(), htmlContent, fromAddress);
+
+        // 5. SENT olarak güncelle
         emailLog.setStatus(EmailStatus.SENT);
         emailLog.setSentAt(new Date());
         emailLogRepository.save(emailLog);
-        log.info("Email sent successfully for ID: {} on tenant: {}", emailLogId, message.getTenantId());
+        log.info("Email sent successfully from '{}' for ID: {} on tenant: {}",
+            fromAddress, emailLogId, message.getTenantId());
 
       } catch (Exception e) {
         log.error("Failed to send email for ID: {} on tenant: {}: {}", emailLogId, message.getTenantId(), e.getMessage());
@@ -117,10 +125,24 @@ public class EmailQueueService implements IEmailQueueService {
     }
   }
 
-  private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
+  /**
+   * Tenant'a özgü mail-from adresini döndürür.
+   * Tenant konfigürasyonunda set edilmemişse global {@code mail.from} değerine düşer.
+   */
+  private String resolveMailFrom(String tenantId) {
+    TenantDataSourceConfig tenantConfig = tenantDataSourceProperties.getDatasources().get(tenantId);
+    if (tenantConfig != null
+        && tenantConfig.getMailFrom() != null
+        && !tenantConfig.getMailFrom().isBlank()) {
+      return tenantConfig.getMailFrom();
+    }
+    return defaultMailFrom;
+  }
+
+  private void sendHtmlEmail(String to, String subject, String htmlContent, String from) throws MessagingException {
     MimeMessage mimeMessage = javaMailSender.createMimeMessage();
     MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-    helper.setFrom(mailFrom);
+    helper.setFrom(from);
     helper.setTo(to);
     helper.setSubject(subject);
     helper.setText(htmlContent, true);

@@ -152,5 +152,7 @@ public class DataSourceConfig {
     private String schema;
     private Integer maxPoolSize;
     private Integer minIdle;
+    /** Tenant'a özgü "from" adresi. Null ise global mail.from kullanılır. */
+    private String mailFrom;
   }
 }

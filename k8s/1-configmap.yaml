@@ -56,6 +56,14 @@ data:
   BASEDB_MAIL_FROM: "noreply@huseyindol.com"
   TENANT1_MAIL_FROM: "tenant1@huseyindol.com"
   TENANT2_MAIL_FROM: "tenant2@huseyindol.com"
+  # Per-tenant SMTP host/port (credentials secret'ta saklanır)
+  # Gmail: smtp.gmail.com:587 | Outlook/Hotmail: smtp.office365.com:587
+  BASEDB_MAIL_HOST: "smtp.gmail.com"
+  BASEDB_MAIL_PORT: "587"
+  TENANT1_MAIL_HOST: "smtp.gmail.com"
+  TENANT1_MAIL_PORT: "587"
+  TENANT2_MAIL_HOST: "smtp.gmail.com"
+  TENANT2_MAIL_PORT: "587"
 
   # --- Zipkin Tracing ---
   ZIPKIN_URL: "http://zipkin:9411"

@@ -154,5 +154,13 @@ public class DataSourceConfig {
     private Integer minIdle;
     /** Tenant'a özgü "from" adresi. Null ise global mail.from kullanılır. */
     private String mailFrom;
+    /** SMTP sunucu adresi (ör. smtp.gmail.com, smtp.office365.com). Null ise global spring.mail.host kullanılır. */
+    private String mailHost;
+    /** SMTP port (ör. 587). Null ise global spring.mail.port kullanılır. */
+    private Integer mailPort;
+    /** SMTP kullanıcı adı (Gmail App Password ile kullanılacak e-posta). Null ise global spring.mail.username kullanılır. */
+    private String mailUsername;
+    /** SMTP şifresi / App Password. Null ise global spring.mail.password kullanılır. */
+    private String mailPassword;
   }
 }

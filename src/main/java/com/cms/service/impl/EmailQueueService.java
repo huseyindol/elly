@@ -17,6 +17,7 @@ import com.cms.config.DataSourceConfig.TenantDataSourceConfig;
 import com.cms.config.DataSourceConfig.TenantDataSourceProperties;
 import com.cms.config.RabbitMQConfig;
 import com.cms.config.TenantContext;
+import com.cms.config.TenantMailSenderFactory;
 import com.cms.dto.EmailMessage;
 import com.cms.entity.EmailLog;
 import com.cms.enums.EmailStatus;
@@ -36,11 +37,11 @@ import lombok.extern.slf4j.Slf4j;
 public class EmailQueueService implements IEmailQueueService {
 
   private final EmailLogRepository emailLogRepository;
-  private final JavaMailSender javaMailSender;
+  private final TenantMailSenderFactory mailSenderFactory;
+  private final TenantDataSourceProperties tenantDataSourceProperties;
   private final TemplateEngine templateEngine;
   private final ObjectMapper objectMapper;
   private final RabbitTemplate rabbitTemplate;
-  private final TenantDataSourceProperties tenantDataSourceProperties;
 
   private static final int MAX_RETRY_COUNT = 3;
 
@@ -84,11 +85,12 @@ public class EmailQueueService implements IEmailQueueService {
         context.setVariables(dynamicData);
         String htmlContent = templateEngine.process("emails/" + emailLog.getTemplateName(), context);
 
-        // 3. Tenant'a özgü from adresini belirle, yoksa global default'a düş
+        // 3. Tenant'a özgü from adresi ve mail sender'ı belirle
         String fromAddress = resolveMailFrom(message.getTenantId());
+        JavaMailSender mailSender = mailSenderFactory.getMailSender(message.getTenantId());
 
         // 4. SMTP üzerinden gönder
-        sendHtmlEmail(emailLog.getRecipient(), emailLog.getSubject(), htmlContent, fromAddress);
+        sendHtmlEmail(mailSender, emailLog.getRecipient(), emailLog.getSubject(), htmlContent, fromAddress);
 
         // 5. SENT olarak güncelle
         emailLog.setStatus(EmailStatus.SENT);
@@ -110,7 +112,6 @@ public class EmailQueueService implements IEmailQueueService {
         } else {
           log.info("Email ID: {} will be retried. Retry count: {}/{}",
               emailLogId, emailLog.getRetryCount(), MAX_RETRY_COUNT);
-          // Tenant ID'yi koruyarak yeniden kuyruğa ekle
           rabbitTemplate.convertAndSend(
               RabbitMQConfig.EMAIL_EXCHANGE,
               RabbitMQConfig.EMAIL_ROUTING_KEY,
@@ -139,13 +140,14 @@ public class EmailQueueService implements IEmailQueueService {
     return defaultMailFrom;
   }
 
-  private void sendHtmlEmail(String to, String subject, String htmlContent, String from) throws MessagingException {
-    MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+  private void sendHtmlEmail(JavaMailSender mailSender, String to, String subject,
+      String htmlContent, String from) throws MessagingException {
+    MimeMessage mimeMessage = mailSender.createMimeMessage();
     MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
     helper.setFrom(from);
     helper.setTo(to);
     helper.setSubject(subject);
     helper.setText(htmlContent, true);
-    javaMailSender.send(mimeMessage);
+    mailSender.send(mimeMessage);
   }
 }

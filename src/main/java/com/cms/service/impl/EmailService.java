@@ -15,9 +15,11 @@ import com.cms.dto.DtoEmailLog;
 import com.cms.dto.EmailMessage;
 import com.cms.dto.EmailRequest;
 import com.cms.entity.EmailLog;
+import com.cms.entity.MailAccount;
 import com.cms.enums.EmailStatus;
 import com.cms.repository.EmailLogRepository;
 import com.cms.service.IEmailService;
+import com.cms.service.IMailAccountService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -32,6 +34,7 @@ public class EmailService implements IEmailService {
   private final EmailLogRepository emailLogRepository;
   private final RabbitTemplate rabbitTemplate;
   private final ObjectMapper objectMapper;
+  private final IMailAccountService mailAccountService;
 
   @Override
   public DtoEmailLog sendEmail(EmailRequest request) {
@@ -46,7 +49,13 @@ public class EmailService implements IEmailService {
       }
     }
 
-    // 2. PENDING status ile DB'ye kaydet (mevcut TenantContext'e göre doğru tenant DB'sine)
+    // 2. Mail hesabını çöz: açıkça belirtildiyse o, yoksa null bırak (queue worker varsayılanı kullanır)
+    MailAccount mailAccount = null;
+    if (request.getMailAccountId() != null) {
+      mailAccount = mailAccountService.getEntityById(request.getMailAccountId());
+    }
+
+    // 3. PENDING status ile DB'ye kaydet
     EmailLog emailLog = new EmailLog();
     emailLog.setRecipient(request.getTo());
     emailLog.setSubject(request.getSubject());
@@ -54,20 +63,21 @@ public class EmailService implements IEmailService {
     emailLog.setPayloadJson(payloadJson);
     emailLog.setStatus(EmailStatus.PENDING);
     emailLog.setRetryCount(0);
+    emailLog.setMailAccount(mailAccount);
 
     EmailLog saved = emailLogRepository.save(emailLog);
-    log.info("Email log created with ID: {} for recipient: {} on tenant: {}",
-        saved.getId(), saved.getRecipient(), TenantContext.getTenantId());
+    log.info("Email log created: id={}, recipient={}, tenant={}, mailAccount={}",
+        saved.getId(), saved.getRecipient(), TenantContext.getTenantId(),
+        mailAccount != null ? mailAccount.getId() : "default");
 
-    // 3. Tenant ID'yi mesajla birlikte RabbitMQ queue'ya gönder
+    // 4. Tenant ID'yi mesajla birlikte RabbitMQ queue'ya gönder
     String tenantId = TenantContext.getTenantId();
     rabbitTemplate.convertAndSend(
         RabbitMQConfig.EMAIL_EXCHANGE,
         RabbitMQConfig.EMAIL_ROUTING_KEY,
         new EmailMessage(tenantId, saved.getId()));
-    log.info("Email log ID: {} sent to RabbitMQ queue for tenant: {}", saved.getId(), tenantId);
 
-    // 4. DTO döndür
+    // 5. DTO döndür
     return DtoEmailLog.builder()
         .id(saved.getId())
         .recipient(saved.getRecipient())

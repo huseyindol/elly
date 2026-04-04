@@ -26,4 +26,7 @@ public class EmailRequest {
   private String templateName;
 
   private Map<String, Object> dynamicData;
+
+  /** Hangi mail hesabının kullanılacağı. NULL ise varsayılan hesap devreye girer. */
+  private Long mailAccountId;
 }

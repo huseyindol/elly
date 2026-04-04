@@ -3,74 +3,58 @@ package com.cms.config;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.stereotype.Component;
 
-import com.cms.config.DataSourceConfig.TenantDataSourceConfig;
-import com.cms.config.DataSourceConfig.TenantDataSourceProperties;
+import com.cms.entity.MailAccount;
+import com.cms.util.AesEncryptor;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Tenant başına JavaMailSender çözümler.
+ * {@link MailAccount} entity'sinden {@link JavaMailSender} üretir ve önbelleğe alır.
  *
- * <p>Tenant konfigürasyonunda mailUsername set edilmişse o tenant'a özel
- * bir JavaMailSenderImpl oluşturur ve cache'ler.
- * Set edilmemişse global (Spring Boot auto-configured) sender'a düşer.
+ * <p>Cache key: {@code mailAccount.id} — update/delete sonrası
+ * {@link #evict(Long)} çağrılarak geçersiz kılınır.
  *
- * <p>Cache key: tenantId. Tenant konfigürasyonu runtime'da değişmez,
- * dolayısıyla application restart'a kadar geçerlidir.
+ * <p>Şifre çözme: {@link AesEncryptor} ile AES-256-CBC.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class TenantMailSenderFactory {
 
-  private final TenantDataSourceProperties tenantDataSourceProperties;
-  /** Spring Boot'un auto-configure ettiği global JavaMailSender. */
-  private final JavaMailSender globalMailSender;
+  private final AesEncryptor aesEncryptor;
 
-  @Value("${spring.mail.host:localhost}")
-  private String globalHost;
-
-  @Value("${spring.mail.port:1025}")
-  private int globalPort;
-
-  private final ConcurrentHashMap<String, JavaMailSender> cache = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Long, JavaMailSender> cache = new ConcurrentHashMap<>();
 
   /**
-   * Verilen tenant için JavaMailSender döndürür.
-   * Tenant config'inde SMTP bilgileri yoksa global sender kullanılır.
+   * Verilen {@link MailAccount} için {@link JavaMailSender} döndürür.
+   * İlk çağrıda oluşturulur ve önbelleğe alınır.
    */
-  public JavaMailSender getMailSender(String tenantId) {
-    TenantDataSourceConfig config = tenantDataSourceProperties.getDatasources().get(tenantId);
-
-    if (config == null
-        || config.getMailUsername() == null
-        || config.getMailUsername().isBlank()) {
-      log.debug("No SMTP config for tenant '{}', using global mail sender", tenantId);
-      return globalMailSender;
-    }
-
-    return cache.computeIfAbsent(tenantId, id -> buildMailSender(id, config));
+  public JavaMailSender getMailSender(MailAccount account) {
+    return cache.computeIfAbsent(account.getId(), id -> buildSender(account));
   }
 
-  private JavaMailSender buildMailSender(String tenantId, TenantDataSourceConfig config) {
-    String host = (config.getMailHost() != null && !config.getMailHost().isBlank())
-        ? config.getMailHost()
-        : globalHost;
-    int port = (config.getMailPort() != null)
-        ? config.getMailPort()
-        : globalPort;
+  /**
+   * Belirtilen hesabın önbelleğini temizler.
+   * Hesap güncellendiğinde veya silindiğinde servis katmanından çağrılır.
+   */
+  public void evict(Long mailAccountId) {
+    cache.remove(mailAccountId);
+    log.debug("JavaMailSender önbelleği temizlendi: mailAccountId={}", mailAccountId);
+  }
+
+  private JavaMailSender buildSender(MailAccount account) {
+    String rawPassword = aesEncryptor.decrypt(account.getSmtpPassword());
 
     JavaMailSenderImpl sender = new JavaMailSenderImpl();
-    sender.setHost(host);
-    sender.setPort(port);
-    sender.setUsername(config.getMailUsername());
-    sender.setPassword(config.getMailPassword());
+    sender.setHost(account.getSmtpHost());
+    sender.setPort(account.getSmtpPort());
+    sender.setUsername(account.getSmtpUsername());
+    sender.setPassword(rawPassword);
     sender.setDefaultEncoding("UTF-8");
 
     Properties props = sender.getJavaMailProperties();
@@ -79,8 +63,8 @@ public class TenantMailSenderFactory {
     props.put("mail.smtp.starttls.enable", "true");
     props.put("mail.smtp.starttls.required", "true");
 
-    log.info("Built JavaMailSender for tenant '{}' → {}:{} user={}",
-        tenantId, host, port, config.getMailUsername());
+    log.info("JavaMailSender oluşturuldu: mailAccountId={}, host={}:{}",
+        account.getId(), account.getSmtpHost(), account.getSmtpPort());
     return sender;
   }
 }

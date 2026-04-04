@@ -46,24 +46,11 @@ data:
   RABBITMQ_PORT: "5672"
 
   # --- Mail SMTP ---
-  MAIL_HOST: "smtp.gmail.com"
-  MAIL_PORT: "587"
-  MAIL_SMTP_AUTH: "true"
-  MAIL_SMTP_STARTTLS: "true"
-  # Global fallback — tenant'a özgü MAIL_FROM set edilmezse kullanılır
-  MAIL_FROM: "noreply@huseyindol.com"
-  # Per-tenant from adresleri (boş bırakılırsa global MAIL_FROM devreye girer)
-  BASEDB_MAIL_FROM: "noreply@huseyindol.com"
-  TENANT1_MAIL_FROM: "tenant1@huseyindol.com"
-  TENANT2_MAIL_FROM: "tenant2@huseyindol.com"
-  # Per-tenant SMTP host/port (credentials secret'ta saklanır)
-  # Gmail: smtp.gmail.com:587 | Outlook/Hotmail: smtp.office365.com:587
-  BASEDB_MAIL_HOST: "smtp.gmail.com"
-  BASEDB_MAIL_PORT: "587"
-  TENANT1_MAIL_HOST: "smtp.gmail.com"
-  TENANT1_MAIL_PORT: "587"
-  TENANT2_MAIL_HOST: "smtp.gmail.com"
-  TENANT2_MAIL_PORT: "587"
+  # Dev ortamı için Mailpit fallback. Prod'da SMTP ayarları DB'den gelir (panelden yönetilir).
+  MAIL_HOST: "localhost"
+  MAIL_PORT: "1025"
+  MAIL_SMTP_AUTH: "false"
+  MAIL_SMTP_STARTTLS: "false"
 
   # --- Zipkin Tracing ---
   ZIPKIN_URL: "http://zipkin:9411"

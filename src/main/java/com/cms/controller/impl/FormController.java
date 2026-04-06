@@ -22,10 +22,12 @@ import com.cms.dto.DtoFormSubmit;
 import com.cms.dto.PagedResponse;
 import com.cms.entity.FormDefinition;
 import com.cms.entity.FormSubmission;
+import com.cms.entity.MailAccount;
 import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.FormMapper;
 import com.cms.service.IFormDefinitionService;
 import com.cms.service.IFormSubmissionService;
+import com.cms.service.IMailAccountService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -37,6 +39,7 @@ public class FormController extends BaseController implements IFormController {
   private final IFormDefinitionService formDefinitionService;
   private final IFormSubmissionService formSubmissionService;
   private final FormMapper formMapper;
+  private final IMailAccountService mailAccountService;
 
   // ==================== FormDefinition Endpoints ====================
 
@@ -44,6 +47,7 @@ public class FormController extends BaseController implements IFormController {
   @PostMapping
   public RootEntityResponse<DtoFormDefinition> createFormDefinition(@RequestBody DtoFormDefinitionIU dto) {
     FormDefinition entity = formMapper.toEntity(dto);
+    entity.setMailAccount(resolveMailAccount(dto.getMailAccountId()));
     FormDefinition saved = formDefinitionService.save(entity);
     return ok(formMapper.toDto(saved));
   }
@@ -55,8 +59,15 @@ public class FormController extends BaseController implements IFormController {
       @RequestBody DtoFormDefinitionIU dto) {
     FormDefinition existing = formDefinitionService.getById(id);
     formMapper.updateFromDto(dto, existing);
+    existing.setMailAccount(resolveMailAccount(dto.getMailAccountId()));
     FormDefinition saved = formDefinitionService.save(existing);
     return ok(formMapper.toDto(saved));
+  }
+
+  /** mailAccountId varsa entity'yi getirir, null ise null döndürür (varsayılan devreye girer). */
+  private MailAccount resolveMailAccount(Long mailAccountId) {
+    if (mailAccountId == null) return null;
+    return mailAccountService.getEntityById(mailAccountId);
   }
 
   @Override

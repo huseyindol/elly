@@ -41,6 +41,17 @@ data:
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
 
+  # --- RabbitMQ ---
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+
+  # --- Mail SMTP ---
+  # Dev ortamı için Mailpit fallback. Prod'da SMTP ayarları DB'den gelir (panelden yönetilir).
+  MAIL_HOST: "localhost"
+  MAIL_PORT: "1025"
+  MAIL_SMTP_AUTH: "false"
+  MAIL_SMTP_STARTTLS: "false"
+
   # --- Zipkin Tracing ---
   ZIPKIN_URL: "http://zipkin:9411"
 

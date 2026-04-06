@@ -7,7 +7,10 @@ import com.cms.entity.form.FormSchema;
 import io.hypersistence.utils.hibernate.type.json.JsonType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -38,4 +41,12 @@ public class FormDefinition extends BaseEntity {
   private FormSchema schema;
 
   private Boolean active;
+
+  /**
+   * Bu form gönderimlerine ait maillerin hangi hesaptan gönderileceğini belirler.
+   * NULL ise varsayılan (is_default=true) hesap kullanılır.
+   */
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "mail_account_id")
+  private MailAccount mailAccount;
 }

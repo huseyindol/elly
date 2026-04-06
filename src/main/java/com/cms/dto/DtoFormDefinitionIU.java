@@ -19,4 +19,6 @@ public class DtoFormDefinitionIU {
   private Integer version;
   private FormSchema schema;
   private Boolean active;
+  /** Hangi mail hesabının kullanılacağı. NULL ise varsayılan hesap devreye girer. */
+  private Long mailAccountId;
 }

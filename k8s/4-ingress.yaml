@@ -37,6 +37,7 @@ spec:
   tls:
     - hosts:
         - api.huseyindol.com
+        - admin.huseyindol.com
         - redis.huseyindol.com
         - grafana.huseyindol.com
         - prometheus.huseyindol.com
@@ -83,6 +84,23 @@ spec:
                 name: zipkin
                 port:
                   number: 9411
+    - host: admin.huseyindol.com
+      http:
+        paths:
+          - path: /assets
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: elly-app-service
+                port:
+                  number: 8080
     - host: api.huseyindol.com
       http:
         paths:

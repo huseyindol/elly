@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elly CMS - Entity Schema Diagram</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .header {
+    text-align: center;
+    padding: 40px 20px 20px;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border-bottom: 1px solid #334155;
+  }
+  .header h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header p { color: #94a3b8; font-size: 1.1rem; }
+
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    padding: 16px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+  .legend-line {
+    width: 30px;
+    height: 3px;
+    border-radius: 2px;
+  }
+
+  .tabs {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+  }
+  .tab:hover { border-color: #60a5fa; color: #60a5fa; }
+  .tab.active {
+    background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+    border-color: transparent;
+    color: white;
+    font-weight: 600;
+  }
+
+  .diagram-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---- Main Schema SVG ---- */
+  .schema-svg {
+    width: 100%;
+    min-height: 800px;
+  }
+
+  /* ---- Content Hierarchy ---- */
+  .hierarchy {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 40px 20px;
+  }
+
+  .h-level {
+    position: relative;
+    width: 100%;
+    max-width: 1100px;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 20px 0;
+  }
+
+  .h-connector {
+    width: 4px;
+    height: 40px;
+    background: linear-gradient(to bottom, #60a5fa, #a78bfa);
+    border-radius: 2px;
+  }
+  .h-connector-fork {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-direction: column;
+  }
+  .h-connector-fork .h-bar {
+    width: 600px;
+    max-width: 90vw;
+    height: 4px;
+    background: linear-gradient(to right, #60a5fa, #a78bfa, #f472b6);
+    border-radius: 2px;
+  }
+  .h-connector-fork .h-stubs {
+    display: flex;
+    justify-content: space-between;
+    width: 600px;
+    max-width: 90vw;
+  }
+  .h-stub {
+    width: 4px;
+    height: 20px;
+    background: #a78bfa;
+    border-radius: 2px;
+  }
+
+  .entity-card {
+    border-radius: 12px;
+    padding: 20px;
+    min-width: 200px;
+    max-width: 280px;
+    text-align: center;
+    position: relative;
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: default;
+  }
+  .entity-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  }
+  .entity-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 6px;
+    font-weight: 700;
+  }
+  .entity-card .type-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .entity-card .fields {
+    font-size: 0.78rem;
+    color: #cbd5e1;
+    text-align: left;
+    line-height: 1.6;
+  }
+  .entity-card .fields .field-name { color: #93c5fd; font-weight: 500; }
+  .entity-card .fields .field-type { color: #a78bfa; }
+
+  /* Color themes */
+  .card-page {
+    background: linear-gradient(135deg, #1e3a5f, #1e293b);
+    border: 2px solid #3b82f6;
+  }
+  .card-page h3 { color: #60a5fa; }
+  .card-page .type-badge { background: #1d4ed8; color: #bfdbfe; }
+
+  .card-component {
+    background: linear-gradient(135deg, #3b1f5e, #1e293b);
+    border: 2px solid #8b5cf6;
+  }
+  .card-component h3 { color: #a78bfa; }
+  .card-component .type-badge { background: #6d28d9; color: #ddd6fe; }
+
+  .card-banner {
+    background: linear-gradient(135deg, #5f1e3a, #1e293b);
+    border: 2px solid #ec4899;
+  }
+  .card-banner h3 { color: #f472b6; }
+  .card-banner .type-badge { background: #be185d; color: #fce7f3; }
+
+  .card-widget {
+    background: linear-gradient(135deg, #1e4f3a, #1e293b);
+    border: 2px solid #10b981;
+  }
+  .card-widget h3 { color: #34d399; }
+  .card-widget .type-badge { background: #047857; color: #d1fae5; }
+
+  .card-post {
+    background: linear-gradient(135deg, #4f3a1e, #1e293b);
+    border: 2px solid #f59e0b;
+  }
+  .card-post h3 { color: #fbbf24; }
+  .card-post .type-badge { background: #b45309; color: #fef3c7; }
+
+  .card-form {
+    background: linear-gradient(135deg, #1e4f4f, #1e293b);
+    border: 2px solid #06b6d4;
+  }
+  .card-form h3 { color: #22d3ee; }
+  .card-form .type-badge { background: #0e7490; color: #cffafe; }
+
+  .card-seo {
+    background: linear-gradient(135deg, #2d3a1e, #1e293b);
+    border: 2px solid #84cc16;
+  }
+  .card-seo h3 { color: #a3e635; }
+  .card-seo .type-badge { background: #4d7c0f; color: #ecfccb; }
+
+  .card-comment {
+    background: linear-gradient(135deg, #4a3a1e, #1e293b);
+    border: 2px solid #fb923c;
+  }
+  .card-comment h3 { color: #fb923c; }
+  .card-comment .type-badge { background: #c2410c; color: #ffedd5; }
+
+  .card-user {
+    background: linear-gradient(135deg, #1e2a4f, #1e293b);
+    border: 2px solid #6366f1;
+  }
+  .card-user h3 { color: #818cf8; }
+  .card-user .type-badge { background: #4338ca; color: #e0e7ff; }
+
+  .card-cms {
+    background: linear-gradient(135deg, #3a1e4f, #1e293b);
+    border: 2px solid #d946ef;
+  }
+  .card-cms h3 { color: #e879f9; }
+  .card-cms .type-badge { background: #a21caf; color: #fae8ff; }
+
+  .card-asset {
+    background: linear-gradient(135deg, #1e3a3a, #1e293b);
+    border: 2px solid #2dd4bf;
+  }
+  .card-asset h3 { color: #2dd4bf; }
+  .card-asset .type-badge { background: #0f766e; color: #ccfbf1; }
+
+  /* Relation arrow labels */
+  .rel-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    text-align: center;
+    padding: 4px 0;
+    font-style: italic;
+  }
+
+  /* Rules panel */
+  .rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 20px;
+    padding: 20px;
+  }
+  .rule-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 24px;
+    transition: border-color 0.3s;
+  }
+  .rule-card:hover { border-color: #60a5fa; }
+  .rule-card h4 {
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rule-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .rule-card li {
+    padding: 6px 0;
+    border-bottom: 1px solid #1e293b;
+    font-size: 0.9rem;
+    color: #cbd5e1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rule-card li:last-child { border-bottom: none; }
+  .rule-icon {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Tenant diagram */
+  .tenant-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+    padding: 40px 20px;
+  }
+  .tenant-box {
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 16px;
+    padding: 30px;
+    width: 100%;
+    max-width: 900px;
+    text-align: center;
+  }
+  .tenant-box h3 { margin-bottom: 16px; font-size: 1.3rem; }
+  .tenant-dbs {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .tenant-db {
+    padding: 16px 24px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    min-width: 160px;
+  }
+  .db-base { background: #1d4ed8; border: 2px solid #3b82f6; }
+  .db-t1 { background: #047857; border: 2px solid #10b981; }
+  .db-t2 { background: #7c3aed; border: 2px solid #a78bfa; }
+
+  .flow-arrow {
+    font-size: 2rem;
+    color: #475569;
+    line-height: 1;
+  }
+
+  .flow-boxes {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .flow-box {
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-size: 0.9rem;
+    text-align: center;
+    min-width: 180px;
+  }
+  .flow-box strong { color: #60a5fa; display: block; margin-bottom: 4px; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header h1 { font-size: 1.6rem; }
+    .entity-card { min-width: 160px; max-width: 100%; }
+    .h-connector-fork .h-bar { width: 90vw; }
+    .h-connector-fork .h-stubs { width: 90vw; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Elly CMS</h1>
+  <p>Entity Schema & Content Hierarchy Diagram</p>
+  <p style="color:#64748b; font-size:0.85rem; margin-top:4px;">Spring Boot 3.5.7 &middot; Java 21 &middot; PostgreSQL Multi-Tenant &middot; Redis Cache</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showView('hierarchy')">Content Hierarchy</div>
+  <div class="tab" onclick="showView('relations')">Entity Relations</div>
+  <div class="tab" onclick="showView('rules')">Business Rules</div>
+  <div class="tab" onclick="showView('tenant')">Multi-Tenancy</div>
+</div>
+
+<!-- ==================== VIEW 1: Content Hierarchy ==================== -->
+<div class="view active" id="view-hierarchy">
+  <div class="diagram-container">
+    <div class="hierarchy">
+
+      <!-- Level 1: Page -->
+      <div class="h-level">
+        <div class="entity-card card-page" style="min-width:320px;">
+          <h3>Page</h3>
+          <div class="type-badge">Top Level Entity</div>
+          <div class="fields">
+            <span class="field-name">title</span> <span class="field-type">String</span> &middot;
+            <span class="field-name">slug</span> <span class="field-type">String</span> &middot;
+            <span class="field-name">template</span> <span class="field-type">String</span> &middot;
+            <span class="field-name">status</span> <span class="field-type">String</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center;">
+          <svg width="60" height="40"><line x1="0" y1="20" x2="60" y2="20" stroke="#84cc16" stroke-width="2" stroke-dasharray="6,3"/><text x="30" y="14" text-anchor="middle" fill="#84cc16" font-size="10">1:1</text></svg>
+        </div>
+        <div class="entity-card card-seo" style="min-width:220px;">
+          <h3>SeoInfo</h3>
+          <div class="type-badge">SEO Metadata</div>
+          <div class="fields">
+            <span class="field-name">title</span> &middot;
+            <span class="field-name">keywords</span> &middot;
+            <span class="field-name">canonicalUrl</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector -->
+      <div class="h-connector"></div>
+      <div class="rel-label">ManyToMany &middot; page_components &middot; ordered by orderIndex</div>
+      <div class="h-connector"></div>
+
+      <!-- Level 2: Component -->
+      <div class="h-level">
+        <div class="entity-card card-component" style="min-width:360px;">
+          <h3>Component</h3>
+          <div class="type-badge">Content Building Block</div>
+          <div class="fields">
+            <span class="field-name">name</span> <span class="field-type">String</span> &middot;
+            <span class="field-name">type</span> <span class="field-type">ComponentTypeEnum</span><br>
+            <span style="color:#fbbf24; font-size:0.72rem;">BANNER | WIDGET | FORM</span><br>
+            <span class="field-name">orderIndex</span> &middot;
+            <span class="field-name">template</span> &middot;
+            <span class="field-name">status</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fork connector -->
+      <div class="h-connector"></div>
+      <div class="h-connector-fork">
+        <div class="h-bar"></div>
+        <div class="h-stubs">
+          <div class="h-stub"></div>
+          <div class="h-stub"></div>
+          <div class="h-stub"></div>
+        </div>
+      </div>
+
+      <!-- Level 3: Banner, Widget, Form — each as a self-contained vertical tree -->
+      <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap; width:100%; max-width:1200px; align-items:flex-start;">
+
+        <!-- Column 1: Banner (leaf) -->
+        <div style="text-align:center; flex:1; min-width:240px; max-width:300px;">
+          <div class="rel-label" style="margin-bottom:8px;">type = BANNER<br>component_banners</div>
+          <div class="entity-card card-banner" style="margin:0 auto;">
+            <h3>Banner</h3>
+            <div class="type-badge">Visual Asset</div>
+            <div class="fields">
+              <span class="field-name">title</span> &middot;
+              <span class="field-name">images</span> <span class="field-type">BannerImage</span><br>
+              <span style="font-size:0.7rem; color:#94a3b8;">(desktop, tablet, mobile)</span><br>
+              <span class="field-name">link</span> &middot;
+              <span class="field-name">orderIndex</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 2: Widget + its children tree -->
+        <div style="text-align:center; flex:1.5; min-width:400px; max-width:520px;">
+          <div class="rel-label" style="margin-bottom:8px;">type = WIDGET<br>component_widgets</div>
+          <div class="entity-card card-widget" style="margin:0 auto;">
+            <h3>Widget</h3>
+            <div class="type-badge">Dynamic Content</div>
+            <div class="fields">
+              <span class="field-name">name</span> &middot;
+              <span class="field-name">type</span> <span class="field-type">WidgetTypeEnum</span><br>
+              <span style="color:#fbbf24; font-size:0.72rem;">BANNER | POST</span><br>
+              <span class="field-name">orderIndex</span> &middot;
+              <span class="field-name">template</span>
+            </div>
+          </div>
+
+          <!-- Widget fork connector -->
+          <div class="h-connector" style="margin:0 auto;"></div>
+          <div style="display:flex; align-items:center; flex-direction:column;">
+            <div style="width:340px; max-width:90%; height:4px; background:linear-gradient(to right, #10b981, #34d399); border-radius:2px;"></div>
+            <div style="display:flex; justify-content:space-between; width:340px; max-width:90%;">
+              <div style="width:4px; height:20px; background:#34d399; border-radius:2px;"></div>
+              <div style="width:4px; height:20px; background:#34d399; border-radius:2px;"></div>
+            </div>
+          </div>
+
+          <!-- Widget children: Banner (reused) + Post -->
+          <div style="display:flex; gap:16px; justify-content:center; align-items:flex-start;">
+            <div style="text-align:center; flex:1;">
+              <div class="rel-label">type = BANNER<br>widget_banners</div>
+              <div class="entity-card card-banner" style="min-width:160px; margin:0 auto;">
+                <h3>Banner</h3>
+                <div class="type-badge">Reused</div>
+                <div class="fields" style="font-size:0.72rem; text-align:center;">
+                  Same entity, shared via<br>widget_banners join table
+                </div>
+              </div>
+            </div>
+
+            <div style="text-align:center; flex:1;">
+              <div class="rel-label">type = POST<br>widget_posts</div>
+              <div class="entity-card card-post" style="min-width:180px; margin:0 auto;">
+                <h3>Post</h3>
+                <div class="type-badge">Blog / Article</div>
+                <div class="fields">
+                  <span class="field-name">title</span> &middot;
+                  <span class="field-name">slug</span><br>
+                  <span class="field-name">content</span> <span class="field-type">TEXT</span><br>
+                  <span class="field-name">seoInfo</span> <span class="field-type">1:1</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 3: FormDefinition + FormSubmission -->
+        <div style="text-align:center; flex:1; min-width:240px; max-width:300px;">
+          <div class="rel-label" style="margin-bottom:8px;">type = FORM<br>component_forms</div>
+          <div class="entity-card card-form" style="margin:0 auto;">
+            <h3>FormDefinition</h3>
+            <div class="type-badge">Dynamic Form</div>
+            <div class="fields">
+              <span class="field-name">title</span> &middot;
+              <span class="field-name">schema</span> <span class="field-type">JSONB</span><br>
+              <span style="font-size:0.7rem; color:#94a3b8;">(steps, fields, validations)</span><br>
+              <span class="field-name">version</span> &middot;
+              <span class="field-name">active</span>
+            </div>
+          </div>
+
+          <div class="h-connector" style="margin:0 auto;"></div>
+          <div class="rel-label">N:1 &middot; form_definition_id</div>
+          <div class="h-connector" style="margin:0 auto; height:20px;"></div>
+
+          <div class="entity-card card-form" style="min-width:200px; margin:0 auto;">
+            <h3>FormSubmission</h3>
+            <div class="type-badge">User Input</div>
+            <div class="fields">
+              <span class="field-name">payload</span> <span class="field-type">JSONB</span><br>
+              <span class="field-name">submittedAt</span> <span class="field-type">Date</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Post children — full-width section below the 3-column layout -->
+      <div style="text-align:center; margin-top:4px;">
+        <div class="h-connector" style="margin:0 auto;"></div>
+        <div class="rel-label">Post alt elemanlari</div>
+        <div class="h-connector" style="margin:0 auto; height:20px;"></div>
+
+        <div style="display:flex; align-items:center; flex-direction:column;">
+          <div style="width:500px; max-width:90vw; height:4px; background:linear-gradient(to right, #fb923c, #fbbf24, #84cc16); border-radius:2px;"></div>
+          <div style="display:flex; justify-content:space-between; width:500px; max-width:90vw;">
+            <div style="width:4px; height:20px; background:#fb923c; border-radius:2px;"></div>
+            <div style="width:4px; height:20px; background:#fbbf24; border-radius:2px;"></div>
+            <div style="width:4px; height:20px; background:#84cc16; border-radius:2px;"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:20px; justify-content:center; align-items:flex-start; flex-wrap:nowrap;">
+          <div style="text-align:center; width:200px;">
+            <div class="rel-label">N:1 &middot; post_id</div>
+            <div class="entity-card card-comment" style="min-width:180px; margin:0 auto;">
+              <h3>Comment</h3>
+              <div class="type-badge">Interaction</div>
+              <div class="fields">
+                <span class="field-name">name</span> &middot; <span class="field-name">email</span><br>
+                <span class="field-name">content</span> &middot; <span class="field-name">status</span><br>
+                <span style="font-size:0.7rem; color:#fb923c;">self-ref (parent/child)</span>
+              </div>
+            </div>
+          </div>
+          <div style="text-align:center; width:200px;">
+            <div class="rel-label">N:1 &middot; post_id</div>
+            <div class="entity-card card-post" style="min-width:180px; border-color:#f59e0b; margin:0 auto;">
+              <h3>Rating</h3>
+              <div class="type-badge">Scoring</div>
+              <div class="fields">
+                <span class="field-name">rating</span> <span class="field-type">Integer</span><br>
+                <span class="field-name">userIdentifier</span><br>
+                <span style="font-size:0.7rem; color:#94a3b8;">Unique: (user, post)</span>
+              </div>
+            </div>
+          </div>
+          <div style="text-align:center; width:200px;">
+            <div class="rel-label">1:1 &middot; seo_info_id</div>
+            <div class="entity-card card-seo" style="min-width:180px; margin:0 auto;">
+              <h3>SeoInfo</h3>
+              <div class="type-badge">SEO (Post)</div>
+              <div class="fields">
+                <span style="font-size:0.78rem; color:#94a3b8;">Post'a ait SEO bilgisi</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ==================== VIEW 2: Entity Relations ==================== -->
+<div class="view" id="view-relations">
+  <div class="diagram-container">
+    <svg viewBox="0 0 1200 900" class="schema-svg" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa"/>
+        </marker>
+        <marker id="arrow-pink" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#f472b6"/>
+        </marker>
+        <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+        </marker>
+        <marker id="arrow-yellow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+        </marker>
+        <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+        </marker>
+        <marker id="diamond" markerWidth="12" markerHeight="8" refX="6" refY="4" orient="auto">
+          <polygon points="0 4, 6 0, 12 4, 6 8" fill="#a78bfa" stroke="#a78bfa"/>
+        </marker>
+      </defs>
+
+      <!-- Page box -->
+      <rect x="60" y="40" width="200" height="100" rx="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2"/>
+      <text x="160" y="70" text-anchor="middle" fill="#60a5fa" font-size="16" font-weight="700">Page</text>
+      <text x="160" y="90" text-anchor="middle" fill="#94a3b8" font-size="11">title, slug, template</text>
+      <text x="160" y="105" text-anchor="middle" fill="#94a3b8" font-size="11">status, description</text>
+
+      <!-- SeoInfo box (Page) -->
+      <rect x="350" y="40" width="180" height="80" rx="10" fill="#2d3a1e" stroke="#84cc16" stroke-width="2"/>
+      <text x="440" y="70" text-anchor="middle" fill="#a3e635" font-size="16" font-weight="700">SeoInfo</text>
+      <text x="440" y="90" text-anchor="middle" fill="#94a3b8" font-size="11">title, keywords, canonical</text>
+      <line x1="260" y1="80" x2="350" y2="80" stroke="#84cc16" stroke-width="2"/>
+      <text x="305" y="73" text-anchor="middle" fill="#84cc16" font-size="10">1:1</text>
+
+      <!-- Component box -->
+      <rect x="60" y="220" width="200" height="110" rx="10" fill="#3b1f5e" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="160" y="250" text-anchor="middle" fill="#a78bfa" font-size="16" font-weight="700">Component</text>
+      <text x="160" y="270" text-anchor="middle" fill="#94a3b8" font-size="11">name, type, orderIndex</text>
+      <text x="160" y="285" text-anchor="middle" fill="#fbbf24" font-size="10">BANNER | WIDGET | FORM</text>
+      <text x="160" y="300" text-anchor="middle" fill="#94a3b8" font-size="11">template, status</text>
+      <line x1="160" y1="140" x2="160" y2="220" stroke="#a78bfa" stroke-width="2" marker-end="url(#diamond)"/>
+      <text x="180" y="180" fill="#a78bfa" font-size="10">M:N page_components</text>
+
+      <!-- Banner box -->
+      <rect x="350" y="200" width="180" height="100" rx="10" fill="#5f1e3a" stroke="#ec4899" stroke-width="2"/>
+      <text x="440" y="230" text-anchor="middle" fill="#f472b6" font-size="16" font-weight="700">Banner</text>
+      <text x="440" y="250" text-anchor="middle" fill="#94a3b8" font-size="11">title, images (embed)</text>
+      <text x="440" y="265" text-anchor="middle" fill="#94a3b8" font-size="11">link, orderIndex</text>
+      <text x="440" y="280" text-anchor="middle" fill="#64748b" font-size="9">desktop / tablet / mobile</text>
+      <line x1="260" y1="260" x2="350" y2="260" stroke="#ec4899" stroke-width="2" marker-end="url(#arrow-pink)"/>
+      <text x="305" y="253" text-anchor="middle" fill="#ec4899" font-size="10">M:N</text>
+
+      <!-- Widget box -->
+      <rect x="350" y="340" width="180" height="100" rx="10" fill="#1e4f3a" stroke="#10b981" stroke-width="2"/>
+      <text x="440" y="370" text-anchor="middle" fill="#34d399" font-size="16" font-weight="700">Widget</text>
+      <text x="440" y="390" text-anchor="middle" fill="#94a3b8" font-size="11">name, type, orderIndex</text>
+      <text x="440" y="405" text-anchor="middle" fill="#fbbf24" font-size="10">BANNER | POST</text>
+      <line x1="260" y1="290" x2="350" y2="370" stroke="#10b981" stroke-width="2" marker-end="url(#arrow-green)"/>
+      <text x="290" y="320" fill="#10b981" font-size="10">M:N</text>
+
+      <!-- FormDefinition box -->
+      <rect x="350" y="480" width="180" height="100" rx="10" fill="#1e4f4f" stroke="#06b6d4" stroke-width="2"/>
+      <text x="440" y="505" text-anchor="middle" fill="#22d3ee" font-size="14" font-weight="700">FormDefinition</text>
+      <text x="440" y="525" text-anchor="middle" fill="#94a3b8" font-size="11">title, schema (JSONB)</text>
+      <text x="440" y="540" text-anchor="middle" fill="#94a3b8" font-size="11">version, active</text>
+      <line x1="220" y1="330" x2="350" y2="510" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+      <text x="260" y="420" fill="#06b6d4" font-size="10">M:N</text>
+
+      <!-- Widget -> Banner (dashed arrow curving right then up to Banner box) -->
+      <path d="M 530 360 C 570 360, 570 280, 530 280" stroke="#ec4899" stroke-width="1.5" stroke-dasharray="6,3" fill="none" marker-end="url(#arrow-pink)"/>
+      <text x="570" y="320" fill="#ec4899" font-size="9">widget_banners</text>
+
+      <!-- Widget -> Post -->
+      <rect x="620" y="340" width="180" height="100" rx="10" fill="#4f3a1e" stroke="#f59e0b" stroke-width="2"/>
+      <text x="710" y="370" text-anchor="middle" fill="#fbbf24" font-size="16" font-weight="700">Post</text>
+      <text x="710" y="390" text-anchor="middle" fill="#94a3b8" font-size="11">title, slug, content</text>
+      <text x="710" y="405" text-anchor="middle" fill="#94a3b8" font-size="11">template, orderIndex</text>
+      <line x1="530" y1="390" x2="620" y2="390" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-yellow)"/>
+      <text x="575" y="383" text-anchor="middle" fill="#fbbf24" font-size="10">M:N</text>
+
+      <!-- Post -> SeoInfo -->
+      <rect x="870" y="340" width="160" height="70" rx="10" fill="#2d3a1e" stroke="#84cc16" stroke-width="2"/>
+      <text x="950" y="365" text-anchor="middle" fill="#a3e635" font-size="14" font-weight="700">SeoInfo</text>
+      <text x="950" y="385" text-anchor="middle" fill="#94a3b8" font-size="10">post SEO data</text>
+      <line x1="800" y1="375" x2="870" y2="375" stroke="#84cc16" stroke-width="2"/>
+      <text x="835" y="368" text-anchor="middle" fill="#84cc16" font-size="10">1:1</text>
+
+      <!-- Comment -->
+      <rect x="620" y="500" width="180" height="100" rx="10" fill="#4a3a1e" stroke="#fb923c" stroke-width="2"/>
+      <text x="710" y="530" text-anchor="middle" fill="#fb923c" font-size="16" font-weight="700">Comment</text>
+      <text x="710" y="550" text-anchor="middle" fill="#94a3b8" font-size="11">name, email, content</text>
+      <text x="710" y="565" text-anchor="middle" fill="#fb923c" font-size="10">self-ref (parent/child)</text>
+      <line x1="710" y1="440" x2="710" y2="500" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="730" y="475" fill="#fb923c" font-size="10">N:1</text>
+
+      <!-- Rating -->
+      <rect x="870" y="500" width="160" height="80" rx="10" fill="#4f3a1e" stroke="#f59e0b" stroke-width="2"/>
+      <text x="950" y="530" text-anchor="middle" fill="#fbbf24" font-size="16" font-weight="700">Rating</text>
+      <text x="950" y="550" text-anchor="middle" fill="#94a3b8" font-size="11">rating, userIdentifier</text>
+      <text x="950" y="565" text-anchor="middle" fill="#64748b" font-size="9">unique(user, post)</text>
+      <line x1="800" y1="420" x2="870" y2="520" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow-yellow)"/>
+      <text x="850" y="470" fill="#f59e0b" font-size="10">N:1</text>
+
+      <!-- FormSubmission -->
+      <rect x="350" y="620" width="180" height="80" rx="10" fill="#1e4f4f" stroke="#06b6d4" stroke-width="2"/>
+      <text x="440" y="645" text-anchor="middle" fill="#22d3ee" font-size="14" font-weight="700">FormSubmission</text>
+      <text x="440" y="665" text-anchor="middle" fill="#94a3b8" font-size="11">payload (JSONB)</text>
+      <text x="440" y="680" text-anchor="middle" fill="#94a3b8" font-size="11">submittedAt</text>
+      <line x1="440" y1="580" x2="440" y2="620" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+      <text x="460" y="603" fill="#06b6d4" font-size="10">N:1</text>
+
+      <!-- ====== INDEPENDENT ENTITIES ====== -->
+      <!-- User -->
+      <rect x="60" y="700" width="180" height="90" rx="10" fill="#1e2a4f" stroke="#6366f1" stroke-width="2"/>
+      <text x="150" y="730" text-anchor="middle" fill="#818cf8" font-size="16" font-weight="700">User</text>
+      <text x="150" y="750" text-anchor="middle" fill="#94a3b8" font-size="11">username, email, password</text>
+      <text x="150" y="765" text-anchor="middle" fill="#94a3b8" font-size="11">provider, tokenVersion</text>
+
+      <!-- RefreshToken -->
+      <rect x="300" y="720" width="160" height="60" rx="10" fill="#1e2a4f" stroke="#6366f1" stroke-width="1.5"/>
+      <text x="380" y="745" text-anchor="middle" fill="#818cf8" font-size="14" font-weight="700">RefreshToken</text>
+      <text x="380" y="762" text-anchor="middle" fill="#94a3b8" font-size="10">token, expiryDate</text>
+      <line x1="240" y1="750" x2="300" y2="750" stroke="#6366f1" stroke-width="2"/>
+      <text x="270" y="743" text-anchor="middle" fill="#6366f1" font-size="10">1:1</text>
+
+      <!-- user_tenants -->
+      <rect x="60" y="810" width="180" height="40" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+      <text x="150" y="835" text-anchor="middle" fill="#94a3b8" font-size="11">user_tenants (ElementCollection)</text>
+      <line x1="150" y1="790" x2="150" y2="810" stroke="#475569" stroke-width="1.5"/>
+
+      <!-- CmsBasicInfo -->
+      <rect x="550" y="700" width="180" height="80" rx="10" fill="#3a1e4f" stroke="#d946ef" stroke-width="2"/>
+      <text x="640" y="725" text-anchor="middle" fill="#e879f9" font-size="14" font-weight="700">CmsBasicInfo</text>
+      <text x="640" y="745" text-anchor="middle" fill="#94a3b8" font-size="11">sectionKey, title</text>
+      <text x="640" y="760" text-anchor="middle" fill="#64748b" font-size="9">UUID id (own PK)</text>
+
+      <!-- CmsContent -->
+      <rect x="790" y="700" width="180" height="80" rx="10" fill="#3a1e4f" stroke="#d946ef" stroke-width="1.5"/>
+      <text x="880" y="725" text-anchor="middle" fill="#e879f9" font-size="14" font-weight="700">CmsContent</text>
+      <text x="880" y="745" text-anchor="middle" fill="#94a3b8" font-size="11">contentType, metadata</text>
+      <text x="880" y="760" text-anchor="middle" fill="#64748b" font-size="9">UUID id (own PK)</text>
+      <line x1="730" y1="740" x2="790" y2="740" stroke="#d946ef" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="760" y="733" text-anchor="middle" fill="#d946ef" font-size="10">N:1</text>
+
+      <!-- Assets -->
+      <rect x="1020" y="700" width="160" height="80" rx="10" fill="#1e3a3a" stroke="#2dd4bf" stroke-width="2"/>
+      <text x="1100" y="725" text-anchor="middle" fill="#2dd4bf" font-size="16" font-weight="700">Assets</text>
+      <text x="1100" y="745" text-anchor="middle" fill="#94a3b8" font-size="11">name, path, type</text>
+      <text x="1100" y="760" text-anchor="middle" fill="#64748b" font-size="9">standalone (no relations)</text>
+
+      <!-- Legend -->
+      <rect x="850" y="40" width="330" height="120" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+      <text x="870" y="65" fill="#e2e8f0" font-size="13" font-weight="600">Legend</text>
+      <line x1="870" y1="80" x2="910" y2="80" stroke="#60a5fa" stroke-width="2"/>
+      <text x="920" y="84" fill="#94a3b8" font-size="11">Solid = Direct relationship</text>
+      <line x1="870" y1="100" x2="910" y2="100" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="920" y="104" fill="#94a3b8" font-size="11">Dashed = Indirect / via join</text>
+      <polygon points="870,116 880,120 870,124" fill="#60a5fa"/>
+      <text x="920" y="124" fill="#94a3b8" font-size="11">1:1, N:1, M:N = Cardinality</text>
+      <rect x="870" y="132" width="12" height="12" rx="2" fill="#a78bfa"/>
+      <text x="920" y="143" fill="#94a3b8" font-size="11">Diamond = ManyToMany owner</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ==================== VIEW 3: Business Rules ==================== -->
+<div class="view" id="view-rules">
+  <div class="diagram-container">
+    <div class="rules-grid">
+
+      <div class="rule-card" style="border-left:4px solid #3b82f6;">
+        <h4><span style="color:#60a5fa;">&#9632;</span> Page Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#3b82f6;"></span> Her Page'in benzersiz bir <b style="color:#60a5fa;">slug</b>'i olmali</li>
+          <li><span class="rule-icon" style="background:#84cc16;"></span> Her Page'e <b style="color:#a3e635;">bir adet SeoInfo</b> baglenir (1:1)</li>
+          <li><span class="rule-icon" style="background:#8b5cf6;"></span> Page icine <b style="color:#a78bfa;">birden fazla Component</b> eklenebilir (M:N)</li>
+          <li><span class="rule-icon" style="background:#a78bfa;"></span> Component'ler <b style="color:#a78bfa;">orderIndex</b> sirasi ile goruntulenir</li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #8b5cf6;">
+        <h4><span style="color:#a78bfa;">&#9632;</span> Component Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#ec4899;"></span> type=<b style="color:#f472b6;">BANNER</b> &rarr; sadece Banner'lar eklenir</li>
+          <li><span class="rule-icon" style="background:#10b981;"></span> type=<b style="color:#34d399;">WIDGET</b> &rarr; sadece Widget'lar eklenir</li>
+          <li><span class="rule-icon" style="background:#06b6d4;"></span> type=<b style="color:#22d3ee;">FORM</b> &rarr; sadece FormDefinition'lar eklenir</li>
+          <li><span class="rule-icon" style="background:#f59e0b;"></span> <b style="color:#fbbf24;">@PrePersist/@PreUpdate</b> ile tip uyumsuz koleksiyonlar temizlenir</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Bir Component <b>birden fazla Page</b>'e ait olabilir</li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #10b981;">
+        <h4><span style="color:#34d399;">&#9632;</span> Widget Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#ec4899;"></span> type=<b style="color:#f472b6;">BANNER</b> &rarr; Widget icine Banner'lar eklenir</li>
+          <li><span class="rule-icon" style="background:#fbbf24;"></span> type=<b style="color:#fbbf24;">POST</b> &rarr; Widget icine Post'lar eklenir</li>
+          <li><span class="rule-icon" style="background:#f59e0b;"></span> <b style="color:#fbbf24;">@PrePersist/@PreUpdate</b> ile tip uyumsuz koleksiyonlar temizlenir</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Widget ayni anda hem Banner hem Post <b>iceremez</b></li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #f59e0b;">
+        <h4><span style="color:#fbbf24;">&#9632;</span> Post Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#84cc16;"></span> Her Post'a <b style="color:#a3e635;">bir adet SeoInfo</b> baglenir (1:1)</li>
+          <li><span class="rule-icon" style="background:#fb923c;"></span> Post'a <b style="color:#fb923c;">Comment</b> eklenebilir (N:1)</li>
+          <li><span class="rule-icon" style="background:#fbbf24;"></span> Post'a <b style="color:#fbbf24;">Rating</b> verilebilir (N:1)</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Rating: ayni kullanici ayni post'a <b>bir kez</b> puan verebilir</li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #fb923c;">
+        <h4><span style="color:#fb923c;">&#9632;</span> Comment Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#fb923c;"></span> Comment <b style="color:#fb923c;">self-referential</b> yapidir (parent/children)</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Ust yorum silinirse alt yorumlar da silinir (cascade, orphanRemoval)</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Her yorum bir Post'a aittir</li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #06b6d4;">
+        <h4><span style="color:#22d3ee;">&#9632;</span> Form Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#06b6d4;"></span> FormDefinition <b style="color:#22d3ee;">JSONB schema</b> ile dinamik form tanimi icerir</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Schema: steps, fields, validations, conditions icerir</li>
+          <li><span class="rule-icon" style="background:#06b6d4;"></span> FormSubmission, FormDefinition'a N:1 bagli</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Submission payload'u JSONB olarak saklanir</li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #6366f1;">
+        <h4><span style="color:#818cf8;">&#9632;</span> Auth & User Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#6366f1;"></span> User her zaman <b style="color:#818cf8;">basedb</b> uzerinden sorgulanir</li>
+          <li><span class="rule-icon" style="background:#6366f1;"></span> RefreshToken &harr; User (1:1)</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> User.managedTenants ile erisim yetkili tenant listesi tutulur</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> tokenVersion ile token invalidation yapilabilir</li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #d946ef;">
+        <h4><span style="color:#e879f9;">&#9632;</span> CMS Content Kurallari</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#d946ef;"></span> CmsBasicInfo ve CmsContent <b style="color:#e879f9;">kendi UUID</b>'lerini kullanir</li>
+          <li><span class="rule-icon" style="background:#d946ef;"></span> BaseEntity'den extend <b>etmezler</b></li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> CmsContent &rarr; CmsBasicInfo (N:1)</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> metadata alani JSONB olarak saklanir</li>
+        </ul>
+      </div>
+
+      <div class="rule-card" style="border-left:4px solid #2dd4bf;">
+        <h4><span style="color:#2dd4bf;">&#9632;</span> Assets</h4>
+        <ul>
+          <li><span class="rule-icon" style="background:#2dd4bf;"></span> <b style="color:#2dd4bf;">Bagimsiz entity</b> - hicbir entity ile iliskisi yok</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> name, path, type, extension, subFolder alanlari</li>
+          <li><span class="rule-icon" style="background:#94a3b8;"></span> Dosya yonetimi icin kullanilir</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ==================== VIEW 4: Multi-Tenancy ==================== -->
+<div class="view" id="view-tenant">
+  <div class="diagram-container">
+    <div class="tenant-section">
+
+      <div class="tenant-box" style="border-color:#60a5fa;">
+        <h3 style="color:#60a5fa;">Incoming Request</h3>
+        <p style="color:#94a3b8;">X-Tenant-ID header + JWT Token</p>
+      </div>
+
+      <div class="flow-arrow">&darr;</div>
+
+      <div class="flow-boxes">
+        <div class="flow-box" style="border-color:#3b82f6;">
+          <strong>1. JwtTenantFilter</strong>
+          JWT decrypt &rarr; tenant ID cikarir
+        </div>
+        <div class="flow-box" style="border-color:#8b5cf6;">
+          <strong>2. TenantContext</strong>
+          ThreadLocal'a tenant set edilir
+        </div>
+        <div class="flow-box" style="border-color:#10b981;">
+          <strong>3. TenantRoutingDataSource</strong>
+          Dogru DataSource secilir
+        </div>
+      </div>
+
+      <div class="flow-arrow">&darr;</div>
+
+      <div class="tenant-box">
+        <h3 style="color:#e2e8f0;">Database-per-Tenant Architecture</h3>
+        <p style="color:#94a3b8; margin-bottom:20px;">Her tenant icin ayri PostgreSQL veritabani</p>
+        <div class="tenant-dbs">
+          <div class="tenant-db db-base">
+            <div>elly_basedb</div>
+            <div style="font-size:0.75rem; font-weight:400; margin-top:4px; opacity:0.8;">Users, RefreshTokens<br>(Auth - merkezi)</div>
+          </div>
+          <div class="tenant-db db-t1">
+            <div>elly_tenant1</div>
+            <div style="font-size:0.75rem; font-weight:400; margin-top:4px; opacity:0.8;">Pages, Components,<br>Posts, Banners...</div>
+          </div>
+          <div class="tenant-db db-t2">
+            <div>elly_tenant2</div>
+            <div style="font-size:0.75rem; font-weight:400; margin-top:4px; opacity:0.8;">Pages, Components,<br>Posts, Banners...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-arrow">&darr;</div>
+
+      <div class="flow-boxes">
+        <div class="flow-box" style="border-color:#f59e0b;">
+          <strong>Redis Cache</strong>
+          Key: tenantId::cacheName::key<br>
+          <span style="font-size:0.8rem; color:#94a3b8;">tenant1::pages::slug_home</span>
+        </div>
+        <div class="flow-box" style="border-color:#ef4444;">
+          <strong>Izolasyon Kurali</strong>
+          Tenant A verisi asla<br>Tenant B'ye sizmaz
+        </div>
+      </div>
+
+      <div style="margin-top:30px;">
+        <div class="tenant-box" style="border-color:#334155;">
+          <h3 style="color:#94a3b8; font-size:1rem;">Content Entities (Tenant DB'de)</h3>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:16px;">
+            <span style="background:#1e3a5f; border:1px solid #3b82f6; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Page</span>
+            <span style="background:#3b1f5e; border:1px solid #8b5cf6; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Component</span>
+            <span style="background:#5f1e3a; border:1px solid #ec4899; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Banner</span>
+            <span style="background:#1e4f3a; border:1px solid #10b981; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Widget</span>
+            <span style="background:#4f3a1e; border:1px solid #f59e0b; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Post</span>
+            <span style="background:#4a3a1e; border:1px solid #fb923c; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Comment</span>
+            <span style="background:#4f3a1e; border:1px solid #f59e0b; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Rating</span>
+            <span style="background:#1e4f4f; border:1px solid #06b6d4; padding:6px 14px; border-radius:8px; font-size:0.85rem;">FormDefinition</span>
+            <span style="background:#1e4f4f; border:1px solid #06b6d4; padding:6px 14px; border-radius:8px; font-size:0.85rem;">FormSubmission</span>
+            <span style="background:#2d3a1e; border:1px solid #84cc16; padding:6px 14px; border-radius:8px; font-size:0.85rem;">SeoInfo</span>
+            <span style="background:#3a1e4f; border:1px solid #d946ef; padding:6px 14px; border-radius:8px; font-size:0.85rem;">CmsBasicInfo</span>
+            <span style="background:#3a1e4f; border:1px solid #d946ef; padding:6px 14px; border-radius:8px; font-size:0.85rem;">CmsContent</span>
+            <span style="background:#1e3a3a; border:1px solid #2dd4bf; padding:6px 14px; border-radius:8px; font-size:0.85rem;">Assets</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="tenant-box" style="border-color:#6366f1; max-width:400px;">
+          <h3 style="color:#818cf8; font-size:1rem;">Auth Entities (basedb'de)</h3>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:16px;">
+            <span style="background:#1e2a4f; border:1px solid #6366f1; padding:6px 14px; border-radius:8px; font-size:0.85rem;">User</span>
+            <span style="background:#1e2a4f; border:1px solid #6366f1; padding:6px 14px; border-radius:8px; font-size:0.85rem;">RefreshToken</span>
+            <span style="background:#1e293b; border:1px solid #475569; padding:6px 14px; border-radius:8px; font-size:0.85rem;">user_tenants</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  function showView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('view-' + id).classList.add('active');
+    event.target.classList.add('active');
+  }
+</script>
+
+</body>
+</html>

@@ -117,3 +117,25 @@ spec:
     port: 15672
     targetPort: 15672
     nodePort: 31672
+
+---
+# ============================================
+# RabbitMQ AMQP NodePort (lokal geliştirme için)
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-amqp
+  namespace: elly
+  labels:
+    app: rabbitmq
+    component: messaging
+spec:
+  selector:
+    app: rabbitmq
+  type: NodePort
+  ports:
+  - name: amqp
+    port: 5672
+    targetPort: 5672
+    nodePort: 31673

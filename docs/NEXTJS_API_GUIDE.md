@@ -168,6 +168,106 @@ Token'da `loginSource: "admin"` bulunur (OAuth2 kullanıcıları admin akışın
 
 ---
 
+## Authorization (RBAC)
+
+> **⚠️ ÖNEMLİ:** Tüm API endpoint'leri (auth ve public-token hariç) artık **JWT authentication** ve **permission bazlı yetkilendirme** gerektirir.
+
+### Yetkilendirme Mimarisi
+
+Sistem iki katmanlı bir RBAC (Role-Based Access Control) yapısı kullanır:
+- **User** → birden fazla **Role** atanabilir
+- **Role** → birden fazla **Permission** içerir
+- Her API endpoint'i belirli bir permission gerektirir (ör: `posts:create`, `pages:read`)
+
+### Varsayılan Roller
+
+| Rol | Açıklama | İzinler |
+|-----|----------|----------|
+| `SUPER_ADMIN` | Tam yetki | Tüm 40+ izin |
+| `ADMIN` | Panel yönetimi | `roles:*` ve `users:manage` hariç tümü |
+| `EDITOR` | İçerik yönetimi | İçerik modülleri (posts, pages, components, widgets, banners, assets, comments, forms, ratings, contents, basic_infos) |
+| `VIEWER` | Sadece okuma | Tüm `*:read` izinleri |
+
+### Permission Formatı
+
+Permission'lar `modül:işlem` formatındadır:
+
+| Modül | İzinler |
+|-------|----------|
+| posts | `posts:create`, `posts:read`, `posts:update`, `posts:delete` |
+| pages | `pages:create`, `pages:read`, `pages:update`, `pages:delete` |
+| components | `components:create`, `components:read`, `components:update`, `components:delete` |
+| widgets | `widgets:create`, `widgets:read`, `widgets:update`, `widgets:delete` |
+| banners | `banners:create`, `banners:read`, `banners:update`, `banners:delete` |
+| assets | `assets:create`, `assets:read`, `assets:update`, `assets:delete` |
+| comments | `comments:create`, `comments:read`, `comments:delete` |
+| forms | `forms:create`, `forms:read`, `forms:update`, `forms:delete` |
+| ratings | `ratings:create`, `ratings:read` |
+| contents | `contents:create`, `contents:read`, `contents:update`, `contents:delete` |
+| basic_infos | `basic_infos:create`, `basic_infos:read`, `basic_infos:update`, `basic_infos:delete` |
+| mail | `mail:create`, `mail:read`, `mail:update`, `mail:delete` |
+| emails | `emails:send`, `emails:read` |
+| cache | `cache:read`, `cache:manage` |
+| tenants | `tenants:read`, `tenants:manage` |
+| users | `users:read`, `users:update`, `users:manage` |
+| roles | `roles:create`, `roles:read`, `roles:update`, `roles:delete` |
+
+### Yetkilendirme Hataları
+
+Yetkisiz erişimde aşağıdaki response döner:
+
+**401 Unauthorized** (Token yok veya geçersiz):
+```json
+{
+  "result": false,
+  "status": 401,
+  "error": "Unauthorized",
+  "errorCode": "AUTHENTICATION_REQUIRED",
+  "message": "Authentication required"
+}
+```
+
+**403 Forbidden** (Token geçerli ama yetki yok):
+```json
+{
+  "result": false,
+  "status": 403,
+  "error": "Forbidden",
+  "errorCode": "ACCESS_DENIED",
+  "message": "You do not have permission to access this resource"
+}
+```
+
+### Next.js Entegrasyonu
+
+```ts
+// lib/api.ts — Yetkilendirilmiş API çağrısı
+const response = await fetch(`${API_BASE}/api/v1/posts`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(postData)
+});
+
+if (response.status === 403) {
+  // Kullanıcının bu işlem için yetkisi yok
+  throw new Error('Bu işlem için yetkiniz bulunmuyor');
+}
+```
+
+### Authentication Gerektirmeyen Endpoint'ler
+
+| Endpoint | Açıklama |
+|----------|----------|
+| `/api/v1/auth/**` | Login, register, token refresh, public-token |
+| `/oauth2/**`, `/login/oauth2/**` | OAuth2 akışı |
+| `/swagger-ui/**`, `/api-docs/**` | API dokümantasyonu |
+| `/actuator/**` | Health check |
+
+---
+
 ## Pages
 
 ### GET /api/v1/pages/{slug}
@@ -2128,6 +2228,163 @@ Sayfalı içerik listesi.
 
 ---
 
+## Roles & Permissions (Rol Yönetimi)
+
+### GET /api/v1/roles
+Tüm rolleri listele.
+
+**Permission:** `roles:read`
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "SUPER_ADMIN",
+      "description": "Tam yetki - tüm servislere erişim",
+      "permissions": [
+        {
+          "id": 1,
+          "name": "posts:create",
+          "description": "POSTS CREATE",
+          "module": "POSTS"
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/v1/roles/{id}
+Rol detayı getir.
+
+**Permission:** `roles:read`
+
+**Path Parameters:**
+- `id`: Rol ID
+
+---
+
+### POST /api/v1/roles
+Yeni rol oluştur.
+
+**Permission:** `roles:create`
+
+**Body:**
+```json
+{
+  "name": "CUSTOM_ROLE",
+  "description": "Özel rol açıklaması"
+}
+```
+
+---
+
+### PUT /api/v1/roles/{id}
+Rol güncelle.
+
+**Permission:** `roles:update`
+
+**Path Parameters:**
+- `id`: Rol ID
+
+**Body:**
+```json
+{
+  "name": "UPDATED_ROLE",
+  "description": "Güncellenmiş açıklama"
+}
+```
+
+---
+
+### DELETE /api/v1/roles/{id}
+Rol sil.
+
+**Permission:** `roles:delete`
+
+**Path Parameters:**
+- `id`: Rol ID
+
+---
+
+### PUT /api/v1/roles/{roleId}/permissions
+Role izin ata. Mevcut izinler gönderilen liste ile değiştirilir.
+
+**Permission:** `roles:update`
+
+**Path Parameters:**
+- `roleId`: Rol ID
+
+**Body:**
+```json
+[1, 2, 3, 5, 8]
+```
+> Permission ID'lerinin listesi
+
+---
+
+### PUT /api/v1/roles/users/{userId}/roles
+Kullanıcıya rol ata. Mevcut roller gönderilen liste ile değiştirilir.
+
+**Permission:** `users:manage`
+
+**Path Parameters:**
+- `userId`: Kullanıcı ID
+
+**Body:**
+```json
+{
+  "roleIds": [1, 2]
+}
+```
+
+---
+
+### GET /api/v1/roles/permissions
+Tüm izinleri listele.
+
+**Permission:** `roles:read`
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "posts:create",
+      "description": "POSTS CREATE",
+      "module": "POSTS"
+    },
+    {
+      "id": 2,
+      "name": "posts:read",
+      "description": "POSTS READ",
+      "module": "POSTS"
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/v1/roles/permissions/module/{module}
+Modüle göre izinleri listele.
+
+**Permission:** `roles:read`
+
+**Path Parameters:**
+- `module`: Modül adı (ör: `POSTS`, `PAGES`, `BANNERS`)
+
+**Response:** (permissions listesi ile aynı format)
+
+---
+
 ## Response Format
 
 Tüm API'ler şu formatta döner:
@@ -2140,7 +2397,7 @@ Tüm API'ler şu formatta döner:
 }
 ```
 
-**Hata:**
+**Hata — 401 Unauthorized (Token yok/geçersiz):**
 ```json
 {
   "result": false,
@@ -2148,5 +2405,27 @@ Tüm API'ler şu formatta döner:
   "error": "Unauthorized",
   "errorCode": "AUTHENTICATION_REQUIRED",
   "message": "Authentication required"
+}
+```
+
+**Hata — 403 Forbidden (Yetki yok):**
+```json
+{
+  "result": false,
+  "status": 403,
+  "error": "Forbidden",
+  "errorCode": "ACCESS_DENIED",
+  "message": "You do not have permission to access this resource"
+}
+```
+
+**Hata — 404 Not Found:**
+```json
+{
+  "result": false,
+  "status": 404,
+  "error": "Not Found",
+  "errorCode": "RESOURCE_NOT_FOUND",
+  "message": "Resource not found"
 }
 ```

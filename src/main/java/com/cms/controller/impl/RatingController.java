@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IRatingController;
 import com.cms.dto.DtoRating;
 import com.cms.dto.DtoRatingIU;
@@ -35,6 +37,7 @@ public class RatingController extends BaseController implements IRatingControlle
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('ratings:create')")
   public RootEntityResponse<DtoRating> saveRating(
       @Valid @RequestBody DtoRatingIU dtoRatingIU,
       HttpServletRequest request) {
@@ -59,6 +62,7 @@ public class RatingController extends BaseController implements IRatingControlle
 
   @Override
   @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('ratings:read')")
   public RootEntityResponse<DtoRating> getRatingById(@PathVariable Long id) {
     Rating rating = ratingService.getRatingById(id);
     DtoRating dtoRating = ratingMapper.toDtoRating(rating);
@@ -67,6 +71,7 @@ public class RatingController extends BaseController implements IRatingControlle
 
   @Override
   @GetMapping("/post/{postId}")
+  @PreAuthorize("hasAuthority('ratings:read')")
   public RootEntityResponse<List<DtoRating>> getRatingsByPostId(@PathVariable Long postId) {
     List<Rating> ratings = ratingService.getRatingsByPostId(postId);
     List<DtoRating> dtoRatings = ratingMapper.toDtoRatings(ratings);
@@ -75,6 +80,7 @@ public class RatingController extends BaseController implements IRatingControlle
 
   @Override
   @GetMapping("/stats/{postId}")
+  @PreAuthorize("hasAuthority('ratings:read')")
   public RootEntityResponse<DtoRatingStats> getRatingStats(@PathVariable Long postId) {
     DtoRatingStats stats = new DtoRatingStats();
     stats.setPostId(postId);

@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IWidgetController;
 import com.cms.dto.DtoWidget;
 import com.cms.dto.DtoWidgetIU;
@@ -36,6 +38,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('widgets:create')")
   public RootEntityResponse<DtoWidget> createWidget(@RequestBody DtoWidgetIU dtoWidgetIU) {
     Widget widget = widgetMapper.toWidget(dtoWidgetIU);
     Widget savedWidget = widgetService.saveWidget(widget, dtoWidgetIU.getBannerIds(), dtoWidgetIU.getPostIds());
@@ -45,6 +48,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
 
   @Override
   @PutMapping("/{id}")
+  @PreAuthorize("hasAuthority('widgets:update')")
   public RootEntityResponse<DtoWidget> updateWidget(@PathVariable Long id, @RequestBody DtoWidgetIU dtoWidgetIU) {
     Widget widget = widgetService.getWidgetById(id);
     widgetMapper.updateWidgetFromDto(dtoWidgetIU, widget);
@@ -55,6 +59,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('widgets:delete')")
   public RootEntityResponse<Boolean> deleteWidget(@PathVariable Long id) {
     Boolean deleted = widgetService.deleteWidget(id);
     if (deleted) {
@@ -65,6 +70,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
 
   @Override
   @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('widgets:read')")
   public RootEntityResponse<DtoWidget> getWidgetById(@PathVariable Long id) {
     Widget widget = widgetService.getWidgetById(id);
     DtoWidget dtoWidget = widgetMapper.toDtoWidget(widget);
@@ -73,6 +79,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
 
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('widgets:read')")
   public RootEntityResponse<List<DtoWidget>> getAllWidgets() {
     List<Widget> widgets = widgetService.getAllWidgets();
     List<DtoWidget> dtoWidgets = widgetMapper.toDtoWidgetListSimple(widgets);
@@ -81,6 +88,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
 
   @Override
   @GetMapping("/list/summary")
+  @PreAuthorize("hasAuthority('widgets:read')")
   public RootEntityResponse<List<DtoWidgetSummary>> getAllWidgetsSummary() {
     List<DtoWidgetSummary> dtoWidgetSummaries = widgetService.getAllWidgetsSummary();
     return ok(dtoWidgetSummaries);
@@ -89,6 +97,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
   // Paginated endpoints
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('widgets:read')")
   public RootEntityResponse<PagedResponse<DtoWidget>> getAllWidgetsPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
@@ -101,6 +110,7 @@ public class WidgetController extends BaseController implements IWidgetControlle
 
   @Override
   @GetMapping("/list/summary/paged")
+  @PreAuthorize("hasAuthority('widgets:read')")
   public RootEntityResponse<PagedResponse<DtoWidgetSummary>> getAllWidgetsSummaryPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,

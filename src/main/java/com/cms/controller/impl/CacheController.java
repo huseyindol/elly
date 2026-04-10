@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.config.TenantContext;
 import com.cms.dto.DtoCacheInfo;
 
@@ -36,6 +38,7 @@ public class CacheController {
   private final RedisTemplate<String, Object> redisTemplate;
 
   @GetMapping
+  @PreAuthorize("hasAuthority('cache:read')")
   public List<DtoCacheInfo> getCacheStats() {
     String tenantId = resolveTenantId();
     List<DtoCacheInfo> cacheInfos = new ArrayList<>();
@@ -57,6 +60,7 @@ public class CacheController {
   }
 
   @DeleteMapping("/{name}")
+  @PreAuthorize("hasAuthority('cache:manage')")
   public String clearCache(@PathVariable String name) {
     String tenantId = resolveTenantId();
     String pattern = tenantId + "::" + name + "::*";
@@ -71,6 +75,7 @@ public class CacheController {
   }
 
   @DeleteMapping
+  @PreAuthorize("hasAuthority('cache:manage')")
   public String clearAllCaches() {
     String tenantId = resolveTenantId();
     String pattern = tenantId + "::*";
@@ -84,6 +89,7 @@ public class CacheController {
   }
 
   @DeleteMapping("/all-tenants")
+  @PreAuthorize("hasAuthority('cache:manage')")
   public String clearAllTenantsCache() {
     Set<String> keys = scanKeys("*");
 

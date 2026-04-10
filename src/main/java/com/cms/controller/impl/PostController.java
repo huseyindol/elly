@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IPostController;
 import com.cms.dto.DtoPost;
 import com.cms.dto.DtoPostIU;
@@ -36,6 +38,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('posts:create')")
   public RootEntityResponse<DtoPost> createPost(@RequestBody DtoPostIU dtoPostIU) {
     Post post = postMapper.toPost(dtoPostIU);
     Post savedPost = postService.savePost(post);
@@ -45,6 +48,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @PutMapping("/{id}")
+  @PreAuthorize("hasAuthority('posts:update')")
   public RootEntityResponse<DtoPost> updatePost(@PathVariable Long id, @RequestBody DtoPostIU dtoPostIU) {
     Post post = postService.getPostById(id);
     postMapper.updatePostFromDto(dtoPostIU, post);
@@ -55,6 +59,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('posts:delete')")
   public RootEntityResponse<Boolean> deletePost(@PathVariable Long id) {
     Boolean deleted = postService.deletePost(id);
     if (deleted) {
@@ -65,6 +70,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('posts:read')")
   public RootEntityResponse<DtoPost> getPostById(@PathVariable Long id) {
     Post post = postService.getPostById(id);
     DtoPost dtoPost = postMapper.toDtoPost(post);
@@ -73,6 +79,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('posts:read')")
   public RootEntityResponse<List<DtoPost>> getAllPosts() {
     List<Post> posts = postService.getAllPosts();
     List<DtoPost> dtoPosts = postMapper.toDtoPostListSimple(posts);
@@ -81,6 +88,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @GetMapping("/list/summary")
+  @PreAuthorize("hasAuthority('posts:read')")
   public RootEntityResponse<List<DtoPostSummary>> getAllPostsSummary() {
     List<DtoPostSummary> posts = postService.getAllPostsSummary();
     return ok(posts);
@@ -88,6 +96,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @GetMapping("/slug/{slug}")
+  @PreAuthorize("hasAuthority('posts:read')")
   public RootEntityResponse<DtoPost> getPostBySlug(@PathVariable String slug) {
     Post post = postService.getPostBySlug(slug);
     DtoPost dtoPost = postMapper.toDtoPost(post);
@@ -97,6 +106,7 @@ public class PostController extends BaseController implements IPostController {
   // Paginated endpoints
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('posts:read')")
   public RootEntityResponse<PagedResponse<DtoPost>> getAllPostsPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
@@ -109,6 +119,7 @@ public class PostController extends BaseController implements IPostController {
 
   @Override
   @GetMapping("/list/summary/paged")
+  @PreAuthorize("hasAuthority('posts:read')")
   public RootEntityResponse<PagedResponse<DtoPostSummary>> getAllPostsSummaryPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,

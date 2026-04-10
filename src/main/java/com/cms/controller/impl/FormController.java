@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IFormController;
 import com.cms.dto.DtoFormDefinition;
 import com.cms.dto.DtoFormDefinitionIU;
@@ -45,6 +47,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('forms:create')")
   public RootEntityResponse<DtoFormDefinition> createFormDefinition(@RequestBody DtoFormDefinitionIU dto) {
     FormDefinition entity = formMapper.toEntity(dto);
     entity.setMailAccount(resolveMailAccount(dto.getMailAccountId()));
@@ -54,6 +57,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @PutMapping("/{id}")
+  @PreAuthorize("hasAuthority('forms:update')")
   public RootEntityResponse<DtoFormDefinition> updateFormDefinition(
       @PathVariable Long id,
       @RequestBody DtoFormDefinitionIU dto) {
@@ -72,6 +76,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<DtoFormDefinition> getFormDefinitionById(@PathVariable Long id) {
     FormDefinition entity = formDefinitionService.getById(id);
     return ok(formMapper.toDto(entity));
@@ -79,6 +84,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<List<DtoFormDefinition>> getAllFormDefinitions() {
     List<FormDefinition> entities = formDefinitionService.getAll();
     return ok(formMapper.toDtoList(entities));
@@ -86,6 +92,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/list/active")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<List<DtoFormDefinition>> getActiveFormDefinitions() {
     List<FormDefinition> entities = formDefinitionService.getAllActive();
     return ok(formMapper.toDtoList(entities));
@@ -93,6 +100,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<PagedResponse<DtoFormDefinition>> getAllFormDefinitionsPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
@@ -105,6 +113,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('forms:delete')")
   public RootEntityResponse<Boolean> deleteFormDefinition(@PathVariable Long id) {
     Boolean deleted = formDefinitionService.delete(id);
     if (deleted) {
@@ -117,6 +126,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @PostMapping("/{formId}/submit")
+  @PreAuthorize("hasAuthority('forms:create')")
   public RootEntityResponse<DtoFormSubmission> submitForm(
       @PathVariable Long formId,
       @RequestBody DtoFormSubmit dto) {
@@ -126,6 +136,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/{formId}/submissions")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<List<DtoFormSubmission>> getSubmissionsByFormId(@PathVariable Long formId) {
     List<FormSubmission> submissions = formSubmissionService.getByFormDefinitionId(formId);
     return ok(formMapper.toSubmissionDtoList(submissions));
@@ -133,6 +144,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/{formId}/submissions/paged")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<PagedResponse<DtoFormSubmission>> getSubmissionsByFormIdPaged(
       @PathVariable Long formId,
       @RequestParam(defaultValue = "0") int page,
@@ -146,6 +158,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/submissions/{submissionId}")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<DtoFormSubmission> getSubmissionById(@PathVariable Long submissionId) {
     FormSubmission submission = formSubmissionService.getById(submissionId);
     return ok(formMapper.toSubmissionDto(submission));
@@ -153,6 +166,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/{formId}/submissions/count")
+  @PreAuthorize("hasAuthority('forms:read')")
   public RootEntityResponse<Long> getSubmissionCount(@PathVariable Long formId) {
     Long count = formSubmissionService.countByFormId(formId);
     return ok(count);

@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.config.CustomUserDetailsService;
 import com.cms.config.DataSourceConfig;
+import com.cms.config.UserAuthCacheService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -44,6 +45,7 @@ public class AuthService implements IAuthService {
   private final AuthenticationManager authenticationManager;
   private final RefreshTokenRepository refreshTokenRepository;
   private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
+  private final UserAuthCacheService userAuthCacheService;
 
   @Value("${jwt.refresh.expiration:3600000}")
   private Long refreshTokenExpiration;
@@ -159,6 +161,8 @@ public class AuthService implements IAuthService {
 
     // Native query ile token_version'ı güncelle (tam entity update yerine)
     userRepository.updateTokenVersion(user.getId(), newTokenVersion);
+    // Token version değişti, cache'i temizle
+    userAuthCacheService.evictUserCache(user.getUsername());
 
     String loginSource = isAdminLogin ? "admin" : "tenant";
 
@@ -221,6 +225,8 @@ public class AuthService implements IAuthService {
     Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
     user.setTokenVersion(currentVersion + 1);
     user = userRepository.save(user);
+    // Refresh token'da token version değişti, cache temizle
+    userAuthCacheService.evictUserCache(user.getUsername());
 
     // Tenant ve loginSource bilgilerini mevcut refresh token'dan al
     String tenantId = jwtUtil.extractTenantId(refreshTokenString);

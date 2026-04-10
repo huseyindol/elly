@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.ICmsContentController;
 import com.cms.dto.DtoCmsContent;
 import com.cms.dto.DtoCmsContentIU;
@@ -38,6 +40,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @GetMapping("/section/{sectionKey}")
+  @PreAuthorize("hasAuthority('contents:read')")
   public RootEntityResponse<List<DtoCmsContent>> getContentsBySectionKey(@PathVariable String sectionKey) {
     List<CmsContent> contents = cmsContentService.getActiveCmsContentsBySectionKey(sectionKey);
     List<DtoCmsContent> dtoContents = cmsContentMapper.toDtoCmsContentList(contents);
@@ -46,6 +49,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('contents:read')")
   public RootEntityResponse<DtoCmsContent> getContentById(@PathVariable UUID id) {
     CmsContent cmsContent = cmsContentService.getCmsContentById(id);
     DtoCmsContent dtoCmsContent = cmsContentMapper.toDtoCmsContent(cmsContent);
@@ -54,6 +58,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('contents:read')")
   public RootEntityResponse<List<DtoCmsContent>> getAllContents() {
     List<CmsContent> contents = cmsContentService.getAllCmsContents();
     List<DtoCmsContent> dtoContents = cmsContentMapper.toDtoCmsContentList(contents);
@@ -62,6 +67,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('contents:read')")
   public RootEntityResponse<PagedResponse<DtoCmsContent>> getAllContentsPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
@@ -74,6 +80,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('contents:create')")
   public RootEntityResponse<DtoCmsContent> createContent(@Valid @RequestBody DtoCmsContentIU dtoCmsContentIU) {
     CmsContent cmsContent = cmsContentMapper.toCmsContent(dtoCmsContentIU);
 
@@ -90,6 +97,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @PostMapping("/bulk")
+  @PreAuthorize("hasAuthority('contents:create')")
   public RootEntityResponse<List<DtoCmsContent>> createBulkContents(
       @Valid @RequestBody DtoCmsContentBulkRequest request) {
     com.cms.entity.CmsBasicInfo basicInfoPayload = null;
@@ -112,6 +120,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @PutMapping("/{id}")
+  @PreAuthorize("hasAuthority('contents:update')")
   public RootEntityResponse<DtoCmsContent> updateContent(@PathVariable UUID id,
       @Valid @RequestBody DtoCmsContentIU dtoCmsContentIU) {
     CmsContent contentUpdate = cmsContentMapper.toCmsContent(dtoCmsContentIU);
@@ -129,6 +138,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('contents:delete')")
   public RootEntityResponse<Boolean> deleteContent(@PathVariable UUID id) {
     Boolean deleted = cmsContentService.deleteCmsContent(id);
     if (deleted) {

@@ -32,6 +32,26 @@ import lombok.extern.slf4j.Slf4j;
 public class GlobalExceptionHandler {
 
   /**
+   * Handle Spring Security Access Denied (403 Forbidden)
+   */
+  @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+  public ResponseEntity<ErrorResponse> handleAccessDeniedException(
+      org.springframework.security.access.AccessDeniedException ex,
+      HttpServletRequest request) {
+    log.error("Access denied: {}", ex.getMessage());
+
+    ErrorResponse errorResponse = ErrorResponse.of(
+        false,
+        HttpStatus.FORBIDDEN.value(),
+        HttpStatus.FORBIDDEN.getReasonPhrase(),
+        "ACCESS_DENIED",
+        "You do not have permission to access this resource",
+        request.getRequestURI());
+
+    return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
+  }
+
+  /**
    * Handle FormValidationException with field-level errors
    */
   @ExceptionHandler(FormValidationException.class)

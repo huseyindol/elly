@@ -9,12 +9,16 @@ import jakarta.persistence.ElementCollection;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "users", indexes = {
@@ -55,6 +59,14 @@ public class User extends BaseEntity {
 
   @Column(name = "token_version", nullable = false)
   private Long tokenVersion = 0L; // Token versioning için - yeni token alındığında artırılır
+
+  @ManyToMany(fetch = FetchType.EAGER)
+  @JoinTable(
+      name = "user_roles",
+      joinColumns = @JoinColumn(name = "user_id"),
+      inverseJoinColumns = @JoinColumn(name = "role_id")
+  )
+  private Set<Role> roles = new HashSet<>();
 
   @ElementCollection(fetch = FetchType.EAGER)
   @CollectionTable(name = "user_tenants", joinColumns = @JoinColumn(name = "user_id"))

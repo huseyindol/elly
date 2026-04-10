@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +37,7 @@ public class TenantController {
    */
   @PostMapping("/token")
   @Operation(summary = "Tenant JWT Token Üret", description = "Belirtilen tenant ID için JWT token üretir. Bu token X-Tenant-ID header'ında kullanılır.")
+  @PreAuthorize("hasAuthority('tenants:manage')")
   public ResponseEntity<Map<String, Object>> generateTenantToken(
       @RequestParam String tenantId) {
 
@@ -63,6 +66,7 @@ public class TenantController {
    */
   @GetMapping("/list")
   @Operation(summary = "Tenant Listesi", description = "Konfigüre edilmiş tüm tenant'ları listeler.")
+  @PreAuthorize("hasAuthority('tenants:read')")
   public ResponseEntity<Map<String, Object>> listTenants() {
     Set<String> tenantIds = tenantProperties.getDatasources().keySet();
     String defaultTenant = tenantProperties.getDefaultTenant();

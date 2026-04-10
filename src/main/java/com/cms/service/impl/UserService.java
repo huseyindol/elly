@@ -4,6 +4,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cms.config.UserAuthCacheService;
 import com.cms.dto.DtoChangePassword;
 import com.cms.dto.DtoUserResponse;
 import com.cms.dto.DtoUserUpdate;
@@ -25,6 +26,7 @@ public class UserService implements IUserService {
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
   private final UserMapper userMapper;
+  private final UserAuthCacheService userAuthCacheService;
 
   @Override
   public DtoUserResponse getMe(String username) {
@@ -55,6 +57,11 @@ public class UserService implements IUserService {
     userMapper.updateUserFromDto(dto, user);
 
     User savedUser = userRepository.save(user);
+    // Profil güncellendiğinde cache temizle (username/email değişmiş olabilir)
+    userAuthCacheService.evictUserCache(username);
+    if (!username.equals(savedUser.getUsername())) {
+      userAuthCacheService.evictUserCache(savedUser.getUsername());
+    }
     log.info("User profile updated: {}", savedUser.getUsername());
     return userMapper.toDtoUserResponse(savedUser);
   }
@@ -81,6 +88,8 @@ public class UserService implements IUserService {
 
     user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
     userRepository.save(user);
+    // Şifre değiştiğinde cache temizle
+    userAuthCacheService.evictUserCache(username);
     log.info("Password changed for user: {}", username);
   }
 

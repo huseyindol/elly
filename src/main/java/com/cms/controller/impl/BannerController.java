@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IBannerController;
 import com.cms.dto.DtoBanner;
 import com.cms.dto.DtoBannerIU;
@@ -50,6 +52,7 @@ public class BannerController extends BaseController implements IBannerControlle
    */
   @Override
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @PreAuthorize("hasAuthority('banners:create')")
   public RootEntityResponse<DtoBanner> createBanner(
       @RequestPart("data") String dataJson,
       @RequestPart(value = "desktop", required = false) MultipartFile desktopImage,
@@ -92,6 +95,7 @@ public class BannerController extends BaseController implements IBannerControlle
    */
   @Override
   @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @PreAuthorize("hasAuthority('banners:update')")
   public RootEntityResponse<DtoBanner> updateBanner(
       @PathVariable Long id,
       @RequestPart("data") String dataJson,
@@ -143,6 +147,7 @@ public class BannerController extends BaseController implements IBannerControlle
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('banners:delete')")
   public RootEntityResponse<Boolean> deleteBanner(@PathVariable Long id) {
     Boolean deleted = bannerService.deleteBanner(id);
     if (deleted) {
@@ -153,6 +158,7 @@ public class BannerController extends BaseController implements IBannerControlle
 
   @Override
   @GetMapping("/{id:\\d+}")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<DtoBanner> getBannerById(@PathVariable Long id) {
     Banner banner = bannerService.getBannerById(id);
     DtoBanner dtoBanner = bannerMapper.toDtoBanner(banner);
@@ -164,6 +170,7 @@ public class BannerController extends BaseController implements IBannerControlle
    */
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<List<DtoBanner>> getAllBanners() {
     List<Banner> banners = bannerService.getAllBanners();
     List<DtoBanner> dtoBanners = bannerMapper.toDtoBannerList(banners);
@@ -175,6 +182,7 @@ public class BannerController extends BaseController implements IBannerControlle
    */
   @Override
   @GetMapping("/list/summary")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<List<DtoBannerSummary>> getAllBannersWithSummary() {
     List<DtoBannerSummary> dtoBannerSummaries = bannerService.getAllBannersWithSummary();
     return ok(dtoBannerSummaries);
@@ -185,6 +193,7 @@ public class BannerController extends BaseController implements IBannerControlle
    */
   @Override
   @GetMapping("/list/{subFolder}")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<List<DtoBanner>> getBannersBySubFolder(@PathVariable String subFolder) {
     // subFolder boşluk ise null yap
     if (subFolder != null && subFolder.trim().isEmpty()) {
@@ -199,6 +208,7 @@ public class BannerController extends BaseController implements IBannerControlle
    */
   @Override
   @GetMapping("/list/summary/{subFolder}")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<List<DtoBannerSummary>> getBannersSummaryBySubFolder(@PathVariable String subFolder) {
     if (subFolder != null && subFolder.trim().isEmpty()) {
       subFolder = null;
@@ -212,6 +222,7 @@ public class BannerController extends BaseController implements IBannerControlle
    */
   @Override
   @GetMapping("/sub-folders")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<List<String>> getAllSubFolders() {
     List<String> subFolders = bannerService.getAllSubFolders();
     return ok(subFolders);
@@ -220,6 +231,7 @@ public class BannerController extends BaseController implements IBannerControlle
   // Paginated endpoints
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<PagedResponse<DtoBanner>> getAllBannersPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
@@ -232,6 +244,7 @@ public class BannerController extends BaseController implements IBannerControlle
 
   @Override
   @GetMapping("/list/summary/paged")
+  @PreAuthorize("hasAuthority('banners:read')")
   public RootEntityResponse<PagedResponse<DtoBannerSummary>> getAllBannersWithSummaryPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,

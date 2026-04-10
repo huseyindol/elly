@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IComponentController;
 import com.cms.dto.DtoComponent;
 import com.cms.dto.DtoComponentIU;
@@ -36,6 +38,7 @@ public class ComponentController extends BaseController implements IComponentCon
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('components:create')")
   public RootEntityResponse<DtoComponent> createComponent(@RequestBody DtoComponentIU dtoComponentIU) {
     Component component = componentMapper.toComponent(dtoComponentIU);
     Component savedComponent = componentService.saveComponent(component, dtoComponentIU.getPageIds(),
@@ -46,6 +49,7 @@ public class ComponentController extends BaseController implements IComponentCon
 
   @Override
   @PutMapping("/{id}")
+  @PreAuthorize("hasAuthority('components:update')")
   public RootEntityResponse<DtoComponent> updateComponent(@PathVariable Long id,
       @RequestBody DtoComponentIU dtoComponentIU) {
     Component component = componentService.getComponentById(id);
@@ -58,6 +62,7 @@ public class ComponentController extends BaseController implements IComponentCon
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('components:delete')")
   public RootEntityResponse<Boolean> deleteComponent(@PathVariable Long id) {
     Boolean deleted = componentService.deleteComponent(id);
     if (deleted) {
@@ -68,6 +73,7 @@ public class ComponentController extends BaseController implements IComponentCon
 
   @Override
   @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('components:read')")
   public RootEntityResponse<DtoComponent> getComponentById(@PathVariable Long id) {
     Component component = componentService.getComponentById(id);
     DtoComponent dtoComponent = componentMapper.toDtoComponent(component);
@@ -76,6 +82,7 @@ public class ComponentController extends BaseController implements IComponentCon
 
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('components:read')")
   public RootEntityResponse<List<DtoComponent>> getAllComponents() {
     List<Component> components = componentService.getAllComponents();
     List<DtoComponent> dtoComponents = componentMapper.toDtoComponentListSimple(components);
@@ -84,6 +91,7 @@ public class ComponentController extends BaseController implements IComponentCon
 
   @Override
   @GetMapping("/list/summary")
+  @PreAuthorize("hasAuthority('components:read')")
   public RootEntityResponse<List<DtoComponentSummary>> getAllComponentsSummary() {
     List<DtoComponentSummary> dtoComponentSummary = componentService.getAllComponentsSummary();
     return ok(dtoComponentSummary);
@@ -92,6 +100,7 @@ public class ComponentController extends BaseController implements IComponentCon
   // Paginated endpoints
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('components:read')")
   public RootEntityResponse<PagedResponse<DtoComponent>> getAllComponentsPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
@@ -104,6 +113,7 @@ public class ComponentController extends BaseController implements IComponentCon
 
   @Override
   @GetMapping("/list/summary/paged")
+  @PreAuthorize("hasAuthority('components:read')")
   public RootEntityResponse<PagedResponse<DtoComponentSummary>> getAllComponentsSummaryPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,

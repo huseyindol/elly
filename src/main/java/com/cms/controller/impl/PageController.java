@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IPageController;
 import com.cms.dto.DtoPage;
 import com.cms.dto.DtoPageDetail;
@@ -39,6 +41,7 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('pages:create')")
   public RootEntityResponse<DtoPage> createPage(@RequestBody DtoPageIU dtoPageIU) {
     Page page = pageMapper.toPage(dtoPageIU);
 
@@ -54,6 +57,7 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @PutMapping("/{id}")
+  @PreAuthorize("hasAuthority('pages:update')")
   public RootEntityResponse<DtoPage> updatePage(@PathVariable Long id, @RequestBody DtoPageIU dtoPageIU) {
     Page page = pageService.getPageById(id);
     pageMapper.updatePageFromDto(dtoPageIU, page);
@@ -74,6 +78,7 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('pages:delete')")
   public RootEntityResponse<Boolean> deletePage(@PathVariable Long id) {
     Boolean deleted = pageService.deletePage(id);
     if (deleted) {
@@ -84,6 +89,7 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @GetMapping("/{slug}")
+  @PreAuthorize("hasAuthority('pages:read')")
   public RootEntityResponse<DtoPageDetail> getPageBySlug(@PathVariable String slug) {
     Page pageBySlug = pageService.getPageBySlug(slug);
     DtoPageDetail dtoPage = pageMapper.toDtoPageDetail(pageBySlug);
@@ -92,6 +98,7 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('pages:read')")
   public RootEntityResponse<List<DtoPage>> getAllPages() {
     List<Page> pages = pageService.getAllPages();
     List<DtoPage> dtoPages = pageMapper.toDtoPageListSimple(pages);
@@ -100,6 +107,7 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @GetMapping("/list/summary")
+  @PreAuthorize("hasAuthority('pages:read')")
   public RootEntityResponse<List<DtoPageSummary>> getAllPageSummary() {
     List<DtoPageSummary> pages = pageService.getAllPageSummary();
     return ok(pages);
@@ -108,6 +116,7 @@ public class PageController extends BaseController implements IPageController {
   // Paginated endpoints
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('pages:read')")
   public RootEntityResponse<PagedResponse<DtoPage>> getAllPagesPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,
@@ -120,6 +129,7 @@ public class PageController extends BaseController implements IPageController {
 
   @Override
   @GetMapping("/list/summary/paged")
+  @PreAuthorize("hasAuthority('pages:read')")
   public RootEntityResponse<PagedResponse<DtoPageSummary>> getAllPageSummaryPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,

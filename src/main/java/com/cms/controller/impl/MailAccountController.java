@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IMailAccountController;
 import com.cms.dto.DtoMailAccountRequest;
 import com.cms.dto.DtoMailAccountResponse;
@@ -36,6 +38,7 @@ public class MailAccountController extends BaseController implements IMailAccoun
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   @Override
+  @PreAuthorize("hasAuthority('mail:create')")
   public RootEntityResponse<DtoMailAccountResponse> create(
       @Valid @RequestBody DtoMailAccountRequest request) {
     return ok(mailAccountService.create(request));
@@ -43,6 +46,7 @@ public class MailAccountController extends BaseController implements IMailAccoun
 
   @PutMapping("/{id}")
   @Override
+  @PreAuthorize("hasAuthority('mail:update')")
   public RootEntityResponse<DtoMailAccountResponse> update(
       @PathVariable Long id,
       @Valid @RequestBody DtoMailAccountRequest request) {
@@ -51,30 +55,35 @@ public class MailAccountController extends BaseController implements IMailAccoun
 
   @GetMapping("/{id}")
   @Override
+  @PreAuthorize("hasAuthority('mail:read')")
   public RootEntityResponse<DtoMailAccountResponse> getById(@PathVariable Long id) {
     return ok(mailAccountService.getById(id));
   }
 
   @GetMapping
   @Override
+  @PreAuthorize("hasAuthority('mail:read')")
   public RootEntityResponse<List<DtoMailAccountResponse>> getAll() {
     return ok(mailAccountService.getAll());
   }
 
   @DeleteMapping("/{id}")
   @Override
+  @PreAuthorize("hasAuthority('mail:delete')")
   public RootEntityResponse<Boolean> delete(@PathVariable Long id) {
     return ok(mailAccountService.delete(id));
   }
 
   @PutMapping("/{id}/default")
   @Override
+  @PreAuthorize("hasAuthority('mail:update')")
   public RootEntityResponse<DtoMailAccountResponse> setDefault(@PathVariable Long id) {
     return ok(mailAccountService.setDefault(id));
   }
 
   @PostMapping("/{id}/test")
   @Override
+  @PreAuthorize("hasAuthority('mail:create')")
   public RootEntityResponse<String> testConnection(
       @PathVariable Long id,
       @Valid @RequestBody DtoMailTestRequest request) {

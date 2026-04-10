@@ -65,6 +65,7 @@ public class AuthController extends BaseController implements IAuthController {
     String jwt = authHeader.substring(7);
     Map<String, Object> claims = new LinkedHashMap<>();
     claims.put("username", jwtUtil.extractUsername(jwt));
+    claims.put("loginSource", jwtUtil.extractLoginSource(jwt));
     claims.put("userId", jwtUtil.extractUserId(jwt));
     claims.put("tenantId", jwtUtil.extractTenantId(jwt));
     claims.put("tokenVersion", jwtUtil.extractTokenVersion(jwt));

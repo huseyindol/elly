@@ -1,0 +1,19 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "teammateMode": "in-process",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -qiE '(DROP TABLE|DROP DATABASE|DELETE FROM|TRUNCATE TABLE)'; then echo 'UYARI: Destructive SQL komutu tespit edildi! Devam etmeden önce onay ver.'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

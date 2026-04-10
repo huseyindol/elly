@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IEmailController;
 import com.cms.dto.DtoEmailLog;
 import com.cms.dto.EmailRequest;
@@ -29,6 +31,7 @@ public class EmailController implements IEmailController {
   @PostMapping("/send")
   @ResponseStatus(HttpStatus.ACCEPTED)
   @Override
+  @PreAuthorize("hasAuthority('emails:send')")
   public RootEntityResponse<DtoEmailLog> sendEmail(@Valid @RequestBody EmailRequest request) {
     DtoEmailLog result = emailService.sendEmail(request);
     RootEntityResponse<DtoEmailLog> response = new RootEntityResponse<>();
@@ -40,6 +43,7 @@ public class EmailController implements IEmailController {
 
   @GetMapping("/templates")
   @Override
+  @PreAuthorize("hasAuthority('emails:read')")
   public RootEntityResponse<List<String>> getAvailableTemplates() {
     return RootEntityResponse.ok(emailService.getAvailableTemplates());
   }

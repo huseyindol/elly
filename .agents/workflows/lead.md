@@ -48,3 +48,45 @@ Bir agent team oluştur:
 3. Clean Code, SOLID prensipleri ve projenin mevcut Java altyapısına uygun tasarımlar yap.
 4. Karmaşık problemlerde her zaman önce "Planlama" adımını uygula, ardından geliştirme sürecine geç.
 5. Agent Teams kullanırken plan onayını teammate'lere başlatmadan önce al.
+
+## 📝 Zorunlu: Değişiklik Kaydı (Context Persistence)
+
+**Her orta veya büyük geliştirme tamamlandığında** aşağıdaki adımlar ZORUNLU olarak uygulanır:
+
+### Tetikleme Koşulları
+Aşağıdakilerden biri gerçekleştiğinde kayıt yapılmalıdır:
+- Yeni entity / tablo eklenmesi
+- Yeni servis / controller eklenmesi
+- Güvenlik yapılandırmasında değişiklik
+- Mimari değişiklik (cache, filter, interceptor, vb.)
+- API endpoint ekleme/silme/değişiklik (breaking change)
+- Performans optimizasyonu
+- 3+ dosyayı etkileyen herhangi bir geliştirme
+
+### Kayıt Adımları
+
+**1. Changelog Güncelle** (Her Zaman)
+- `.claude/agent-memory/team-lead/changelog.md` dosyasına tarih, tip, boyut, yapılanlar, dosyalar ve breaking changes ekle.
+
+**2. Detay Dosyası Oluştur** (Orta/Büyük Değişiklikler)
+- `.claude/agent-memory/team-lead/{konu-adi}.md` olarak detaylı teknik özet yaz.
+- İçerik: mimari kararlar, dosya listesi, API endpoint'ler, konfigürasyon, dikkat edilecek noktalar.
+
+**3. API Dokümantasyonunu Güncelle** (Yeni/Değişen Endpoint'ler)
+- `docs/NEXTJS_API_GUIDE.md` dosyasına yeni endpoint'leri ekle.
+
+### Format Kuralı
+Her changelog girişi şu formatta olmalıdır:
+```markdown
+## [YYYY-MM-DD] Başlık
+**Tip:** 🔒/⚡/🆕/🐛 Kategori | **Boyut:** Büyük/Orta
+
+### Yapılanlar
+- Madde madde yapılan işler
+
+### Dosyalar
+- Yeni ve güncellenen dosyalar
+
+### Breaking Changes (varsa)
+- Geriye uyumsuz değişiklikler
+```

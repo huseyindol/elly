@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.IAssetsController;
 import com.cms.dto.DtoAssets;
 import com.cms.dto.DtoAssetsIU;
@@ -40,6 +42,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @PostMapping(consumes = "multipart/form-data")
+  @PreAuthorize("hasAuthority('assets:create')")
   public RootEntityResponse<DtoAssets> createAssets(
       @ParameterObject @ModelAttribute DtoAssetsIU dtoAssetsIU,
       @RequestParam(value = "file", required = true) MultipartFile file) {
@@ -55,6 +58,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @PostMapping(value = "/multi", consumes = "multipart/form-data")
+  @PreAuthorize("hasAuthority('assets:create')")
   public RootEntityResponse<List<DtoAssets>> createMultipleAssets(
       @ParameterObject @ModelAttribute DtoAssetsIU dtoAssetsIU,
       @RequestParam(value = "files", required = true) List<MultipartFile> files) {
@@ -67,6 +71,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @PutMapping(value = "/{id}", consumes = "multipart/form-data")
+  @PreAuthorize("hasAuthority('assets:update')")
   public RootEntityResponse<DtoAssets> updateAssets(@PathVariable Long id,
       @RequestParam(value = "file", required = true) MultipartFile file) {
     Assets assets = assetsService.getAssetsById(id);
@@ -80,6 +85,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('assets:delete')")
   public RootEntityResponse<Boolean> deleteAssets(@PathVariable Long id) {
     Boolean deleted = assetsService.deleteAssets(id);
     if (deleted) {
@@ -90,6 +96,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/id/{id}")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<DtoAssets> getAssetsById(@PathVariable Long id) {
     Assets assets = assetsService.getAssetsById(id);
     DtoAssets dtoAssets = assetsMapper.toDtoAssets(assets);
@@ -98,6 +105,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/{name}")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<List<DtoAssets>> getAssetsByName(@PathVariable String name) {
     List<Assets> assets = assetsService.getAssetsByName(name);
     List<DtoAssets> dtoAssets = assets.stream().map(assetsMapper::toDtoAssets).collect(Collectors.toList());
@@ -106,6 +114,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/{name}/paged")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<PagedResponse<DtoAssets>> getAssetsByNamePaged(
       @PathVariable String name,
       @RequestParam(defaultValue = "0") int page,
@@ -120,6 +129,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/sub-folders")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<List<String>> getAllSubFolders() {
     List<String> subFolders = assetsService.getAllSubFolders();
     return ok(subFolders);
@@ -127,6 +137,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/list/{subFolder}")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<List<DtoAssets>> getAssetsBySubFolder(@PathVariable String subFolder) {
     List<Assets> assets = assetsService.getAssetsBySubFolder(subFolder);
     List<DtoAssets> dtoAssets = assets.stream().map(assetsMapper::toDtoAssets).collect(Collectors.toList());
@@ -135,6 +146,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/list/{subFolder}/paged")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<PagedResponse<DtoAssets>> getAssetsBySubFolderPaged(
       @PathVariable String subFolder,
       @RequestParam(defaultValue = "0") int page,
@@ -149,6 +161,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/{subFolder}/{name}/paged")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<PagedResponse<DtoAssets>> getAssetsBySubFolderAndNamePaged(
       @PathVariable String subFolder,
       @PathVariable String name,
@@ -164,6 +177,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/list")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<List<DtoAssets>> getAllAssets() {
     List<Assets> assets = assetsService.getAllAssets();
     List<DtoAssets> dtoAssets = assets.stream().map(assetsMapper::toDtoAssets).collect(Collectors.toList());
@@ -172,6 +186,7 @@ public class AssetsController extends BaseController implements IAssetsControlle
 
   @Override
   @GetMapping("/list/paged")
+  @PreAuthorize("hasAuthority('assets:read')")
   public RootEntityResponse<com.cms.dto.PagedResponse<DtoAssets>> getAllAssetsPaged(
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size,

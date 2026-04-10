@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.cms.controller.ICommentController;
 import com.cms.dto.DtoComment;
 import com.cms.dto.DtoCommentIU;
@@ -34,6 +36,7 @@ public class CommentController extends BaseController implements ICommentControl
 
   @Override
   @PostMapping
+  @PreAuthorize("hasAuthority('comments:create')")
   public RootEntityResponse<DtoComment> saveComment(@Valid @RequestBody DtoCommentIU dtoCommentIU) {
     Comment comment = commentMapper.toComment(dtoCommentIU);
     if (dtoCommentIU.getPostId() != null) {
@@ -53,6 +56,7 @@ public class CommentController extends BaseController implements ICommentControl
 
   @Override
   @DeleteMapping("/{id}")
+  @PreAuthorize("hasAuthority('comments:delete')")
   public RootEntityResponse<Boolean> deleteComment(@PathVariable Long id) {
     Boolean deleted = commentService.deleteComment(id);
     if (deleted) {
@@ -63,6 +67,7 @@ public class CommentController extends BaseController implements ICommentControl
 
   @Override
   @GetMapping("/post/{postId}")
+  @PreAuthorize("hasAuthority('comments:read')")
   public RootEntityResponse<List<DtoComment>> getCommentsByPostId(@PathVariable Long postId) {
     List<Comment> comments = commentService.getTopLevelCommentsByPostId(postId);
     List<DtoComment> dtoComments = commentMapper.toDtoComments(comments);
@@ -71,6 +76,7 @@ public class CommentController extends BaseController implements ICommentControl
 
   @Override
   @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('comments:read')")
   public RootEntityResponse<DtoComment> getCommentById(@PathVariable Long id) {
     Comment comment = commentService.getCommentById(id);
     DtoComment dtoComment = commentMapper.toDtoComment(comment);

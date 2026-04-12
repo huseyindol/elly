@@ -91,4 +91,12 @@ public class MailAccountController extends BaseController implements IMailAccoun
     mailTestService.sendTestEmail(account, request.getTestTo());
     return ok("Test maili başarıyla gönderildi → " + request.getTestTo());
   }
+
+  @PostMapping("/{id}/verify")
+  @Override
+  @PreAuthorize("hasAuthority('mail:read')")
+  public RootEntityResponse<String> verifyConnection(@PathVariable Long id) {
+    mailAccountService.testConnection(id);
+    return ok("SMTP bağlantısı başarılı");
+  }
 }

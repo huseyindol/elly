@@ -60,11 +60,25 @@ public class TenantMailSenderFactory {
     Properties props = sender.getJavaMailProperties();
     props.put("mail.transport.protocol", "smtp");
     props.put("mail.smtp.auth", "true");
-    props.put("mail.smtp.starttls.enable", "true");
-    props.put("mail.smtp.starttls.required", "true");
 
-    log.info("JavaMailSender oluşturuldu: mailAccountId={}, host={}:{}",
-        account.getId(), account.getSmtpHost(), account.getSmtpPort());
+    if (account.getSmtpPort() == 465) {
+      // SSL/TLS (Gmail 465 portu)
+      props.put("mail.smtp.ssl.enable", "true");
+      props.put("mail.smtp.ssl.trust", account.getSmtpHost());
+    } else {
+      // STARTTLS (587 portu — Gmail için önerilen)
+      props.put("mail.smtp.starttls.enable", "true");
+      props.put("mail.smtp.starttls.required", "true");
+    }
+
+    // Connection timeout — SMTP sunucusu yanıt vermezse 10sn'de kes
+    props.put("mail.smtp.connectiontimeout", "10000");
+    props.put("mail.smtp.timeout", "10000");
+    props.put("mail.smtp.writetimeout", "10000");
+
+    log.info("JavaMailSender oluşturuldu: mailAccountId={}, host={}:{}, ssl={}",
+        account.getId(), account.getSmtpHost(), account.getSmtpPort(),
+        account.getSmtpPort() == 465);
     return sender;
   }
 }

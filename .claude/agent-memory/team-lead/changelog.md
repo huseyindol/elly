@@ -5,6 +5,32 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-04-12] Tenant-Based Gmail SMTP Mail Gönderimi
+**Tip:** 🆕 Özellik + 🐛 Bugfix | **Boyut:** Orta
+
+### Yapılanlar
+- Spring Mail auto-config (`MailSenderAutoConfiguration`) exclude edildi — pod crash root cause çözüldü
+- `spring.mail.*` property'leri tamamen kaldırıldı — mail gönderimi artık 100% DB-based (MailAccount)
+- RabbitMQ retry queue (30sn TTL gecikme) eklendi — tight-loop retry önlendi
+- `TenantMailSenderFactory`: Gmail SSL/TLS port otomasyonu + 10sn connection timeout eklendi
+- `POST /api/v1/mail-accounts/{id}/verify` endpoint'i eklendi — mail göndermeden SMTP doğrulaması
+
+### Dosyalar
+- Güncellenen: EllyApplication.java, application.properties, RabbitMQConfig.java, TenantMailSenderFactory.java, EmailQueueService.java, MailAccountService.java, MailAccountController.java, IMailAccountService.java, IMailAccountController.java
+
+### Konfigürasyon
+- Gmail: smtp.gmail.com:587 (STARTTLS) | Google App Password gerekli (2FA açık olmalı)
+- Her tenant panelden kendi mail hesabını ekler → `mail_accounts` tablosu (AES şifreli)
+
+### Breaking Changes
+- `spring.mail.*` env variable'ları artık kullanılmıyor (MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD)
+- RabbitMQ'da `email-retry-queue` ve `email-retry-exchange` yeni oluşacak
+
+### Detay Dosyası
+- `.claude/agent-memory/team-lead/tenant-mail-smtp.md`
+
+---
+
 ## [2026-04-10] RBAC Permission System
 **Tip:** 🔒 Güvenlik | **Boyut:** Büyük
 

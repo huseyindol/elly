@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,12 +12,14 @@ import com.cms.config.TenantMailSenderFactory;
 import com.cms.dto.DtoMailAccountRequest;
 import com.cms.dto.DtoMailAccountResponse;
 import com.cms.entity.MailAccount;
+import com.cms.exception.BadRequestException;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.mapper.MailAccountMapper;
 import com.cms.repository.MailAccountRepository;
 import com.cms.service.IMailAccountService;
 import com.cms.util.AesEncryptor;
 
+import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -119,6 +122,24 @@ public class MailAccountService implements IMailAccountService {
     return repository.findByIsDefaultTrueAndActiveTrue()
         .orElseThrow(() -> new ResourceNotFoundException(
             "Varsayılan aktif mail hesabı bulunamadı. Lütfen panelden bir hesap ekleyin ve varsayılan olarak işaretleyin."));
+  }
+
+  @Override
+  public boolean testConnection(Long id) {
+    MailAccount account = findOrThrow(id);
+    JavaMailSenderImpl sender = (JavaMailSenderImpl) mailSenderFactory.getMailSender(account);
+    try {
+      sender.testConnection();
+      log.info("SMTP bağlantısı başarılı: hesap='{}', host={}:{}",
+          account.getName(), account.getSmtpHost(), account.getSmtpPort());
+      return true;
+    } catch (MessagingException e) {
+      log.error("SMTP bağlantısı başarısız: hesap='{}', hata='{}'",
+          account.getName(), e.getMessage());
+      throw new BadRequestException(
+          "SMTP bağlantısı başarısız [" + account.getSmtpHost() + ":" + account.getSmtpPort() + "]: "
+              + e.getMessage());
+    }
   }
 
   private MailAccount findOrThrow(Long id) {

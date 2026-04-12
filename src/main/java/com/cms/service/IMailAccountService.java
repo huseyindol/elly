@@ -29,4 +29,10 @@ public interface IMailAccountService {
    * Bulunamazsa {@link com.cms.exception.ResourceNotFoundException} fırlatır.
    */
   MailAccount getDefaultEntity();
+
+  /**
+   * SMTP bağlantısını doğrular — mail göndermeden sunucuya bağlanır.
+   * Bağlantı başarısızsa {@link com.cms.exception.BadRequestException} fırlatır.
+   */
+  boolean testConnection(Long id);
 }

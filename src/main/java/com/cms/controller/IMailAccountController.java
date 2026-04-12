@@ -25,4 +25,7 @@ public interface IMailAccountController {
 
   /** Gerçek SMTP bağlantısı açarak testTo adresine deneme maili gönderir. */
   RootEntityResponse<String> testConnection(Long id, @Valid DtoMailTestRequest request);
+
+  /** Mail göndermeden SMTP bağlantısını doğrular. */
+  RootEntityResponse<String> verifyConnection(Long id);
 }

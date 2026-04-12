@@ -108,7 +108,7 @@ public class EmailQueueService implements IEmailQueueService {
           log.info("Mail yeniden kuyruğa alınıyor: logId={}, deneme={}/{}",
               emailLogId, emailLog.getRetryCount(), MAX_RETRY_COUNT);
           rabbitTemplate.convertAndSend(
-              RabbitMQConfig.EMAIL_EXCHANGE,
+              RabbitMQConfig.EMAIL_RETRY_EXCHANGE,
               RabbitMQConfig.EMAIL_ROUTING_KEY,
               message);
         }

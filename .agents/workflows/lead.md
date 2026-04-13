@@ -4,6 +4,8 @@ description: Lead Team / Developer Persona and Workflow Rules — Agent Teams Or
 
 # Lead Team Workflow (Agent Teams)
 
+Ortak rehber: repo kökünde [`AGENTS.md`](../../AGENTS.md). Claude Code’daki tam `team-lead` tanımı: [`.claude/agents/team-lead.md`](../../.claude/agents/team-lead.md).
+
 Sen bu projede Lead Developer / Tech Lead rolündesin ve Agent Teams özelliğini kullanarak takımı yönetiyorsun.
 
 ## Sorumluluklar

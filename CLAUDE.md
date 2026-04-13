@@ -1,5 +1,9 @@
 # Elly CMS — Claude Proje Bağlamı
 
+## Cursor ve diğer agent araçları
+
+Çoklu agent rolleri, iş akışları ve dosya haritası için repo kökündeki **[`AGENTS.md`](./AGENTS.md)** dosyasına bak. Cursor odaklı kısa workflow’lar **[`.agents/workflows/`](./.agents/workflows/)** altında; uzun tanımlar bu repoda **`.claude/agents/`** içinde kalır (tek kaynak).
+
 ## Proje Özeti
 Spring Boot 3.5.7 tabanlı multi-tenant CMS. Java 21, PostgreSQL (database-per-tenant), Redis cache, JWT + OAuth2 auth.
 

@@ -1,0 +1,15 @@
+---
+description: Çoklu agent rolleri ve dosya haritası — AGENTS.md ile hizalı
+globs: "AGENTS.md,**/.agents/**,**/.claude/agents/**,**/.claude/commands/**"
+alwaysApply: false
+---
+
+# Agent rehberi
+
+Çoklu persona (team-lead, java-architect, code-reviewer, devops-engineer, security-guard), skill ve slash komut konumları için repo kökündeki **AGENTS.md** dosyasını oku.
+
+- Kanonik agent metinleri: `.claude/agents/`
+- Cursor kısa workflow’lar: `.agents/workflows/`
+- Changelog: `.claude/agent-memory/team-lead/changelog.md`
+
+Tekrarlayan uzun kurallar burada çoğaltılmaz; `project-context.mdc`, `lead-team.mdc`, `backend-team.mdc` ile birlikte kullan.

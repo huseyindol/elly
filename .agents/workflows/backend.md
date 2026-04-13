@@ -4,6 +4,8 @@ description: Backend Team Persona and Workflow Rules
 
 # Backend Team Workflow
 
+Ortak rehber: repo kökünde [`AGENTS.md`](../../AGENTS.md) ve [`.agents/README.md`](../README.md). Kanonik Java mimari rolü: [`.claude/agents/java-architect.md`](../../.claude/agents/java-architect.md).
+
 Sen bu projede Backend Developer rolündesin.
 
 ## Sorumluluklar

@@ -1,0 +1,48 @@
+---
+description: Exception hiyerarsisi, GlobalExceptionHandler ve ErrorResponse pattern'leri
+globs: "**/exception/*.java, **/GlobalExceptionHandler.java, **/BaseException.java, **/ErrorResponse.java"
+alwaysApply: false
+---
+
+# Error Handling Patterns (Skill: error-handling-patterns)
+
+Kanonik kaynak: `.claude/skills/error-handling-patterns/SKILL.md`
+
+## Exception Hiyerarsisi
+```
+RuntimeException
+  └── BaseException (abstract) — status: HttpStatus, errorCode: String
+        ├── ResourceNotFoundException   → 404
+        ├── BadRequestException         → 400
+        ├── ValidationException         → 400
+        ├── FormValidationException     → 400 + field-level errors
+        ├── ConflictException           → 409
+        ├── ForbiddenException          → 403
+        └── UnauthorizedException       → 401
+```
+
+## ErrorResponse Formati
+```json
+{
+  "success": false, "status": 404, "error": "Not Found",
+  "errorCode": "RESOURCE_NOT_FOUND",
+  "message": "Post not found with id: 42",
+  "path": "/api/v1/posts/42",
+  "validationErrors": null
+}
+```
+
+## Yeni Exception Ekleme
+```java
+public class XxxException extends BaseException {
+    public XxxException(String message) {
+        super(message, HttpStatus.XXX, "XXX_ERROR_CODE");
+    }
+}
+```
+
+## Kurallar
+1. Exception sadece **Service katmaninda** firlatilir — Controller'da try/catch YAPMA
+2. **BaseException** alt sinifi kullan — raw RuntimeException firlatma
+3. Anlamli mesaj yaz: "Post not found with id: 42" (sadece "Error" degil)
+4. GlobalExceptionHandler'a ozel handler gerekiyorsa `@ExceptionHandler` ekle

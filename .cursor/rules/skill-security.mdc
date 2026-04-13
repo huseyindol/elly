@@ -1,0 +1,40 @@
+---
+description: JWT, OAuth2, Spring Security pattern'leri ve endpoint guvenlik kurallari
+globs: "**/SecurityConfig.java, **/JwtUtil.java, **/JwtAuthenticationFilter.java, **/OAuth2*.java, **/AuthService.java, **/PermissionConstants.java"
+alwaysApply: false
+---
+
+# Spring Security Patterns (Skill: spring-security-patterns)
+
+Kanonik kaynak: `.claude/skills/spring-security-patterns/SKILL.md`
+
+## JWT Yapisi
+```java
+JwtUtil.generateToken(user, loginSource, tenantId)        // Access token
+JwtUtil.generateRefreshToken(user, loginSource, tenantId) // Refresh token
+// Claims: sub (email), loginSource (ADMIN|TENANT|OAUTH2), tenantId
+```
+
+## Login Akislari
+| Akis | Endpoint | loginSource |
+|------|----------|-------------|
+| Admin | `POST /api/auth/admin/login` | ADMIN |
+| Tenant | `POST /api/auth/login` | TENANT |
+| OAuth2 | `/oauth2/authorize/{provider}` | OAUTH2 |
+
+## RBAC
+- User → ManyToMany → Role → ManyToMany → Permission
+- `@EnableMethodSecurity` + `@PreAuthorize("hasAuthority('PERMISSION_NAME')")`
+- 4 rol: SUPER_ADMIN, ADMIN, EDITOR, VIEWER + 40+ permission
+- Auth cache: Redis `auth:user:{username}` TTL=30dk
+
+## Yeni Endpoint Guvenlik Checklist
+1. `SecurityConfig.java`'ya `requestMatchers` kurali ekle
+2. Method-level: `@PreAuthorize("hasAuthority('...')")`
+3. `PermissionConstants.java`'ya yeni permission ekle
+4. `DataInitializer.java`'da rollere ata
+
+## Filter Sirasi
+```
+JwtAuthenticationFilter → JwtTenantFilter → AdminLoginInterceptor → TenantLoginInterceptor
+```

@@ -1,0 +1,43 @@
+---
+description: Elly CMS kod konvansiyonlari — paket yapisi, katman kurallari, zorunlu pattern'ler
+globs: "**/controller/**/*.java, **/service/**/*.java, **/entity/*.java, **/mapper/*.java, **/dto/**/*.java, **/repository/*.java"
+alwaysApply: false
+---
+
+# Elly Conventions (Skill: elly-conventions)
+
+Kanonik kaynak: `.claude/skills/elly-conventions/SKILL.md`
+
+## Paket Yapisi
+```
+com.cms.
+├── config/          # Spring konfigurasyonlari
+├── controller/      # IXxxController interface
+│   └── impl/        # XxxController implementasyonlari
+├── service/         # IXxxService interface
+│   └── impl/        # XxxService implementasyonlari
+├── repository/      # Spring Data JPA
+├── entity/          # JPA @Entity
+├── mapper/          # MapStruct @Mapper
+├── dto/request/     # CreateRequest, UpdateRequest
+├── dto/response/    # XxxResponse
+├── exception/       # BaseException alt siniflari
+└── enums/           # Enum tanimlari
+```
+
+## Zorunlu Pattern
+```java
+// Entity: @Data @Builder @NoArgsConstructor @AllArgsConstructor @Entity @Table
+// Service: @Service @RequiredArgsConstructor @Transactional
+// Controller: @RestController @RequiredArgsConstructor
+// Mapper: @Mapper(componentModel = "spring")
+// Response: RootEntityResponse<T> ile wrap
+// DI: Constructor injection (@RequiredArgsConstructor), ASLA @Autowired field
+```
+
+## Yasak Pratikler
+- Entity'yi dogrudan controller'dan dondurme → MapStruct kullan
+- `@Autowired` field injection → `@RequiredArgsConstructor`
+- Tenant context olmadan cross-tenant query
+- Controller icinde `@Transactional`
+- Cache key'lerinde tenantId'yi elle ekleme (otomatik)

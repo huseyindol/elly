@@ -1,0 +1,40 @@
+---
+description: Elly CMS proje durumu, tamamlanan ozellikler, mimari kararlar ve oturum surekliligi
+alwaysApply: false
+---
+
+# Elly Project Mastery (Skill: elly-project-mastery)
+
+Kanonik kaynak: `.claude/skills/elly-project-mastery/SKILL.md`
+
+## Tamamlanan Buyuk Ozellikler
+
+| Tarih | Ozellik | Durum |
+|-------|---------|-------|
+| 2026-04-12 | Tenant-Based Gmail SMTP + RabbitMQ Retry | Tamamlandi |
+| 2026-04-10 | RBAC Permission System (Role/Permission/PreAuthorize) | Tamamlandi |
+| 2026-04-10 | User Auth Redis Cache (auth:user:{username}) | Tamamlandi |
+
+## Kritik Konfigurasyon Kararlari
+
+| Karar | Neden |
+|-------|-------|
+| spring.mail.* kaldirildi | Pod CrashLoopBackOff onlemek |
+| DB-based mail SMTP | Her tenant kendi Gmail'ini kullaniyor |
+| Redis user auth cache | Her request'te 3 SQL → 1 Redis GET |
+| Constructor injection zorunlu | @Autowired yasak |
+| RabbitMQ retry TTL=30sn | Tight-loop retry onlemek |
+
+## Changelog ve Gorev Dosyalari
+- `.claude/agent-memory/team-lead/changelog.md` — tum degisiklik kayitlari
+- `.claude/agent-memory/team-lead/*.md` — konu bazli teknik detaylar
+
+## Skill Envanteri — Gorev Turune Gore
+
+| Gorev | Aktif Skill'ler |
+|-------|-----------------|
+| Yeni entity/endpoint | elly-conventions, multitenant-routing, error-handling-patterns |
+| Cache sorunu | redis-cache-patterns |
+| Queue/consumer | rabbitmq-patterns, multitenant-routing |
+| Auth/guvenlik | spring-security-patterns, multitenant-routing |
+| Kod review | elly-conventions, redis-cache-patterns, error-handling-patterns |

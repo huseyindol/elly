@@ -69,11 +69,12 @@ Auth Flow:
 
 - **Runtime:** Java 21, Spring Boot 3.5.7
 - **DB:** PostgreSQL (database-per-tenant: basedb, tenant1, tenant2)
-- **Cache:** Redis (`auth:user:{username}` TTL=30dk)
+- **Cache:** Redis (`auth:user:{username}` TTL=30dk, genel cache TTL=10dk)
 - **Queue:** RabbitMQ (email-queue, email-retry-queue, email-dlq)
 - **Auth:** JWT + OAuth2 (Google, Facebook, GitHub)
-- **Mail:** Tenant-based Gmail SMTP (DB'den, AES-256-CBC şifreli)
-- **Security:** RBAC (@PreAuthorize + Permission entity)
+- **Mail:** Tenant-based Gmail SMTP (DB'den, AES-256-CBC sifreli)
+- **Security:** RBAC (@PreAuthorize + Permission entity, 40+ permission)
+- **Exception:** BaseException hiyerarsisi + GlobalExceptionHandler
 
 ### Kritik Konfigürasyon Kararları
 
@@ -120,6 +121,20 @@ src/main/java/com/cms/
 
 ---
 
+## SKİLL ENVANTERİ — Görev Türüne Göre Hangi Skill
+
+| Görev | Aktif Edilecek Skill'ler |
+|-------|-------------------------|
+| Yeni entity/endpoint | elly-conventions, multitenant-routing, error-handling-patterns |
+| Cache ekleme/sorunu | redis-cache-patterns |
+| Queue/consumer ekleme | rabbitmq-patterns, multitenant-routing |
+| Auth/güvenlik değişikliği | spring-security-patterns, multitenant-routing |
+| Kod review | elly-conventions, redis-cache-patterns, error-handling-patterns |
+| Deployment sorunu | elly-project-mastery (kritik konfigürasyon kararları) |
+| Oturum devam | dev-session-tracker, elly-project-mastery |
+
+Tüm skill dosyaları: `.claude/skills/<skill-adi>/SKILL.md`
+
 ## GELİŞTİRME KURALLARI — Her Değişiklikte Uygula
 
 ### Yeni Özellik Eklerken
@@ -127,8 +142,10 @@ src/main/java/com/cms/
 2. Şu sırayı takip et: `Entity → Repository → IService → ServiceImpl → IController → Controller → DTO → Mapper`
 3. Her endpoint `RootEntityResponse<T>` döndürmeli
 4. Multi-tenant sorgularda `TenantContext.getCurrentTenant()` kullan
-5. Cache key'lerinde tenantId ekle: `{entity}:{tenantId}:{id}`
-6. Permission ekle: `PermissionConstants.java` + `DataInitializer.java`
+5. Cache: `redis-cache-patterns` skill'ine bak — tenant prefix otomatik, key pattern'i takip et
+6. Exception: `error-handling-patterns` skill'ine bak — BaseException alt sınıfı kullan
+7. Permission ekle: `PermissionConstants.java` + `DataInitializer.java`
+8. RabbitMQ consumer ekliyorsan: `rabbitmq-patterns` skill'ine bak — TenantContext set/clear zorunlu
 
 ### Değişiklik Sonrası Zorunlu Güncellemeler
 ```

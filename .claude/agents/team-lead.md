@@ -8,6 +8,20 @@ memory: project
 
 Sen Elly CMS projesinin Tech Lead'isin. Agent Teams orchestrator'ı olarak görev yaparsın.
 
+## Skill Sistemi — Teammate'lere Görev Atarken Kullan
+Skill'ler `.claude/skills/` altında, her biri bir SKILL.md dosyasıdır. Teammate'e görev verirken ilgili skill'leri referans göster:
+
+| Skill | Konu | Birincil Kullanıcı |
+|-------|------|--------------------|
+| `elly-conventions` | Paket yapısı, katman kuralları | java-architect, code-reviewer |
+| `multitenant-routing` | TenantContext, DataSource | java-architect, security-guard |
+| `spring-security-patterns` | JWT, OAuth2, SecurityConfig | security-guard, java-architect |
+| `redis-cache-patterns` | Cache key, TTL, invalidation | java-architect, code-reviewer |
+| `rabbitmq-patterns` | Queue, retry, DLQ | java-architect, devops-engineer |
+| `error-handling-patterns` | Exception, GlobalExceptionHandler | java-architect, code-reviewer |
+| `elly-project-mastery` | Proje durumu, mimari kararlar | team-lead (sen) |
+| `dev-session-tracker` | Oturum takibi, changelog | team-lead (sen) |
+
 ## Sorumlulukların
 
 **Görev Analizi & Dağıtım:**

@@ -1,0 +1,38 @@
+---
+description: RabbitMQ queue, exchange, retry ve DLQ pattern'leri
+globs: "**/RabbitMQConfig.java, **/EmailQueueService.java, **/EmailRescueJob.java, **/*QueueService.java"
+alwaysApply: false
+---
+
+# RabbitMQ Patterns (Skill: rabbitmq-patterns)
+
+Kanonik kaynak: `.claude/skills/rabbitmq-patterns/SKILL.md`
+
+## Mimari
+```
+Producer → RabbitTemplate.convertAndSend(exchange, routingKey, message)
+  → DirectExchange → Queue → @RabbitListener Consumer
+Hata: Consumer → retry-exchange → retry-queue (TTL=30sn) → ana exchange → ana queue
+Max retry asildiginda: FAILED + DLQ
+```
+
+## Mevcut Queue'lar (email)
+| Queue | Amac |
+|-------|------|
+| `email-queue` | Ana is kuyrugu (DLX=email-dead-letter-exchange) |
+| `email-retry-queue` | Gecikmeli retry (TTL=30sn, DLX=email-exchange) |
+| `email-dead-letter-queue` | Max retry sonrasi son durak |
+
+## Yeni Queue Ekleme
+1. `RabbitMQConfig`'e constant'lar ekle (QUEUE, EXCHANGE, ROUTING_KEY, DLQ, DLX, RETRY_QUEUE, RETRY_EXCHANGE)
+2. Ana queue: `QueueBuilder.durable().withArgument("x-dead-letter-exchange", DLX)...`
+3. Retry queue: `withArgument("x-message-ttl", 30_000)` + DLX=ana exchange
+4. DLQ: `new Queue(DLQ, true)`
+5. Exchange + Binding bean'leri
+
+## Consumer Kurallari
+1. **TenantContext:** Baslangicta `setTenantId()`, finally'de `clear()` — ZORUNLU
+2. **Retry:** `rabbitTemplate.convertAndSend(RETRY_EXCHANGE, ROUTING_KEY, message)` — dogrudan ana queue'ya degil
+3. **MAX_RETRY_COUNT = 3** asilinca FAILED + DLQ
+4. **Idempotency:** Ayni mesaj birden fazla islenebilir
+5. **Serialization:** Jackson2JsonMessageConverter

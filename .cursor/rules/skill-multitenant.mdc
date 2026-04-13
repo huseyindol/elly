@@ -1,0 +1,32 @@
+---
+description: Multi-tenant DataSource routing, TenantContext yonetimi ve tenant izolasyonu kurallari
+globs: "**/TenantContext.java, **/TenantDataSourceRouter.java, **/DataSourceConfig.java, **/JwtTenantFilter.java, **/TenantRoutingDataSource.java"
+alwaysApply: false
+---
+
+# Multi-Tenant Routing (Skill: multitenant-routing)
+
+Kanonik kaynak: `.claude/skills/multitenant-routing/SKILL.md`
+
+## Mimari
+- **Strateji:** Database-per-tenant (her tenant ayri PostgreSQL DB)
+- **Tenant'lar:** `basedb` (varsayilan), `tenant1`, `tenant2`
+- **Routing:** `TenantDataSourceRouter extends AbstractRoutingDataSource`
+- **Context:** `TenantContext` (ThreadLocal tabanli)
+
+## Request Akisi
+```
+HTTP Request → JwtTenantFilter → JWT'den tenantId cikart
+  → TenantContext.setCurrentTenant(tenantId)
+  → TenantDataSourceRouter.determineCurrentLookupKey()
+  → Dogru PostgreSQL DB'sine baglan
+  → finally: TenantContext.clear()
+```
+
+## Kritik Kurallar
+1. **@Async:** ThreadLocal kaybolur — tenant'i manuel aktar
+2. **Cache key'leri:** `computePrefixWith` otomatik tenant prefix ekler, ekstra ekleme
+3. **Test:** `@BeforeEach`'de `TenantContext.setCurrentTenant("basedb")`, `@AfterEach`'de `clear()`
+4. **RabbitMQ Consumer:** Baslangicta `setTenantId()`, finally'de `clear()` — ZORUNLU
+5. **TenantContext null:** `basedb`'ye fallback
+6. **Transaction icinde tenant degistirme:** TEHLIKELI, kacin

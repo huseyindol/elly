@@ -1,0 +1,39 @@
+---
+description: Redis cache pattern'leri — tenant-isolated key, TTL, invalidation, graceful fallback
+globs: "**/CacheConfig.java, **/GracefulCacheErrorHandler.java, **/CacheController.java, **/UserAuthCacheService.java"
+alwaysApply: false
+---
+
+# Redis Cache Patterns (Skill: redis-cache-patterns)
+
+Kanonik kaynak: `.claude/skills/redis-cache-patterns/SKILL.md`
+
+## Key Formati (Otomatik)
+```
+{tenantId}::{cacheName}::{key}
+Ornek: tenant1::posts::42
+```
+`CacheConfig.computePrefixWith` otomatik tenant prefix ekler. `@Cacheable` key'ine tenant ekleme.
+
+## TTL
+- Genel: 10 dakika
+- Auth cache: 30 dakika (`auth:user:{username}`, RedisTemplate ile)
+
+## Pattern
+```java
+// Okuma
+@Cacheable(value = "posts", key = "#id")
+@Cacheable(value = "posts", key = "'paged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
+
+// Yazma/Silme — allEntries = true (list cache'ler de temizlenir, sadece o tenant'in)
+@CacheEvict(value = "posts", allEntries = true)
+```
+
+## Graceful Fallback
+`GracefulCacheErrorHandler` → Redis down ise `log.warn`, DB'den okumaya devam, uygulama cokmez.
+
+## Anti-Pattern'ler
+- `@Cacheable` + `@Transactional` ayni method: rollback olursa cache zehirlenir
+- `@CacheEvict` olmadan `@Cacheable`: stale data
+- Auth cache'ini annotation ile yonetme → `UserAuthCacheService` + RedisTemplate kullan
+- Cache key'inde entity referansi kullanma → primitive/String kullan

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import com.cms.entity.CmsBasicInfo;
@@ -15,4 +16,7 @@ public interface CmsBasicInfoRepository extends JpaRepository<CmsBasicInfo, UUID
   List<CmsBasicInfo> findBySectionKeyOrderBySortOrderAsc(String sectionKey);
 
   List<CmsBasicInfo> findBySectionKeyAndIsActiveTrueOrderBySortOrderAsc(String sectionKey);
+
+  @Query("SELECT DISTINCT b.sectionKey FROM CmsBasicInfo b WHERE b.isActive = true ORDER BY b.sectionKey")
+  List<String> findDistinctActiveSectionKeys();
 }

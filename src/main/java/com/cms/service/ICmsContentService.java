@@ -31,4 +31,6 @@ public interface ICmsContentService {
   List<CmsContent> getActiveCmsContentsBySectionKey(String sectionKey);
 
   Page<CmsContent> getAllCmsContentsPaged(Pageable pageable);
+
+  List<String> getDistinctSectionKeys();
 }

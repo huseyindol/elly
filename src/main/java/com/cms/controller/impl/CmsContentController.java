@@ -39,6 +39,14 @@ public class CmsContentController extends BaseController implements ICmsContentC
   private final CmsContentMapper cmsContentMapper;
 
   @Override
+  @GetMapping("/section/list")
+  @PreAuthorize("hasAuthority('contents:read')")
+  public RootEntityResponse<List<String>> getSectionKeys() {
+    List<String> sectionKeys = cmsContentService.getDistinctSectionKeys();
+    return ok(sectionKeys);
+  }
+
+  @Override
   @GetMapping("/section/{sectionKey}")
   @PreAuthorize("hasAuthority('contents:read')")
   public RootEntityResponse<List<DtoCmsContent>> getContentsBySectionKey(@PathVariable String sectionKey) {

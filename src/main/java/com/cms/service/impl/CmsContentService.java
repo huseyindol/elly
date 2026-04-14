@@ -17,6 +17,7 @@ import com.cms.service.ICmsContentService;
 
 import lombok.RequiredArgsConstructor;
 import com.cms.entity.CmsBasicInfo;
+import com.cms.repository.CmsBasicInfoRepository;
 import com.cms.service.ICmsBasicInfoService;
 
 @Service
@@ -24,6 +25,7 @@ import com.cms.service.ICmsBasicInfoService;
 public class CmsContentService implements ICmsContentService {
 
   private final CmsContentRepository cmsContentRepository;
+  private final CmsBasicInfoRepository cmsBasicInfoRepository;
   private final ICmsBasicInfoService cmsBasicInfoService;
 
   @Override
@@ -147,5 +149,11 @@ public class CmsContentService implements ICmsContentService {
   @Cacheable(value = "cmsContents", key = "'getAllCmsContentsPaged_' + #pageable.pageNumber + '_' + #pageable.pageSize + '_' + #pageable.sort.toString()")
   public Page<CmsContent> getAllCmsContentsPaged(Pageable pageable) {
     return cmsContentRepository.findAll(pageable);
+  }
+
+  @Override
+  @Cacheable(value = "cmsContents", key = "'distinctSectionKeys'")
+  public List<String> getDistinctSectionKeys() {
+    return cmsBasicInfoRepository.findDistinctActiveSectionKeys();
   }
 }

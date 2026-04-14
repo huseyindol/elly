@@ -26,4 +26,6 @@ public interface ICmsContentController {
   RootEntityResponse<DtoCmsContent> updateContent(UUID id, DtoCmsContentIU dtoCmsContentIU);
 
   RootEntityResponse<Boolean> deleteContent(UUID id);
+
+  RootEntityResponse<List<String>> getSectionKeys();
 }

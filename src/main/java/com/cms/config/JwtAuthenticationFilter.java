@@ -51,6 +51,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private String defaultTenant;
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    return Boolean.TRUE.equals(request.getAttribute(PublicApiFilter.PUBLIC_API_ATTRIBUTE));
+  }
+
+  @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
 

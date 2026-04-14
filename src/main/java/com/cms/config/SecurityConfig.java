@@ -16,6 +16,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -32,6 +33,7 @@ public class SecurityConfig {
   private final UserDetailsService userDetailsService;
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
   private final JwtTenantFilter jwtTenantFilter;
+  private final DataSourceConfig.TenantDataSourceProperties tenantDataSourceProperties;
   private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
   private final CustomOAuth2UserService customOAuth2UserService;
 
@@ -139,6 +141,7 @@ public class SecurityConfig {
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
+            .requestMatchers(HttpMethod.GET, "/api/v1/public/**").permitAll()
             .requestMatchers("/api/v1/auth/**").permitAll()
             .requestMatchers("/oauth2/**").permitAll()
             .requestMatchers("/login/oauth2/**").permitAll()
@@ -167,6 +170,9 @@ public class SecurityConfig {
     // konumlandırılıyor
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
     http.addFilterBefore(jwtTenantFilter, JwtAuthenticationFilter.class);
+    // PublicApiFilter en onde calismali — /api/v1/public/** icin tenant + anonymous auth set eder
+    PublicApiFilter publicApiFilter = new PublicApiFilter(tenantDataSourceProperties);
+    http.addFilterBefore(publicApiFilter, JwtTenantFilter.class);
 
     return http.build();
   }

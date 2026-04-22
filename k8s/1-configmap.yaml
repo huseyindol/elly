@@ -16,6 +16,12 @@ data:
   SERVER_PORT: "8080"
   APP_TIMEZONE: "Europe/Istanbul"
 
+  # --- JPA/Hibernate DDL Strategy ---
+  # Prod'da "validate": Hibernate sadece schema'yi dogrular, ALTER TABLE yapmaz.
+  # Schema degisiklikleri migration SQL'leri ile manuel uygulanir.
+  # Lokal gelistirmede application.properties default'u "update" kalir.
+  JPA_DDL_AUTO: "validate"
+
   # --- Default Tenant ---
   DEFAULT_TENANT: "basedb"
 

@@ -5,6 +5,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,11 +25,16 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * JPA/Hibernate konfigürasyonu Multi-Tenant DataSource ile.
- * 
- * Hibernate DDL (hbm2ddl.auto=update) startup sırasında default tenant
- * üzerinde otomatik çalışır. Diğer tenant'lar için
- * {@link #initializeTenantSchemas()} metodu ApplicationReadyEvent'te
- * her tenant datasource'unda Hibernate schema update tetikler.
+ *
+ * hbm2ddl.auto stratejisi {@code app.jpa.ddl-auto} property'sinden okunur
+ * (env: {@code JPA_DDL_AUTO}):
+ *   - update   : entity farklarini otomatik ALTER TABLE yapar (LOKAL default)
+ *   - validate : sadece dogrular, degistirmez (PROD ONERILEN)
+ *   - none     : Hibernate hic dokunmaz
+ *
+ * Startup sirasinda default tenant uzerinde otomatik calisir. Diger
+ * tenant'lar icin {@link #initializeTenantSchemas()} metodu
+ * ApplicationReadyEvent'te her tenant datasource'unda ayni stratejiyi tetikler.
  */
 @Configuration
 @EnableJpaRepositories(basePackages = "com.cms.repository")
@@ -40,12 +46,14 @@ public class JpaConfig {
 
   private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
 
+  @Value("${app.jpa.ddl-auto:update}")
+  private String ddlAuto;
+
   /**
    * LocalContainerEntityManagerFactoryBean - Hibernate SessionFactory yerine JPA
    * standard.
-   * TenantRoutingDataSource'u kullanır.
-   * hbm2ddl.auto=update: Default tenant schema'sında tabloları
-   * oluşturur/günceller.
+   * TenantRoutingDataSource'u kullanir.
+   * hbm2ddl.auto stratejisi {@code app.jpa.ddl-auto} property'sinden gelir.
    */
   @Bean
   public LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource dataSource) {
@@ -54,12 +62,15 @@ public class JpaConfig {
     em.setPackagesToScan("com.cms.entity");
 
     HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
-    vendorAdapter.setGenerateDdl(true);
+    // generateDdl sadece ddl-auto != none/validate icin anlamli
+    vendorAdapter.setGenerateDdl(!"none".equalsIgnoreCase(ddlAuto) && !"validate".equalsIgnoreCase(ddlAuto));
     vendorAdapter.setShowSql(true);
     em.setJpaVendorAdapter(vendorAdapter);
 
+    log.info("JPA hbm2ddl.auto strategy: {}", ddlAuto);
+
     Map<String, Object> properties = new HashMap<>();
-    properties.put("hibernate.hbm2ddl.auto", "update");
+    properties.put("hibernate.hbm2ddl.auto", ddlAuto);
     // properties.put("hibernate.dialect",
     // "org.hibernate.dialect.PostgreSQLDialect");
     properties.put("hibernate.format_sql", "true");
@@ -145,11 +156,11 @@ public class JpaConfig {
         tempEmf.setPackagesToScan("com.cms.entity");
 
         HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
-        vendorAdapter.setGenerateDdl(true);
+        vendorAdapter.setGenerateDdl(!"none".equalsIgnoreCase(ddlAuto) && !"validate".equalsIgnoreCase(ddlAuto));
         tempEmf.setJpaVendorAdapter(vendorAdapter);
 
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.hbm2ddl.auto", "update");
+        props.put("hibernate.hbm2ddl.auto", ddlAuto);
         props.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
         props.put("hibernate.physical_naming_strategy",
             "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy");

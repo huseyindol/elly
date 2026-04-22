@@ -94,6 +94,7 @@ Proje-spesifik bilgi birikimi `.claude/skills/` altinda tutulur. Agent'lar gorev
 | `rabbitmq-patterns` | Queue/exchange ekleme, consumer pattern, retry/DLQ |
 | `error-handling-patterns` | BaseException hiyerarsisi, GlobalExceptionHandler |
 | `dev-session-tracker` | Uzun gorevlerde ilerleme takibi, changelog |
+| `karpathy-guidelines` | Davranissal kurallar: overengineering'i onle, surgical degisim, goal-driven loop |
 
 ## Agent Teams
 Agent Teams aktif (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Buyuk gorevlerde paralel calisma icin takim kurulabilir.

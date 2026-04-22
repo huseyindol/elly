@@ -1,0 +1,72 @@
+---
+description: Behavioral guidelines to reduce common LLM coding mistakes. Use when writing, reviewing, or refactoring code to avoid overcomplication, make surgical changes, surface assumptions, and define verifiable success criteria.
+alwaysApply: true
+---
+
+# Karpathy behavioral guidelines
+
+LLM'lerin sik yaptigi kodlama hatalarini azaltmak icin davranissal kurallar. Proje-spesifik kurallarla (ornegin `elly-conventions`, `skill-*`) birlikte uygula.
+
+**Tradeoff:** Bu kurallar hizdan cok dikkati onceler. Trivial gorevler icin (tek satir fix, typo) gereksiz yere sert uygulama.
+
+## 1. Think Before Coding
+
+**Varsayma. Kafan karisiksa saklama. Tradeoff'lari yuzeye cikar.**
+
+Kod yazmadan once:
+- Varsayimlarini acik soyle. Emin degilsen sor.
+- Birden fazla yorum varsa hepsini sun — sessizce birini secme.
+- Daha basit bir yol varsa soyle. Gerektiginde itiraz et.
+- Belirsizlik varsa dur. Neyin net olmadigini adlandir. Sor.
+
+## 2. Simplicity First
+
+**Problemi cozen minimum kod. Spekulatif bir sey yok.**
+
+- Istenmeyen ozellik ekleme.
+- Tek kullanimlik koda abstraction kurma.
+- Istenmeyen "esneklik" / "configurability" koyma.
+- Olmayacak senaryolara error handling yazma.
+- 200 satir yazdin ama 50 satir yetseydi, yeniden yaz.
+
+Test sorusu: "Senior bir muhendis buna 'overengineered' der mi?" — Evetse basitlestir.
+
+## 3. Surgical Changes
+
+**Sadece gerekeni degistir. Sadece kendi yarattigin kirliligi temizle.**
+
+Mevcut kodu duzenlerken:
+- Cevredeki kod / yorum / formatlamayi "iyilestirmeye" calisma.
+- Bozuk olmayan seyi refactor etme.
+- Mevcut stili bozma, kendi tarzini dayatma.
+- Ilgisiz dead code gorursen **bahset, silme.**
+
+Degisikliklerin orphan yaratirsa:
+- Senin degisikligin yuzunden kullanilmayan import/variable/function'lari kaldir.
+- Onceden var olan dead code'u talep olmadan silme.
+
+Test: Degisen her satir dogrudan kullanicinin talebine baglanmali.
+
+## 4. Goal-Driven Execution
+
+**Basari kriterini tanimla. Dogrulanana kadar loop et.**
+
+Gorevleri dogrulanabilir hedeflere cevir:
+- "Validation ekle" → "Invalid input icin test yaz, sonra gecsin"
+- "Bug'i fix'le" → "Bug'i reproduce eden test yaz, sonra gecsin"
+- "X'i refactor et" → "Oncesinde ve sonrasinda testler gecsin"
+
+Cok adimli gorevlerde kisa bir plan sun:
+```
+1. [Adim] → dogrulama: [check]
+2. [Adim] → dogrulama: [check]
+3. [Adim] → dogrulama: [check]
+```
+
+Guclu basari kriteri bagimsiz loop'a izin verir. Zayif kriter ("calissin iste") surekli clarification gerektirir.
+
+---
+
+**Calisiyor olmasinin isareti:** diff'lerde gereksiz degisiklik azalir, overengineering yuzunden rewrite azalir, clarifying sorular hatalardan *once* gelir.
+
+Kaynak: [forrestchang/andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills)

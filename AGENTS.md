@@ -79,6 +79,7 @@ Her biri `SKILL.md` icinde: `.claude/skills/<skill-adi>/SKILL.md`
 | `rabbitmq-patterns` | Queue/exchange, consumer, retry/DLQ | Yeni queue, consumer, mesaj akisi |
 | `error-handling-patterns` | BaseException, GlobalExceptionHandler | Yeni exception, error response |
 | `dev-session-tracker` | Uzun gorevlerde ilerleme notlari | "Devam et", "nerede kaldik" |
+| `karpathy-guidelines` | LLM kodlama tuzaklarini azaltan davranissal kurallar (think-before-coding, simplicity, surgical, goal-driven) | Her kod yazma/review/refactor gorevinde |
 
 ### Skill -> Agent Besleme Haritasi
 
@@ -131,5 +132,6 @@ Orta/buyuk degisikliklerde `lead.md` icindeki "Degisiklik Kaydi" bolumunu uygula
 - [`.cursor/rules/lead-team.mdc`](./.cursor/rules/lead-team.mdc) — lead mimari kurallari
 - [`.cursor/rules/backend-team.mdc`](./.cursor/rules/backend-team.mdc) — backend kurallari
 - [`.cursor/rules/project-context.mdc`](./.cursor/rules/project-context.mdc) — stack ve modul ozeti
+- [`.cursor/rules/karpathy-guidelines.mdc`](./.cursor/rules/karpathy-guidelines.mdc) — davranissal kurallar (alwaysApply)
 
 Bu dosya (`AGENTS.md`) agent rolleri, skill'ler ve dosya konumlarini birlestirir; tekrarlayan uzun metinleri `.cursor/rules` icinde cogaltma.

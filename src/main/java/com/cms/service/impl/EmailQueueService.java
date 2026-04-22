@@ -51,7 +51,9 @@ public class EmailQueueService implements IEmailQueueService {
       Long emailLogId = message.getEmailLogId();
       log.info("Mail isleniyor: id={}, tenant={}", emailLogId, message.getTenantId());
 
-      EmailLog emailLog = emailLogRepository.findById(emailLogId).orElse(null);
+      // Consumer thread'inde session kisa omurlu — mailAccount lazy proxy'sini
+      // ayni sorguda init et. Aksi halde LazyInitializationException (no session).
+      EmailLog emailLog = emailLogRepository.findByIdWithMailAccount(emailLogId).orElse(null);
       if (emailLog == null) {
         log.error("EmailLog bulunamadi: id={}, tenant={}", emailLogId, message.getTenantId());
         return;

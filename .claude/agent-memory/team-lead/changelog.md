@@ -5,6 +5,72 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-04-23] Mail+Form v2 — Prod Hotfix'leri + Smoke Test Onayi
+**Tip:** 🔧 Hotfix + ⚙️ Konfigurasyon + ✅ Dogrulama | **Boyut:** Orta
+
+### Ozet
+v2'nin prod'a ilk deploy'u sonrasi ortaya cikan iki sorun giderildi ve end-to-end smoke test yapildi:
+1. **JPA DDL auto "update" orphan constraint yaratiyordu** → ENV-driven, prod'da `validate`
+2. **RabbitMQ consumer `LazyInitializationException` atiyordu** → `LEFT JOIN FETCH` ile fix
+
+Mail v2 artik production'da calisiyor — AES encrypt/decrypt, Gmail SMTP, RabbitMQ retry, Thymeleaf template, tum zincir dogrulandi.
+
+### Hotfix 1 — JPA DDL Strategy (commit `d66568d`)
+**Sorun:** `JpaConfig.java`'da `hbm2ddl.auto=update` iki yerde hardcoded. Her pod restart'ta Hibernate entity farklarini otomatik `ALTER TABLE` yapmaya calisiyordu:
+- Migration'dan once partial schema uyguluyordu → orphan FK (`fknopjtmmekojw3wns3w0k4kii3`)
+- Null iceren kolonlara NOT NULL eklemeye calisiyordu → crash
+- Named constraint'leri farketmiyor, kendisi hash'li FK olusturuyordu
+
+**Fix:**
+- `application.properties`: `app.jpa.ddl-auto=${JPA_DDL_AUTO:update}` (local default)
+- `JpaConfig.java`: `@Value` injection, iki hardcoded `"update"` kaldirildi, `setGenerateDdl()` ddl-auto'ya bagli
+- `k8s/1-configmap.yaml`: `JPA_DDL_AUTO: "validate"` — prod'da Hibernate sadece dogrular, ALTER TABLE yapmaz
+
+**Sonuc:** Migration'lar artik manuel SQL ile yonetilir; Hibernate beklenmedik degisiklik yapmaz.
+
+### Hotfix 2 — Consumer LazyInitializationException (commit `aa943ef`)
+**Sorun:** `EmailQueueService.processEmailMessage` @Transactional degil. `findById(emailLogId)` kendi kisa tx'inde fetch yapiyordu, session kapaniyordu. Sonra `emailLog.getMailAccount()` lazy proxy'ye erisince:
+
+```
+Could not initialize proxy [com.cms.entity.MailAccount#1] - no session
+```
+
+Her form submit mail'i 3 retry sonrasi FAILED'e dusuyordu.
+
+**Fix:**
+- `EmailLogRepository.findByIdWithMailAccount(Long)`: `LEFT JOIN FETCH el.mailAccount` — proxy ayni sorguda init olur
+- `EmailQueueService`: `findById()` yerine bunu kullaniyor
+
+**Sonuc:** Submit → EmailLog PENDING → consumer alir → mailAccount init, SMTP gonderir → SENT. Toplam 4.3 saniye.
+
+### Smoke Test Sonuclari (prod, `api.huseyindol.com`)
+
+1. ✅ `POST /api/v1/auth/login` (admin mode) — JWT token
+2. ✅ `POST /api/v1/mail-accounts` — `id=1`, smtp_password AES-256-CBC sifreli DB'de
+3. ✅ `POST /api/v1/mail-accounts/1/verify` → `"SMTP baglantisi basarili"` (decrypt + Gmail 587/STARTTLS login OK)
+4. ✅ `POST /api/v1/forms` — `id=3`, senderMailAccountId=1, recipient=huseyindoldev@gmail.com
+5. ✅ `POST /api/v1/forms/3/submit` — submissionId=7, EmailLog id=4
+6. ✅ Consumer: `"Mail gonderildi: logId=4, mailAccountId=1, from=huseyindoldev@gmail.com, to=huseyindoldev@gmail.com"` (23:06:19)
+7. ✅ EmailLog: `status=SENT`, `retry_count=0`, `sent_at` dolu
+
+### Dosyalar
+- `src/main/java/com/cms/config/JpaConfig.java` — ddl-auto ENV-driven
+- `src/main/resources/application.properties` — `app.jpa.ddl-auto` + dokuman
+- `k8s/1-configmap.yaml` — `JPA_DDL_AUTO: "validate"`
+- `src/main/java/com/cms/repository/EmailLogRepository.java` — `findByIdWithMailAccount`
+- `src/main/java/com/cms/service/impl/EmailQueueService.java` — JOIN FETCH query kullanimi
+
+### Dagitim Detaylari
+- Migration zaten 2026-04-21'de uygulanmisti (3 DB: basedb, tenant1, tenant2).
+- `aa943ef` deploy'u sonrasi orphan FK temizligi ek olarak gerekmedi — migration + validate kombinasyonu schema'yi temizledi.
+- ConfigMap degisikligi CI workflow'u tarafindan APPLY EDILMIYOR — manuel `kubectl patch` gerekli (ya da rollout restart'tan once `kubectl apply -f k8s/1-configmap.yaml`). Bu v3 roadmap'e not dusuldu.
+
+### Oncul Guvenlik Uyarilari
+- Smoke test sirasinda admin sifresi (112233) ve Gmail App Password sohbette paylasildi. User'in ikisini de rotate etmesi gerekir.
+- v3 icin AES_SECRET_KEY rotation endpoint'i hala acik (v2-mail-form-roadmap.md madde 8).
+
+---
+
 ## [2026-04-21] Mail+Form v2 — DB-based SMTP (AES) + Form-level Sender/Recipient Secimi
 **Tip:** 🆕 Özellik + 🔒 Güvenlik + ↩️ Mimari Reversal + 💥 Breaking | **Boyut:** Büyük
 

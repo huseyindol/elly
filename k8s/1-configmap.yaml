@@ -45,12 +45,12 @@ data:
   RABBITMQ_HOST: "rabbitmq"
   RABBITMQ_PORT: "5672"
 
-  # --- Mail SMTP ---
-  # Dev ortamı için Mailpit fallback. Prod'da SMTP ayarları DB'den gelir (panelden yönetilir).
-  MAIL_HOST: "localhost"
-  MAIL_PORT: "1025"
-  MAIL_SMTP_AUTH: "false"
-  MAIL_SMTP_STARTTLS: "false"
+  # --- Mail SMTP (Mail+Form v2) ---
+  # v2'de SMTP host/port/username/password ENV ya da ConfigMap'te DEGIL, her
+  # tenant DB'sindeki mail_accounts tablosunda saklanir (panel uzerinden eklenir).
+  # Secret'ta sadece AES_SECRET_KEY bulunur — smtp_password AES-256-CBC ile
+  # sifrelenmis halde DB'de durur, run-time'da decrypt edilir. ConfigMap'te
+  # non-sensitive mail ayari yoktur; default/fallback kullanilmaz.
 
   # --- Zipkin Tracing ---
   ZIPKIN_URL: "http://zipkin:9411"

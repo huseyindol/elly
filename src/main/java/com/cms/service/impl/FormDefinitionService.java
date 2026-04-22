@@ -11,11 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.entity.FormDefinition;
+import com.cms.entity.MailAccount;
+import com.cms.entity.form.FormSchema;
 import com.cms.exception.ResourceNotFoundException;
+import com.cms.exception.ValidationException;
 import com.cms.repository.FormDefinitionRepository;
 import com.cms.service.IFormDefinitionService;
-
-import com.cms.entity.form.FormSchema;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -35,6 +36,8 @@ public class FormDefinitionService implements IFormDefinitionService {
       @CacheEvict(value = "formSubmissions", allEntries = true)
   })
   public FormDefinition save(FormDefinition formDefinition) {
+    validateSender(formDefinition);
+
     if (formDefinition.getId() == null) {
       // New entity: set version to 1
       formDefinition.setVersion(1);
@@ -46,6 +49,27 @@ public class FormDefinitionService implements IFormDefinitionService {
       }
     }
     return formDefinitionRepository.save(formDefinition);
+  }
+
+  /**
+   * Mail+Form v2: Sender MailAccount zorunludur, aktif olmali; recipientEmail
+   * bos olamaz. Aksi halde 422 ({@link ValidationException}).
+   */
+  private void validateSender(FormDefinition form) {
+    MailAccount sender = form.getSenderMailAccount();
+    if (sender == null || sender.getId() == null) {
+      throw new ValidationException("senderMailAccount zorunludur");
+    }
+    if (!Boolean.TRUE.equals(sender.getActive())) {
+      throw new ValidationException(
+          "Secilen mail hesabi aktif degil (id=" + sender.getId() + ")");
+    }
+    if (form.getRecipientEmail() == null || form.getRecipientEmail().isBlank()) {
+      throw new ValidationException("recipientEmail zorunludur");
+    }
+    if (form.getNotificationEnabled() == null) {
+      form.setNotificationEnabled(Boolean.TRUE);
+    }
   }
 
   /**

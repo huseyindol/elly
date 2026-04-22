@@ -8,14 +8,14 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Tenant'a özgü SMTP hesabı.
+ * Tenant'a ozgu SMTP hesabi — DB-based (Mail+Form v2).
  *
- * <p>Her tenant kendi DB'sinde birden fazla hesap tutabilir
- * (ör. info@, sales@, product@). Formlar hangi hesabın kullanılacağını
- * {@code mail_account_id} FK ile seçer.
+ * <p>Her tenant kendi DB'sinde birden fazla hesap tutabilir (or. info@, sales@,
+ * support@). Formlar hangi hesabin kullanilacagini {@code sender_mail_account_id}
+ * FK ile acikca secer — varsayilan hesap kavrami YOKTUR.
  *
- * <p>smtpPassword alanı {@link com.cms.util.AesEncryptor} ile
- * AES-256-CBC şifreli olarak saklanır; API response'larda hiçbir zaman dönmez.
+ * <p>{@code smtpPassword} alani {@link com.cms.util.AesEncryptor} ile
+ * AES-256-CBC sifreli olarak saklanir; API response'larda hicbir zaman dönmez.
  */
 @Getter
 @Setter
@@ -23,47 +23,38 @@ import lombok.Setter;
 @Table(
     name = "mail_accounts",
     indexes = {
-        @Index(name = "idx_mail_account_default", columnList = "is_default"),
         @Index(name = "idx_mail_account_active", columnList = "active")
     })
 public class MailAccount extends BaseEntity {
 
-  /** Görünen ad — panelde gösterilir (ör. "Satış Hesabı"). */
+  /** Gorunen ad — panelde gosterilir (ör. "Satis Hesabi"). */
   @Column(nullable = false)
   private String name;
 
-  /** Gönderici adresi — From header'ında kullanılır (ör. sales@firma.com). */
-  @Column(name = "from_address", nullable = false)
+  /** Gonderici adresi — From header'inda kullanilir (ör. sales@firma.com). */
+  @Column(name = "from_address", nullable = false, length = 255)
   private String fromAddress;
 
   /** SMTP sunucu adresi (ör. smtp.gmail.com, smtp.office365.com). */
-  @Column(name = "smtp_host", nullable = false)
+  @Column(name = "smtp_host", nullable = false, length = 255)
   private String smtpHost;
 
-  /** SMTP port (587 = STARTTLS, 465 = SSL). */
+  /** SMTP port (587 = STARTTLS, 465 = SSL/TLS). */
   @Column(name = "smtp_port", nullable = false)
   private Integer smtpPort;
 
-  /** SMTP kimlik doğrulama kullanıcı adı (genellikle e-posta adresi). */
-  @Column(name = "smtp_username", nullable = false)
+  /** SMTP kimlik dogrulama kullanici adi (genellikle e-posta adresi). */
+  @Column(name = "smtp_username", nullable = false, length = 255)
   private String smtpUsername;
 
   /**
-   * SMTP şifresi — AES-256-CBC ile şifreli olarak saklanır.
-   * Ham değer hiçbir zaman DTO/response ile dışarıya açılmamalıdır.
+   * SMTP sifresi — AES-256-CBC ile sifreli olarak saklanir.
+   * Ham deger hicbir zaman DTO/response ile disariya acilmamalidir.
    */
   @Column(name = "smtp_password", nullable = false, length = 512)
   private String smtpPassword;
 
-  /**
-   * Varsayılan hesap bayrağı.
-   * Formun mail_account_id'si null olduğunda bu hesap kullanılır.
-   * Aynı anda yalnızca bir hesap varsayılan olabilir.
-   */
-  @Column(name = "is_default", nullable = false)
-  private Boolean isDefault = false;
-
-  /** Hesap aktiflik durumu; pasif hesaplar seçilemez. */
+  /** Hesap aktiflik durumu; pasif hesaplar form'da sender olarak secilemez. */
   @Column(nullable = false)
   private Boolean active = true;
 }

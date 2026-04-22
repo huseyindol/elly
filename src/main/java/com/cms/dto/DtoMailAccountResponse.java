@@ -6,7 +6,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Mail hesabı yanıtı — smtpPassword hiçbir zaman dahil edilmez.
+ * Mail hesabi yaniti — v2 DB-based.
+ *
+ * <p>SMTP password hicbir zaman response'a eklenmez. Aktiflik ve metadata
+ * bilgileri Admin panelinde hesap secimi icin kullanilir.
  */
 @Getter
 @Setter
@@ -18,7 +21,6 @@ public class DtoMailAccountResponse {
   private String smtpHost;
   private Integer smtpPort;
   private String smtpUsername;
-  private Boolean isDefault;
   private Boolean active;
   private Date createdAt;
   private Date updatedAt;

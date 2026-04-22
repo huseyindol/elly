@@ -48,9 +48,11 @@ public class FormController extends BaseController implements IFormController {
   @Override
   @PostMapping
   @PreAuthorize("hasAuthority('forms:create')")
-  public RootEntityResponse<DtoFormDefinition> createFormDefinition(@RequestBody DtoFormDefinitionIU dto) {
+  public RootEntityResponse<DtoFormDefinition> createFormDefinition(
+      @RequestBody @jakarta.validation.Valid DtoFormDefinitionIU dto) {
     FormDefinition entity = formMapper.toEntity(dto);
-    entity.setMailAccount(resolveMailAccount(dto.getMailAccountId()));
+    entity.setSenderMailAccount(resolveSenderMailAccount(dto.getSenderMailAccountId()));
+    applyNotificationDefaults(entity, dto);
     FormDefinition saved = formDefinitionService.save(entity);
     return ok(formMapper.toDto(saved));
   }
@@ -60,18 +62,28 @@ public class FormController extends BaseController implements IFormController {
   @PreAuthorize("hasAuthority('forms:update')")
   public RootEntityResponse<DtoFormDefinition> updateFormDefinition(
       @PathVariable Long id,
-      @RequestBody DtoFormDefinitionIU dto) {
+      @RequestBody @jakarta.validation.Valid DtoFormDefinitionIU dto) {
     FormDefinition existing = formDefinitionService.getById(id);
     formMapper.updateFromDto(dto, existing);
-    existing.setMailAccount(resolveMailAccount(dto.getMailAccountId()));
+    existing.setSenderMailAccount(resolveSenderMailAccount(dto.getSenderMailAccountId()));
+    applyNotificationDefaults(existing, dto);
     FormDefinition saved = formDefinitionService.save(existing);
     return ok(formMapper.toDto(saved));
   }
 
-  /** mailAccountId varsa entity'yi getirir, null ise null döndürür (varsayılan devreye girer). */
-  private MailAccount resolveMailAccount(Long mailAccountId) {
-    if (mailAccountId == null) return null;
-    return mailAccountService.getEntityById(mailAccountId);
+  /**
+   * senderMailAccountId zorunludur (Mail+Form v1). Hesabin aktiflik/ENV-profil
+   * dogrulamasi {@link com.cms.service.impl.FormDefinitionService#save} icinde yapilir.
+   */
+  private MailAccount resolveSenderMailAccount(Long senderMailAccountId) {
+    return mailAccountService.getEntityById(senderMailAccountId);
+  }
+
+  /** {@code notificationEnabled} null ise true kabul edilir; subject serbest. */
+  private void applyNotificationDefaults(FormDefinition entity, DtoFormDefinitionIU dto) {
+    if (dto.getNotificationEnabled() == null) {
+      entity.setNotificationEnabled(true);
+    }
   }
 
   @Override

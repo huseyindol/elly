@@ -12,12 +12,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * AES-256-CBC ile şifreleme / çözme yardımcısı.
+ * AES-256-CBC ile sifreleme / cozme yardimcisi.
  *
- * <p>Saklama formatı: {@code base64(IV) + ":" + base64(ciphertext)}
+ * <p>Saklama formati: {@code base64(IV) + ":" + base64(ciphertext)}
  *
- * <p>Yapılandırma: {@code AES_SECRET_KEY} ortam değişkeni tam olarak
- * 32 ASCII karakter (256 bit) olmalıdır.
+ * <p>Yapilandirma: {@code AES_SECRET_KEY} ortam degiskeni tam olarak
+ * 32 ASCII karakter (256 bit) olmalidir.
+ *
+ * <p>Mail+Form v2: {@code mail_accounts.smtp_password} bu encoder ile sifreli
+ * saklanir. Ham deger asla DTO/response'larda disariya cikmaz.
  */
 @Component
 public class AesEncryptor {
@@ -31,16 +34,17 @@ public class AesEncryptor {
     byte[] keyBytes = rawKey.getBytes(StandardCharsets.UTF_8);
     if (keyBytes.length != 32) {
       throw new IllegalArgumentException(
-          "AES_SECRET_KEY tam 32 karakter (256 bit) olmalıdır, ancak " + keyBytes.length + " byte alındı");
+          "AES_SECRET_KEY tam 32 karakter (256 bit) olmalidir, ancak "
+              + keyBytes.length + " byte alindi");
     }
     this.secretKey = new SecretKeySpec(keyBytes, "AES");
   }
 
   /**
-   * Düz metni AES-256-CBC ile şifreler.
+   * Duz metni AES-256-CBC ile sifreler.
    *
-   * @param plainText şifrelenecek metin
-   * @return {@code base64(IV):base64(ciphertext)} formatında şifreli metin
+   * @param plainText sifrelenecek metin
+   * @return {@code base64(IV):base64(ciphertext)} formatinda sifreli metin
    */
   public String encrypt(String plainText) {
     try {
@@ -56,21 +60,21 @@ public class AesEncryptor {
           + ":"
           + Base64.getEncoder().encodeToString(encrypted);
     } catch (Exception e) {
-      throw new IllegalStateException("Şifreleme başarısız", e);
+      throw new IllegalStateException("Sifreleme basarisiz", e);
     }
   }
 
   /**
-   * {@code base64(IV):base64(ciphertext)} formatındaki şifreli metni çözer.
+   * {@code base64(IV):base64(ciphertext)} formatindaki sifreli metni cozer.
    *
-   * @param encryptedText şifreli metin
-   * @return düz metin
+   * @param encryptedText sifreli metin
+   * @return duz metin
    */
   public String decrypt(String encryptedText) {
     try {
       String[] parts = encryptedText.split(":", 2);
       if (parts.length != 2) {
-        throw new IllegalArgumentException("Geçersiz şifreli metin formatı");
+        throw new IllegalArgumentException("Gecersiz sifreli metin formati");
       }
       byte[] iv = Base64.getDecoder().decode(parts[0]);
       byte[] cipherText = Base64.getDecoder().decode(parts[1]);
@@ -79,7 +83,7 @@ public class AesEncryptor {
       cipher.init(Cipher.DECRYPT_MODE, secretKey, new IvParameterSpec(iv));
       return new String(cipher.doFinal(cipherText), StandardCharsets.UTF_8);
     } catch (Exception e) {
-      throw new IllegalStateException("Şifre çözme başarısız", e);
+      throw new IllegalStateException("Sifre cozme basarisiz", e);
     }
   }
 }

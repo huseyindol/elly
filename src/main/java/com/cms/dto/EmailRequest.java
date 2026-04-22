@@ -4,6 +4,7 @@ import java.util.Map;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -27,6 +28,10 @@ public class EmailRequest {
 
   private Map<String, Object> dynamicData;
 
-  /** Hangi mail hesabının kullanılacağı. NULL ise varsayılan hesap devreye girer. */
+  /**
+   * Mail+Form v1: Varsayilan hesap kaldirildi; mailAccountId zorunludur.
+   * Hesap tenant'a ait olmali ve aktif olmalidir; aksi halde 422 donulur.
+   */
+  @NotNull(message = "mailAccountId zorunludur (varsayilan hesap kaldirildi)")
   private Long mailAccountId;
 }

@@ -3,7 +3,7 @@ package com.cms.service.impl;
 import java.util.List;
 
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +14,7 @@ import com.cms.dto.DtoMailAccountResponse;
 import com.cms.entity.MailAccount;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ResourceNotFoundException;
+import com.cms.exception.ValidationException;
 import com.cms.mapper.MailAccountMapper;
 import com.cms.repository.MailAccountRepository;
 import com.cms.service.IMailAccountService;
@@ -23,6 +24,17 @@ import jakarta.mail.MessagingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Mail+Form v2 DB-based mail hesabi yonetimi.
+ *
+ * <p>Tum SMTP alanlari DB'de tutulur; {@code smtpPassword} AES-256-CBC ile
+ * sifrelenir ({@link AesEncryptor}). Guncelleme sirasinda {@code smtpPassword}
+ * bos/null gelirse mevcut sifre korunur — yani admin her update'ta sifreyi
+ * tekrar girmek zorunda kalmaz.
+ *
+ * <p>Hesap guncellendiginde veya silindiginde {@link TenantMailSenderFactory}
+ * cache'i ilgili hesap icin evict edilir.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,26 +42,26 @@ public class MailAccountService implements IMailAccountService {
 
   private final MailAccountRepository repository;
   private final MailAccountMapper mapper;
-  private final AesEncryptor aesEncryptor;
   private final TenantMailSenderFactory mailSenderFactory;
+  private final AesEncryptor aesEncryptor;
 
   @Override
   @Transactional
   @CacheEvict(value = "mailAccounts", allEntries = true)
   public DtoMailAccountResponse create(DtoMailAccountRequest request) {
     if (request.getSmtpPassword() == null || request.getSmtpPassword().isBlank()) {
-      throw new IllegalArgumentException("Oluşturma sırasında SMTP şifresi zorunludur");
-    }
-
-    if (Boolean.TRUE.equals(request.getIsDefault())) {
-      repository.clearAllDefaults();
+      throw new ValidationException("smtpPassword zorunludur");
     }
 
     MailAccount entity = mapper.toEntity(request);
     entity.setSmtpPassword(aesEncryptor.encrypt(request.getSmtpPassword()));
+    if (entity.getActive() == null) {
+      entity.setActive(true);
+    }
 
     MailAccount saved = repository.save(entity);
-    log.info("Mail hesabı oluşturuldu: id={}, name={}", saved.getId(), saved.getName());
+    log.info("Mail hesabi olusturuldu: id={}, name={}, host={}:{}",
+        saved.getId(), saved.getName(), saved.getSmtpHost(), saved.getSmtpPort());
     return mapper.toResponse(saved);
   }
 
@@ -58,26 +70,25 @@ public class MailAccountService implements IMailAccountService {
   @CacheEvict(value = "mailAccounts", allEntries = true)
   public DtoMailAccountResponse update(Long id, DtoMailAccountRequest request) {
     MailAccount entity = findOrThrow(id);
-
-    if (Boolean.TRUE.equals(request.getIsDefault()) && !Boolean.TRUE.equals(entity.getIsDefault())) {
-      repository.clearAllDefaults();
-    }
+    String oldPassword = entity.getSmtpPassword();
 
     mapper.updateFromRequest(request, entity);
 
-    // Şifre alanı dolu gelirse güncelle, boşsa eskiyi koru
+    // Sifre bos/null gelirse mevcut sifreyi koru, aksi halde tekrar sifrele.
     if (request.getSmtpPassword() != null && !request.getSmtpPassword().isBlank()) {
       entity.setSmtpPassword(aesEncryptor.encrypt(request.getSmtpPassword()));
+    } else {
+      entity.setSmtpPassword(oldPassword);
     }
 
     MailAccount saved = repository.save(entity);
     mailSenderFactory.evict(saved.getId());
-    log.info("Mail hesabı güncellendi: id={}, name={}", saved.getId(), saved.getName());
+    log.info("Mail hesabi guncellendi: id={}, host={}:{}",
+        saved.getId(), saved.getSmtpHost(), saved.getSmtpPort());
     return mapper.toResponse(saved);
   }
 
   @Override
-  @Cacheable(value = "mailAccounts", key = "#id")
   public DtoMailAccountResponse getById(Long id) {
     return mapper.toResponse(findOrThrow(id));
   }
@@ -88,9 +99,13 @@ public class MailAccountService implements IMailAccountService {
   }
 
   @Override
-  @Cacheable(value = "mailAccounts", key = "'all'")
   public List<DtoMailAccountResponse> getAll() {
     return mapper.toResponseList(repository.findAll());
+  }
+
+  @Override
+  public List<DtoMailAccountResponse> getAllActive() {
+    return mapper.toResponseList(repository.findAllByActiveTrue());
   }
 
   @Override
@@ -100,45 +115,29 @@ public class MailAccountService implements IMailAccountService {
     MailAccount entity = findOrThrow(id);
     repository.delete(entity);
     mailSenderFactory.evict(id);
-    log.info("Mail hesabı silindi: id={}", id);
+    log.info("Mail hesabi silindi: id={}, name={}", id, entity.getName());
     return true;
-  }
-
-  @Override
-  @Transactional
-  @CacheEvict(value = "mailAccounts", allEntries = true)
-  public DtoMailAccountResponse setDefault(Long id) {
-    MailAccount entity = findOrThrow(id);
-    if (!Boolean.TRUE.equals(entity.getActive())) {
-      throw new IllegalStateException("Pasif bir hesap varsayılan yapılamaz");
-    }
-    repository.clearAllDefaults();
-    entity.setIsDefault(true);
-    return mapper.toResponse(repository.save(entity));
-  }
-
-  @Override
-  public MailAccount getDefaultEntity() {
-    return repository.findByIsDefaultTrueAndActiveTrue()
-        .orElseThrow(() -> new ResourceNotFoundException(
-            "Varsayılan aktif mail hesabı bulunamadı. Lütfen panelden bir hesap ekleyin ve varsayılan olarak işaretleyin."));
   }
 
   @Override
   public boolean testConnection(Long id) {
     MailAccount account = findOrThrow(id);
-    JavaMailSenderImpl sender = (JavaMailSenderImpl) mailSenderFactory.getMailSender(account);
+
+    if (!Boolean.TRUE.equals(account.getActive())) {
+      throw new ValidationException("Pasif mail hesabi uzerinde SMTP testi yapilamaz");
+    }
+
+    JavaMailSender sender = mailSenderFactory.getMailSender(account);
     try {
-      sender.testConnection();
-      log.info("SMTP bağlantısı başarılı: hesap='{}', host={}:{}",
+      ((JavaMailSenderImpl) sender).testConnection();
+      log.info("SMTP baglantisi basarili: hesap='{}', host='{}:{}'",
           account.getName(), account.getSmtpHost(), account.getSmtpPort());
       return true;
     } catch (MessagingException e) {
-      log.error("SMTP bağlantısı başarısız: hesap='{}', hata='{}'",
+      log.error("SMTP baglantisi basarisiz: hesap='{}', hata='{}'",
           account.getName(), e.getMessage());
       throw new BadRequestException(
-          "SMTP bağlantısı başarısız [" + account.getSmtpHost() + ":" + account.getSmtpPort() + "]: "
-              + e.getMessage());
+          "SMTP baglantisi basarisiz: " + e.getMessage());
     }
   }
 

@@ -17,6 +17,7 @@ import com.cms.dto.EmailRequest;
 import com.cms.entity.EmailLog;
 import com.cms.entity.MailAccount;
 import com.cms.enums.EmailStatus;
+import com.cms.exception.ValidationException;
 import com.cms.repository.EmailLogRepository;
 import com.cms.service.IEmailService;
 import com.cms.service.IMailAccountService;
@@ -38,24 +39,28 @@ public class EmailService implements IEmailService {
 
   @Override
   public DtoEmailLog sendEmail(EmailRequest request) {
-    // 1. dynamicData'yı JSON string'e çevir
+    if (request.getMailAccountId() == null) {
+      throw new ValidationException("mailAccountId zorunludur — varsayilan hesap kaldirildi");
+    }
+
+    MailAccount mailAccount = mailAccountService.getEntityById(request.getMailAccountId());
+    if (!Boolean.TRUE.equals(mailAccount.getActive())) {
+      throw new ValidationException(
+          "Secilen mail hesabi aktif degil (id=" + mailAccount.getId() + ")");
+    }
+
+    // 1. dynamicData'yi JSON string'e cevir
     String payloadJson = null;
     if (request.getDynamicData() != null && !request.getDynamicData().isEmpty()) {
       try {
         payloadJson = objectMapper.writeValueAsString(request.getDynamicData());
       } catch (JsonProcessingException e) {
         log.error("Failed to serialize dynamicData: {}", e.getMessage());
-        throw new RuntimeException("Failed to serialize dynamic data", e);
+        throw new ValidationException("Dinamik veri JSON'a cevrilemedi: " + e.getMessage(), e);
       }
     }
 
-    // 2. Mail hesabını çöz: açıkça belirtildiyse o, yoksa null bırak (queue worker varsayılanı kullanır)
-    MailAccount mailAccount = null;
-    if (request.getMailAccountId() != null) {
-      mailAccount = mailAccountService.getEntityById(request.getMailAccountId());
-    }
-
-    // 3. PENDING status ile DB'ye kaydet
+    // 2. PENDING status ile DB'ye kaydet
     EmailLog emailLog = new EmailLog();
     emailLog.setRecipient(request.getTo());
     emailLog.setSubject(request.getSubject());
@@ -66,18 +71,18 @@ public class EmailService implements IEmailService {
     emailLog.setMailAccount(mailAccount);
 
     EmailLog saved = emailLogRepository.save(emailLog);
-    log.info("Email log created: id={}, recipient={}, tenant={}, mailAccount={}",
+    log.info("Email log created: id={}, recipient={}, tenant={}, mailAccountId={}, from={}",
         saved.getId(), saved.getRecipient(), TenantContext.getTenantId(),
-        mailAccount != null ? mailAccount.getId() : "default");
+        mailAccount.getId(), mailAccount.getFromAddress());
 
-    // 4. Tenant ID'yi mesajla birlikte RabbitMQ queue'ya gönder
+    // 3. Tenant ID'yi mesajla birlikte RabbitMQ queue'ya gonder
     String tenantId = TenantContext.getTenantId();
     rabbitTemplate.convertAndSend(
         RabbitMQConfig.EMAIL_EXCHANGE,
         RabbitMQConfig.EMAIL_ROUTING_KEY,
         new EmailMessage(tenantId, saved.getId()));
 
-    // 5. DTO döndür
+    // 4. DTO dondur
     return DtoEmailLog.builder()
         .id(saved.getId())
         .recipient(saved.getRecipient())

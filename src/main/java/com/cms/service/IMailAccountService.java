@@ -14,25 +14,19 @@ public interface IMailAccountService {
 
   DtoMailAccountResponse getById(Long id);
 
-  /** Ham entity döndürür — mail gönderme altyapısının iç kullanımı içindir. */
+  /** Ham entity dondurur — mail gonderme altyapisinin ic kullanimi icindir. */
   MailAccount getEntityById(Long id);
 
   List<DtoMailAccountResponse> getAll();
 
+  /** Form yaratirken secime sunulacak aktif hesaplar. */
+  List<DtoMailAccountResponse> getAllActive();
+
   Boolean delete(Long id);
 
-  /** Belirtilen hesabı varsayılan yapar, eskinin varsayılan bayrağını temizler. */
-  DtoMailAccountResponse setDefault(Long id);
-
   /**
-   * Varsayılan (is_default=true, active=true) hesabı döndürür.
-   * Bulunamazsa {@link com.cms.exception.ResourceNotFoundException} fırlatır.
-   */
-  MailAccount getDefaultEntity();
-
-  /**
-   * SMTP bağlantısını doğrular — mail göndermeden sunucuya bağlanır.
-   * Bağlantı başarısızsa {@link com.cms.exception.BadRequestException} fırlatır.
+   * SMTP baglantisini dogrular — mail gondermeden sunucuya baglanir.
+   * Baglanti basarisizsa {@link com.cms.exception.BadRequestException} firlatir.
    */
   boolean testConnection(Long id);
 }

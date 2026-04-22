@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yeni Form Gönderimi</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f7fa;
+    }
+    .email-container {
+      max-width: 640px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .email-header {
+      background: linear-gradient(135deg, #4b6cb7 0%, #182848 100%);
+      color: #ffffff;
+      padding: 24px 28px;
+    }
+    .email-header h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .email-header .subtitle {
+      margin: 6px 0 0;
+      font-size: 14px;
+      opacity: 0.85;
+    }
+    .email-body {
+      padding: 28px;
+      color: #2c3e50;
+      line-height: 1.6;
+    }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #edf1f5;
+      font-size: 13px;
+    }
+    .meta-row:last-child {
+      border-bottom: none;
+    }
+    .meta-label {
+      color: #6b7a90;
+      font-weight: 500;
+    }
+    .meta-value {
+      color: #222;
+    }
+    .section-title {
+      margin: 26px 0 10px;
+      font-size: 15px;
+      color: #4b6cb7;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    table.payload-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      background-color: #fbfcfd;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    table.payload-table th,
+    table.payload-table td {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid #edf1f5;
+      font-size: 14px;
+      vertical-align: top;
+    }
+    table.payload-table th {
+      width: 35%;
+      background-color: #f4f7fa;
+      color: #4b6cb7;
+      font-weight: 600;
+    }
+    table.payload-table tr:last-child td,
+    table.payload-table tr:last-child th {
+      border-bottom: none;
+    }
+    .empty-payload {
+      margin-top: 8px;
+      padding: 16px;
+      background-color: #fff7e6;
+      border-left: 4px solid #f5a623;
+      border-radius: 0 4px 4px 0;
+      color: #8a6d3b;
+      font-size: 14px;
+    }
+    .email-footer {
+      background-color: #f8f9fa;
+      padding: 18px 28px;
+      text-align: center;
+      font-size: 12px;
+      color: #8a93a0;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1 th:text="${'Yeni form gönderimi: ' + formTitle}">Yeni form gönderimi</h1>
+      <p class="subtitle">Elly CMS — Form bildirim servisi</p>
+    </div>
+
+    <div class="email-body">
+      <div class="meta-row">
+        <span class="meta-label">Form</span>
+        <span class="meta-value" th:text="${formTitle}">Form Başlığı</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Versiyon</span>
+        <span class="meta-value" th:text="${formVersion}">1</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Submission ID</span>
+        <span class="meta-value" th:text="${submissionId}">—</span>
+      </div>
+      <div class="meta-row">
+        <span class="meta-label">Gönderim Zamanı</span>
+        <span class="meta-value" th:text="${submittedAt}">—</span>
+      </div>
+
+      <div class="section-title">Form Alanları</div>
+
+      <div th:if="${payload == null or payload.isEmpty()}" class="empty-payload">
+        Bu gönderimde görünür form alanı bulunmuyor.
+      </div>
+
+      <table class="payload-table" th:if="${payload != null and !payload.isEmpty()}">
+        <tbody>
+          <tr th:each="entry : ${payload}">
+            <th th:text="${entry.key}">Alan</th>
+            <td th:text="${entry.value}">Değer</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="email-footer">
+      <p>Bu e-posta Elly CMS form bildirim servisi tarafından otomatik olarak gönderildi.</p>
+      <p>&copy; 2026 Elly CMS</p>
+    </div>
+  </div>
+</body>
+</html>

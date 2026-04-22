@@ -13,16 +13,15 @@ import com.cms.entity.MailAccount;
 @Mapper(componentModel = "spring")
 public interface MailAccountMapper {
 
-  /** Entity → Response DTO (smtpPassword dahil edilmez). */
-  @Mapping(target = "isDefault", source = "isDefault")
+  /** Entity -> Response. smtpPassword asla response'a dahil edilmez. */
   DtoMailAccountResponse toResponse(MailAccount entity);
 
   List<DtoMailAccountResponse> toResponseList(List<MailAccount> entities);
 
   /**
-   * Request DTO → Entity (yeni kayıt).
-   * smtpPassword servis katmanında şifrelenerek set edilir,
-   * burada kasıtlı olarak atlanır.
+   * Request -> Entity (yeni kayit).
+   * {@code smtpPassword} servis katmaninda AES ile sifrelenip set edilir;
+   * burada ignore edilir ki duz metin entity'e sizmasin.
    */
   @Mapping(target = "id", ignore = true)
   @Mapping(target = "createdAt", ignore = true)
@@ -31,8 +30,8 @@ public interface MailAccountMapper {
   MailAccount toEntity(DtoMailAccountRequest request);
 
   /**
-   * Güncelleme: mevcut entity'ye request alanlarını uygular.
-   * smtpPassword ve id servis katmanında ayrıca yönetilir.
+   * Guncelleme: request alanlarini mevcut entity'ye uygular.
+   * {@code smtpPassword} servis katmaninda yonetilir (bos gelirse korunur).
    */
   @Mapping(target = "id", ignore = true)
   @Mapping(target = "createdAt", ignore = true)

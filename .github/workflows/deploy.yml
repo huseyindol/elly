@@ -14,7 +14,10 @@
 #   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 #   FACEBOOK_CLIENT_ID, FACEBOOK_CLIENT_SECRET,
 #   GH_OAUTH_CLIENT_ID, GH_OAUTH_CLIENT_SECRET,
-#   EMAIL_API_KEY
+#   REDIS_PASSWORD, RABBITMQ_USER, RABBITMQ_PASSWORD,
+#   EMAIL_API_KEY,
+#   # Mail+Form v2 — SMTP DB'de; sadece AES-256 anahtari ENV'de
+#   AES_SECRET_KEY  (32 ASCII karakter — smtp_password sifreleme anahtari)
 name: 🚀 Build & Deploy
 
 on:
@@ -114,6 +117,18 @@ jobs:
           export GH_OAUTH_CLIENT_ID_B64=$(echo -n "${{ secrets.GH_OAUTH_CLIENT_ID }}" | base64)
           export GH_OAUTH_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GH_OAUTH_CLIENT_SECRET }}" | base64)
           export EMAIL_API_KEY_B64=$(echo -n "${{ secrets.EMAIL_API_KEY }}" | base64)
+          export REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64)
+          export RABBITMQ_USER_B64=$(echo -n "${{ secrets.RABBITMQ_USER }}" | base64)
+          export RABBITMQ_PASSWORD_B64=$(echo -n "${{ secrets.RABBITMQ_PASSWORD }}" | base64)
+
+          # ============================================
+          # Mail+Form v2 — AES-256 sifreleme anahtari
+          # ============================================
+          # v2'de SMTP bilgileri DB'de tutuluyor (mail_accounts tablosu,
+          # smtpPassword AES-256-CBC ile sifrelenip yaziliyor). Bu anahtar
+          # pod'lara ENV olarak verilir, run-time'da decrypt icin kullanilir.
+          # 32 ASCII karakter olmali. Key rotation plansa re-encrypt gerekli.
+          export AES_SECRET_KEY_B64=$(echo -n "${{ secrets.AES_SECRET_KEY }}" | base64)
 
           # Template'i doldur
           envsubst < k8s/1-secret.template.yaml > k8s/1-secret.yaml

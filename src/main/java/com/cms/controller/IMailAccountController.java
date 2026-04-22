@@ -19,13 +19,14 @@ public interface IMailAccountController {
 
   RootEntityResponse<List<DtoMailAccountResponse>> getAll();
 
+  /** Form yaratirken secime sunulacak aktif hesaplar. */
+  RootEntityResponse<List<DtoMailAccountResponse>> getAllActive();
+
   RootEntityResponse<Boolean> delete(Long id);
 
-  RootEntityResponse<DtoMailAccountResponse> setDefault(Long id);
-
-  /** Gerçek SMTP bağlantısı açarak testTo adresine deneme maili gönderir. */
+  /** Gercek SMTP baglantisi acarak testTo adresine deneme maili gonderir. */
   RootEntityResponse<String> testConnection(Long id, @Valid DtoMailTestRequest request);
 
-  /** Mail göndermeden SMTP bağlantısını doğrular. */
+  /** Mail gondermeden SMTP baglantisini dogrular. */
   RootEntityResponse<String> verifyConnection(Long id);
 }

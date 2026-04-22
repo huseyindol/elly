@@ -34,12 +34,14 @@ Bunu yaptıktan sonra kullanıcıya şunu sun:
 
 ---
 
-## PROJE DURUM SNAPSHOTU (2026-04-12)
+## PROJE DURUM SNAPSHOTU (2026-04-21)
 
 ### Tamamlanan Büyük Özellikler
 
 | Tarih | Özellik | Durum | Detay Dosyası |
 |-------|---------|-------|---------------|
+| 2026-04-21 | Mail+Form v2 — DB-based SMTP (AES) + Form-level sender/recipient secimi | ✅ | docs/MAIL_FORM_V2_GUIDE.md |
+| 2026-04-19 | Mail+Form v1 — ENV-based SMTP profil (v2'de geri alindi) | ↩️ SUPERSEDED | v2-mail-form-roadmap.md |
 | 2026-04-12 | Tenant-Based Gmail SMTP + RabbitMQ Retry | ✅ | tenant-mail-smtp.md |
 | 2026-04-10 | RBAC Permission System (Role/Permission/PreAuthorize) | ✅ | changelog.md |
 | 2026-04-10 | User Auth Redis Cache (auth:user:{username}) | ✅ | changelog.md |
@@ -49,16 +51,24 @@ Bunu yaptıktan sonra kullanıcıya şunu sun:
 ```
 EllyApplication.java
   ↓ exclude: MailSenderAutoConfiguration (pod crash önlemi)
-  
+
 JWT Flow:
   Request → JwtTenantFilter → TenantContext.setCurrentTenant(tenantId)
            → JwtAuthenticationFilter → CachedUserDetails (Redis 30dk)
-           
-Mail Flow:
-  POST /api/v1/emails/send → EmailLog(PENDING) → RabbitMQ email-queue
-  → EmailQueueService consumer → TenantMailSenderFactory → Gmail SMTP
-  → Hata: retry-queue (30sn TTL) → tekrar email-queue (max 3 kez)
-  
+
+Mail Flow (v2 — DB-based, AES-encrypted):
+  ENV: AES_SECRET_KEY (32 ASCII karakter, tek secret)
+  → Panel: POST /mail-accounts (name, fromAddress, smtpHost/Port/Username/Password)
+          → MailAccountService.create() → aesEncryptor.encrypt(smtpPassword) → DB
+  → Panel: POST /mail-accounts/{id}/verify → TenantMailSenderFactory.getMailSender() → testConnection()
+  → Panel: GET /mail-accounts/active → form picker listesi
+  → POST /forms (senderMailAccountId + recipientEmail ile)
+  → POST /forms/{id}/submit → FormSubmission kaydedilir
+  → triggerNotification → EmailRequest(mailAccountId, to=recipientEmail, templateName="form-notification")
+  → EmailLog(PENDING) → RabbitMQ email-queue
+  → EmailQueueService → TenantMailSenderFactory.getMailSender(account) [decrypt] → Gmail SMTP
+  → Hata: retry-queue (30sn TTL) → tekrar email-queue (max 3 kez) → DLQ
+
 Auth Flow:
   Admin: POST /api/auth/admin/login → AdminLoginInterceptor
   Tenant: POST /api/auth/login → TenantLoginInterceptor
@@ -72,7 +82,7 @@ Auth Flow:
 - **Cache:** Redis (`auth:user:{username}` TTL=30dk, genel cache TTL=10dk)
 - **Queue:** RabbitMQ (email-queue, email-retry-queue, email-dlq)
 - **Auth:** JWT + OAuth2 (Google, Facebook, GitHub)
-- **Mail:** Tenant-based Gmail SMTP (DB'den, AES-256-CBC sifreli)
+- **Mail:** DB-based (`mail_accounts` tablosu, smtp_password AES-256-CBC), form-level sender/recipient secimi — v2 (2026-04-21)
 - **Security:** RBAC (@PreAuthorize + Permission entity, 40+ permission)
 - **Exception:** BaseException hiyerarsisi + GlobalExceptionHandler
 
@@ -81,7 +91,12 @@ Auth Flow:
 | Karar | Neden | Dosya |
 |-------|-------|-------|
 | spring.mail.* kaldırıldı | Pod CrashLoopBackOff önlemek için | EllyApplication.java |
-| DB-based mail SMTP | Her tenant kendi Gmail'ini kullanır | TenantMailSenderFactory.java |
+| DB-based mail SMTP (v2) | Multiple hesap + form-level explicit secim; runtime ekleme icin pod restart gereksiz | MailAccount.java, TenantMailSenderFactory.java |
+| AES-256-CBC smtp_password (v2) | Kredensiyelin DB'de duz metin olmasi guvenlik riski | AesEncryptor.java, application.properties |
+| is_default kolonu kaldirildi (v2) | Her form explicit hesap secer, varsayilan konsepti yok | db-migration-mail-form-v2.sql |
+| Form'da sender + recipient zorunlu | Admin hangi mailden hangi alıcıya gönderileceğini açıkça seçer | FormDefinition.java |
+| smtpPassword null/bos -> mevcut korunur | Admin UX: update'te her seferinde App Password girmek zorunda kalmasin | MailAccountService.update() |
+| JavaMailSender cache (mailAccountId key) | Her gonderimde yeni sender kurmak yerine reuse | TenantMailSenderFactory |
 | Redis user auth cache | Her request'teki 3 SQL → 1 Redis GET | UserAuthCacheService.java |
 | Constructor injection zorunlu | @Autowired yasak | Tüm servisler |
 | RabbitMQ retry TTL=30sn | Tight-loop retry önlemek için | RabbitMQConfig.java |
@@ -110,14 +125,30 @@ src/main/java/com/cms/
 └── entity/Role.java / Permission.java  — RBAC entity'leri
 ```
 
-### Mail Sistemi
+### Mail Sistemi (v2 — DB-based + AES, 2026-04-21)
 ```
 src/main/java/com/cms/
+├── util/AesEncryptor.java                 — AES-256-CBC encrypt/decrypt (base64(IV):base64(cipher))
+├── config/TenantMailSenderFactory.java    — mailAccountId -> JavaMailSender cache, decrypt on build
 ├── service/impl/EmailQueueService.java    — RabbitMQ consumer
-├── service/impl/MailAccountService.java   — SMTP verify + test
-├── entity/MailAccount.java               — DB SMTP bilgileri
-└── entity/EmailLog.java                  — Mail gönderim logu
+├── service/impl/MailAccountService.java   — CRUD + AES encrypt + SMTP verify + factory evict
+├── service/impl/MailTestService.java      — /verify endpoint icin test mail gonderimi
+├── service/impl/FormDefinitionService.java — Sender (active?) + recipient (valid email) validation
+├── service/impl/FormSubmissionService.java — Submit sonrası triggerNotification
+├── entity/MailAccount.java                — name, fromAddress, smtp* (password AES), active
+├── entity/FormDefinition.java             — senderMailAccount FK + recipientEmail + notification*
+└── entity/EmailLog.java                   — Mail gönderim logu (retry sayaci, status)
+
+src/main/resources/
+├── templates/emails/form-notification.html — v2 sabit template (v3'de form-bazli)
+├── application.properties                  — aes.secret-key=${AES_SECRET_KEY:12345...}
+└── db-migration-mail-form-v2.sql           — TRUNCATE form_definitions + drop is_default + yeni kolonlar
+
+docs/MAIL_FORM_V2_GUIDE.md                 — Uçtan uca CURL rehberi
+.claude/agent-memory/team-lead/v2-mail-form-roadmap.md — v2 teslim + v3 yol haritasi
 ```
+
+**Silinen (v1'den v2'ye geri donus):** `EnvMailProfileResolver.java`, `DtoAvailableProfile.java`, `config/mail/` klasoru, tum `MAIL_{TENANT}_{PROFILE}_*` ENV'leri + k8s/GH Actions secret'lari, `MailAccount.envProfileKey` + `is_default` kolonlari, `/available-profiles` endpoint.
 
 ---
 

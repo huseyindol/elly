@@ -21,11 +21,20 @@ import lombok.Setter;
  * Entity for storing form definitions with JSON schema.
  * The schema field contains the complete form structure including fields,
  * validation rules, and conditions.
+ *
+ * <p>Mail+Form v2: Form submission otomatik mail bildirimi tetikler:
+ * <ul>
+ *   <li>{@code senderMailAccount}: Hangi SMTP hesabindan gonderilecegi (zorunlu)</li>
+ *   <li>{@code recipientEmail}: Tek hedef adres (zorunlu, coklu TO/CC/BCC v3'e ertelendi)</li>
+ *   <li>{@code notificationSubject}: Bos ise varsayilan konu kullanilir</li>
+ *   <li>{@code notificationEnabled}: Devre disi birakilabilir</li>
+ * </ul>
  */
 @Entity
 @Table(name = "form_definitions", indexes = {
     @Index(name = "idx_form_def_title", columnList = "title"),
-    @Index(name = "idx_form_def_active", columnList = "active")
+    @Index(name = "idx_form_def_active", columnList = "active"),
+    @Index(name = "idx_form_def_sender_mail", columnList = "sender_mail_account_id")
 })
 @Getter
 @Setter
@@ -43,10 +52,30 @@ public class FormDefinition extends BaseEntity {
   private Boolean active;
 
   /**
-   * Bu form gönderimlerine ait maillerin hangi hesaptan gönderileceğini belirler.
-   * NULL ise varsayılan (is_default=true) hesap kullanılır.
+   * Form submit sonrasi bildirim gönderen profil.
+   * {@link MailAccount#getActive() active=false} ise form submit 422 döndürür.
    */
   @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "mail_account_id")
-  private MailAccount mailAccount;
+  @JoinColumn(name = "sender_mail_account_id", nullable = false)
+  private MailAccount senderMailAccount;
+
+  /**
+   * Form submit sonrasi bildirim alici adres (v1: tek adres).
+   * Coklu recipient (TO/CC/BCC) destegi v2'ye ertelendi.
+   */
+  @Column(name = "recipient_email", nullable = false, length = 255)
+  private String recipientEmail;
+
+  /**
+   * Opsiyonel özel konu; bos ise varsayilan ("Yeni form gonderimi: {title}") kullanilir.
+   */
+  @Column(name = "notification_subject", length = 255)
+  private String notificationSubject;
+
+  /**
+   * Bildirim acik/kapali (varsayilan: true).
+   * false ise form submit yine basarili olur ama mail gonderilmez.
+   */
+  @Column(name = "notification_enabled", nullable = false)
+  private Boolean notificationEnabled = true;
 }

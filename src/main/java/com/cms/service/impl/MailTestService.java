@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import com.cms.config.TenantMailSenderFactory;
 import com.cms.entity.MailAccount;
 import com.cms.exception.BadRequestException;
+import com.cms.exception.ValidationException;
 import com.cms.service.IMailTestService;
 
 import jakarta.mail.internet.MimeMessage;
@@ -22,6 +23,10 @@ public class MailTestService implements IMailTestService {
 
   @Override
   public void sendTestEmail(MailAccount account, String testTo) {
+    if (!Boolean.TRUE.equals(account.getActive())) {
+      throw new ValidationException("Pasif mail hesabi test edilemez");
+    }
+
     try {
       JavaMailSender sender = mailSenderFactory.getMailSender(account);
 
@@ -29,29 +34,30 @@ public class MailTestService implements IMailTestService {
       MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
       helper.setFrom(account.getFromAddress());
       helper.setTo(testTo);
-      helper.setSubject("Elly CMS — SMTP Bağlantı Testi");
+      helper.setSubject("Elly CMS — SMTP Baglanti Testi");
       helper.setText(buildHtml(account), true);
 
       sender.send(message);
-      log.info("Test maili gönderildi: hesap='{}', alıcı='{}'", account.getName(), testTo);
+      log.info("Test maili gonderildi: hesap='{}', id={}, alici='{}'",
+          account.getName(), account.getId(), testTo);
 
     } catch (Exception e) {
-      log.error("Test maili gönderilemedi: hesap='{}', hata='{}'", account.getName(), e.getMessage());
+      log.error("Test maili gonderilemedi: hesap='{}', id={}, hata='{}'",
+          account.getName(), account.getId(), e.getMessage());
       throw new BadRequestException(
-          "SMTP bağlantısı başarısız [" + account.getSmtpHost() + ":" + account.getSmtpPort() + "]: "
-              + e.getMessage());
+          "SMTP baglantisi basarisiz [hesap=" + account.getName() + "]: " + e.getMessage());
     }
   }
 
   private String buildHtml(MailAccount account) {
     return """
         <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
-          <h2 style="color:#2563eb">SMTP Bağlantı Testi Başarılı</h2>
-          <p>Bu mail <strong>Elly CMS</strong> panel üzerinden gönderilmiştir.</p>
+          <h2 style="color:#2563eb">SMTP Baglanti Testi Basarili</h2>
+          <p>Bu mail <strong>Elly CMS</strong> panel uzerinden gonderilmistir.</p>
           <hr/>
           <table style="font-size:14px;color:#374151">
-            <tr><td><b>Hesap adı</b></td><td style="padding-left:16px">%s</td></tr>
-            <tr><td><b>Gönderici</b></td><td style="padding-left:16px">%s</td></tr>
+            <tr><td><b>Hesap adi</b></td><td style="padding-left:16px">%s</td></tr>
+            <tr><td><b>Gonderici</b></td><td style="padding-left:16px">%s</td></tr>
             <tr><td><b>SMTP</b></td><td style="padding-left:16px">%s:%d</td></tr>
           </table>
         </div>

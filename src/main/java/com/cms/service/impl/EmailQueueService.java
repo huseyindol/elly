@@ -9,8 +9,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-import org.thymeleaf.TemplateEngine;
-import org.thymeleaf.context.Context;
 
 import com.cms.config.RabbitMQConfig;
 import com.cms.config.TenantContext;
@@ -36,7 +34,7 @@ public class EmailQueueService implements IEmailQueueService {
 
   private final EmailLogRepository emailLogRepository;
   private final TenantMailSenderFactory mailSenderFactory;
-  private final TemplateEngine templateEngine;
+  private final EmailTemplateRenderer templateRenderer;
   private final ObjectMapper objectMapper;
   private final RabbitTemplate rabbitTemplate;
 
@@ -88,10 +86,10 @@ public class EmailQueueService implements IEmailQueueService {
               emailLog.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
         }
 
-        // 3. Thymeleaf ile render et
-        Context ctx = new Context();
-        ctx.setVariables(dynamicData);
-        String htmlContent = templateEngine.process("emails/" + emailLog.getTemplateName(), ctx);
+        // 3. DB-first renderer ile render et (DB'de yoksa classpath fallback)
+        EmailTemplateRenderer.RenderedEmail rendered =
+            templateRenderer.render(emailLog.getTemplateName(), dynamicData);
+        String htmlContent = rendered.html();
 
         // 4. Sender'i fabrikadan al ve gonder (v2: DB-based)
         JavaMailSender sender = mailSenderFactory.getMailSender(account);

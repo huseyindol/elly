@@ -107,4 +107,8 @@ public final class PermissionConstants {
   // =============== RABBITMQ ADMIN ===============
   public static final String RABBIT_READ = "rabbit:read";
   public static final String RABBIT_MANAGE = "rabbit:manage";
+
+  // =============== EMAIL TEMPLATES (v4) ===============
+  public static final String EMAIL_TEMPLATES_READ = "email_templates:read";
+  public static final String EMAIL_TEMPLATES_MANAGE = "email_templates:manage";
 }

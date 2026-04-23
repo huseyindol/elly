@@ -50,6 +50,10 @@ data:
   # --- RabbitMQ ---
   RABBITMQ_HOST: "rabbitmq"
   RABBITMQ_PORT: "5672"
+  # Management HTTP API — panel admin UI proxy'si icin ("rabbitmq-management" service
+  # k8s/2e-rabbitmq.yaml:106 altinda zaten tanimli, port 15672).
+  RABBITMQ_MGMT_URL: "http://rabbitmq-management:15672/api"
+  RABBITMQ_VHOST: "/"
 
   # --- Mail SMTP (Mail+Form v2) ---
   # v2'de SMTP host/port/username/password ENV ya da ConfigMap'te DEGIL, her

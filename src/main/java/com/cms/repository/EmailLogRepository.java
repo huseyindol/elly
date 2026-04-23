@@ -4,6 +4,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -19,6 +20,11 @@ public interface EmailLogRepository extends JpaRepository<EmailLog, Long> {
   List<EmailLog> findByStatusAndCreatedAtBefore(EmailStatus status, Date createdAt, Pageable pageable);
 
   List<EmailLog> findByStatus(EmailStatus status);
+
+  /**
+   * Panel UI icin status filtresi ile paginated listeleme.
+   */
+  Page<EmailLog> findByStatus(EmailStatus status, Pageable pageable);
 
   /**
    * RabbitMQ consumer icin: mailAccount lazy proxy'sini ayni sorguda initialize

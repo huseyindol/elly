@@ -5,6 +5,108 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-04-23] Mail v3 (Retry Endpoint) + v4 Tasarim + RabbitMQ Admin API
+**Tip:** ✨ Feature + 🏗 Tasarim | **Boyut:** Buyuk
+
+### Ozet
+Uc is parcacigi tek iterasyonda tamamlandi:
+1. **v3:** `POST /api/v1/emails/{id}/retry` endpoint'i — FAILED/PENDING mail'i tek call ile reset + re-publish eder
+2. **v4 tasarimi:** Template hosting kararina dair 3-opsiyon analizi → **Opsiyon C (Template Registry DB'de)** onerildi. Kullanicinin "CMS hafif kalsin" hedefine uygun, panel-hosted runtime render'siz.
+3. **RabbitMQ admin proxy API:** Panel'den RabbitMQ'yu yonetecek CMS backend endpoint'leri (`/api/v1/admin/rabbit/*`). Panel repo ayri oldugu icin UI entegrasyon dokumani da hazirlandi.
+
+Ayrica **mail-smoke-test** skill'i yazildi — kullanici "mail smoke test yap" dedigi zaman tam otomasyon calisir.
+
+### v3 — Email Retry Endpoint
+
+**Yeni endpoint'ler:**
+| Method | Path | Permission |
+|---|---|---|
+| POST | `/api/v1/emails/{id}/retry` | `emails:retry` |
+| GET | `/api/v1/emails?status=&page=&size=` | `emails:read` |
+
+**Retry semantik:**
+- SENT kayitlari tekrar gonderilmez (400 `VALIDATION_ERROR`)
+- `status=PENDING`, `retryCount=0`, `errorMessage=null` olarak reset
+- Ayni RabbitMQ exchange + routing key ile tekrar publish
+- `@Transactional` + `ResourceNotFoundException(404)` / `ValidationException(400)` hierarşisi
+- JOIN FETCH ile MailAccount lazy proxy initialize edilir (consumer pattern'i ile simetrik)
+
+**Degisen dosyalar:**
+- `PermissionConstants.java`: `EMAILS_RETRY = "emails:retry"` eklendi
+- `IEmailService.java`, `EmailService.java`: `retry(Long)` + `list(EmailStatus, Pageable)` + private `toDto()` helper (DRY)
+- `EmailLogRepository.java`: `findByStatus(EmailStatus, Pageable)` eklendi
+- `IEmailController.java`, `EmailController.java`: yeni endpoint'ler + `@PageableDefault(size=20, sort="id", desc)`
+
+### v4 Mail Architecture — Tasarim Karari
+
+**Soru:** Template'ler elly-admin-panel'e tasinsin mi? Akis: CMS POST → panel render → HTML → CMS SMTP?
+
+**Cevap:** Hayir, daha iyi bir yol var. `.claude/agent-memory/team-lead/v4-mail-architecture-proposal.md`'de tam analiz:
+
+| Opsiyon | Akis | Verdikt |
+|---|---|---|
+| A | Panel on-demand render (kullanicinin onerisi) | ❌ Her mailde network hop + tek ariza noktasi |
+| B | Panel push to S3/Git | ⚠️ Yeni altyapi gerektirir |
+| **C** | **Template Registry CMS DB'de + panel CRUD** | **✅ ONERI** |
+
+**Neden C:**
+- Runtime cross-service call YOK (v2 performans profili korunur)
+- Panel sadece CRUD UI saglar, render mantigi CMS'te (zaten Thymeleaf entegre)
+- Redis cache, tenant-aware override, optimistic lock versiyonlama hazir geldigi icin
+- Classpath fallback ile zero-downtime migration
+
+**Uygulama icin hazir:** yeni `email_templates` tablosu semasi + bootstrap runner + 6 endpoint + permission'lar dokumante edildi. Bir sonraki iterasyonda kod yazilabilir.
+
+### RabbitMQ Admin Proxy — Panel Entegrasyonu
+
+**Sorun:** Kullanici "RabbitMQ management UI panel'de olsun" dedi, ama panel'i dogrudan `:15672`'ye bagmak credential hygiene + network izolasyonu acisindan yanlis olur.
+
+**Cozum:** CMS thin proxy. Panel → CMS JWT → CMS → internal RabbitMQ management API.
+
+**Yeni endpoint'ler (CMS'te):**
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api/v1/admin/rabbit/overview` | `rabbit:read` |
+| GET | `/api/v1/admin/rabbit/queues` | `rabbit:read` |
+| GET | `/api/v1/admin/rabbit/queues/{name}` | `rabbit:read` |
+| GET | `/api/v1/admin/rabbit/queues/{name}/messages?count=10` | `rabbit:read` |
+| POST | `/api/v1/admin/rabbit/queues/{name}/purge` | `rabbit:manage` |
+| POST | `/api/v1/admin/rabbit/queues/{name}/republish` | `rabbit:manage` |
+| DELETE | `/api/v1/admin/rabbit/queues/{name}/contents` | `rabbit:manage` (purge alias) |
+
+**Implementation notlari:**
+- `RestClient` (Spring 6.1+) kullanildi — WebFlux starter eklemedi (sync cagrilar icin gereksiz)
+- `SimpleClientHttpRequestFactory` + 2s connect / 5s read timeout
+- `BrokerUnavailableException extends BaseException` → `GlobalExceptionHandler` otomatik 503 doner
+- vhost `/` → `%2F` URL-encode edildi (management API gereksinimi)
+- Peek `ackmode=ack_requeue_true` (mesaj queue'dan silinmez)
+
+**Yeni Permission'lar:** `RABBIT_READ`, `RABBIT_MANAGE` — DB seed'e eklenmesi gerekiyor (RBAC migration sonraki is).
+
+**Panel UI entegrasyonu:** `.claude/agent-memory/team-lead/rabbitmq-admin-api-design.md` — tam tasarim, dosya/sayfa/component semasi, API client kodu, confirm modal UX pattern'leri.
+
+### Yeni Skill: `mail-smoke-test`
+
+Kullanici "mail smoke test yap" dediginde tam otomasyon:
+1. Login (JWT al)
+2. Mail account varsa kullan / yoksa yeni olustur + verify
+3. Form varsa kullan / yoksa yeni olustur
+4. Dummy payload uret (unique timestamp + random id)
+5. `/forms/{id}/submit` cagir
+6. EmailLog DB kontrolu + log grep
+7. Kullaniciya ozet ciktiyi markdown tablo halinde sun
+
+Detay: `.claude/skills/mail-smoke-test/SKILL.md`
+
+### Sonraki Iterasyon (v4 / v5 kuyrukta)
+
+- [ ] **v4 uygulama:** `email_templates` tablosu + `EmailTemplate` entity + CRUD endpoint'leri + bootstrap runner
+- [ ] **RBAC seed:** `rabbit:read`, `rabbit:manage`, `email_templates:*` permission'larini role'lere bagla
+- [ ] **Panel UI:** Rabbit yonetim sayfasi + email template editor (elly-admin-panel repo'sunda)
+- [ ] **Integration tests:** `RabbitAdminService` wiremock ile 15672 mock
+
+---
+
 ## [2026-04-23] Mail+Form v2 — Prod Hotfix'leri + Smoke Test Onayi
 **Tip:** 🔧 Hotfix + ⚙️ Konfigurasyon + ✅ Dogrulama | **Boyut:** Orta
 

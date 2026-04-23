@@ -83,6 +83,7 @@ public final class PermissionConstants {
   // =============== EMAILS ===============
   public static final String EMAILS_SEND = "emails:send";
   public static final String EMAILS_READ = "emails:read";
+  public static final String EMAILS_RETRY = "emails:retry";
 
   // =============== CACHE ===============
   public static final String CACHE_READ = "cache:read";
@@ -102,4 +103,8 @@ public final class PermissionConstants {
   public static final String ROLES_CREATE = "roles:create";
   public static final String ROLES_UPDATE = "roles:update";
   public static final String ROLES_DELETE = "roles:delete";
+
+  // =============== RABBITMQ ADMIN ===============
+  public static final String RABBIT_READ = "rabbit:read";
+  public static final String RABBIT_MANAGE = "rabbit:manage";
 }

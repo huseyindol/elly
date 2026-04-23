@@ -235,6 +235,13 @@ CMS endpoint'leri:
 
 Request/Response tipleri: `EmailTemplate` (zaten `types/cms.ts`'de tanımlı).
 
+**Mevcut seed template'leri (DB'de hazır):**
+| templateKey | Subject | Değişkenler |
+|-------------|---------|-------------|
+| `form-notification` | `Yeni Form Gönderimi: [[${formTitle}]]` | `formTitle`, `submittedAt`, `formFields` |
+| `welcome` | `Hoş Geldin, [[${userName}]]!` | `userName`, `dashboardUrl` |
+| `password-reset` | `Şifre Sıfırlama Talebiniz` | `userName`, `resetUrl`, `resetCode`, `expiresIn` |
+
 Preview endpoint'i şu body bekler:
 ```json
 { "data": { "userName": "Ahmet", "link": "https://..." } }

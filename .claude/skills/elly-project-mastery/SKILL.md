@@ -34,12 +34,15 @@ Bunu yaptıktan sonra kullanıcıya şunu sun:
 
 ---
 
-## PROJE DURUM SNAPSHOTU (2026-04-21)
+## PROJE DURUM SNAPSHOTU (2026-04-23)
 
 ### Tamamlanan Büyük Özellikler
 
 | Tarih | Özellik | Durum | Detay Dosyası |
 |-------|---------|-------|---------------|
+| 2026-04-23 | v4 Email Templates — DB-hosted, tenant-aware, panel CRUD + preview | ✅ | changelog.md |
+| 2026-04-23 | RabbitMQ Admin Proxy API — CMS thin proxy, JWT korumalı | ✅ | rabbitmq-admin-api-design.md |
+| 2026-04-23 | Mail v3 — Email retry endpoint | ✅ | changelog.md |
 | 2026-04-21 | Mail+Form v2 — DB-based SMTP (AES) + Form-level sender/recipient secimi | ✅ | docs/MAIL_FORM_V2_GUIDE.md |
 | 2026-04-19 | Mail+Form v1 — ENV-based SMTP profil (v2'de geri alindi) | ↩️ SUPERSEDED | v2-mail-form-roadmap.md |
 | 2026-04-12 | Tenant-Based Gmail SMTP + RabbitMQ Retry | ✅ | tenant-mail-smtp.md |
@@ -100,6 +103,12 @@ Auth Flow:
 | Redis user auth cache | Her request'teki 3 SQL → 1 Redis GET | UserAuthCacheService.java |
 | Constructor injection zorunlu | @Autowired yasak | Tüm servisler |
 | RabbitMQ retry TTL=30sn | Tight-loop retry önlemek için | RabbitMQConfig.java |
+|| ApiKeyFilter silindi | JWT+RBAC sistemi ile çelişiyordu, multi-tenant auth’da anti-pattern | (silindi) |
+|| DataInitializer.syncRole | Yeni permission’lar mevcut rollere otomatik eklenir; createRoleIfNotExists eski | DataInitializer.java |
+|| RabbitMgmtClient EncodingMode.NONE | RestClient pre-encoded %2F’yi %252F’ye çeviriyordu — NONE ile önlendi | RabbitMgmtClientConfig.java |
+|| EmailTemplateLookupService ayrı bean | EmailTemplateService↔EmailTemplateRenderer circular dep’i kırmak için | EmailTemplateLookupService.java |
+|| Email template DB-first → classpath fallback | Zero-downtime geçiş: DB’de yoksa classpath’tan yükle | EmailTemplateRenderer.java |
+|| Bootstrap seed idempotent | existsByKey kontrolü — her deploy’da aynı template tekrar eklenmez | EmailTemplateBootstrapRunner.java |
 
 ---
 
@@ -147,6 +156,29 @@ src/main/resources/
 docs/MAIL_FORM_V2_GUIDE.md                 — Uçtan uca CURL rehberi
 .claude/agent-memory/team-lead/v2-mail-form-roadmap.md — v2 teslim + v3 yol haritasi
 ```
+
+### v4 Email Templates (2026-04-23)
+```
+src/main/java/com/cms/
+├── entity/EmailTemplate.java                  — tenant_id=null global, optimistic lock, version
+├── repository/EmailTemplateRepository.java    — tenant-aware + global lookup
+├── dto/DtoEmailTemplate.java + IU + Preview   — API contract
+├── service/IEmailTemplateService.java         — CRUD + preview + existsByKey
+├── service/impl/EmailTemplateService.java     — implementation, cache eviction
+├── service/impl/EmailTemplateLookupService.java — @Cacheable("emailTemplates"), circular dep çözümü
+├── service/impl/EmailTemplateRenderer.java    — DB-first → classpath fallback Thymeleaf render
+├── controller/IEmailTemplateController.java   — API contract
+└── controller/impl/EmailTemplateController.java — /api/v1/email-templates CRUD + preview
+
+src/main/java/com/cms/config/
+└── EmailTemplateBootstrapRunner.java          — İlk deploy seed (form-notification + welcome + password-reset)
+
+src/main/resources/migration/
+└── db-migration-email-templates-v4.sql        — email_templates tablo + index migration
+```
+
+**Seed template'leri:** `form-notification` (classpath), `welcome` (inline), `password-reset` (inline)
+**Permission'lar:** `email_templates:read`, `email_templates:manage`
 
 **Silinen (v1'den v2'ye geri donus):** `EnvMailProfileResolver.java`, `DtoAvailableProfile.java`, `config/mail/` klasoru, tum `MAIL_{TENANT}_{PROFILE}_*` ENV'leri + k8s/GH Actions secret'lari, `MailAccount.envProfileKey` + `is_default` kolonlari, `/available-profiles` endpoint.
 

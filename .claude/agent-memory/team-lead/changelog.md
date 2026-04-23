@@ -5,6 +5,83 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-04-23] v4 Email Templates — Uygulama + Bugfix Oturumu
+**Tip:** 🆕 Özellik + 🔧 Bugfix + 🔒 Güvenlik | **Boyut:** Büyük
+
+### Özet
+Aynı oturumda 4 bağımsız sorun çözüldü ve v4 Email Templates özelliği sıfırdan uygulandı, production'a alındı.
+
+### Bugfix 1 — Legacy `ApiKeyFilter` Kaldırıldı
+**Sorun:** `GET /api/v1/emails` → 401 `INVALID_API_KEY`. Eski `ApiKeyFilter.java` tüm `/api/v1/emails/**` isteklerinde `X-API-KEY` header zorunlu kılıyordu; JWT+RBAC sistemi ile çelişiyordu.
+**Fix:** `src/main/java/com/cms/filter/ApiKeyFilter.java` silindi. `application.properties`'den `email.api.key` property'si kaldırıldı. `docs/MAIL_GUIDE.md` güncellendi (X-API-KEY ekleme, JWT ile çalışan sistemde anti-pattern).
+
+### Bugfix 2 — RBAC Rol Senkronizasyonu (`DataInitializer.syncRole`)
+**Sorun:** `GET /api/v1/admin/rabbit/queues` → 403 `ACCESS_DENIED`. Yeni `rabbit:read`, `rabbit:manage` permission'ları mevcut rollere atanmamıştı; eski `createRoleIfNotExists` eksik permission ekleme yapmıyordu.
+**Fix:** `DataInitializer.java`'daki `createRoleIfNotExists` → `syncRole` olarak yeniden yazıldı. `syncRole` mevcut rolde eksik permission varsa `addAll` yapar, yoksa idempotent geçer. Her deploy'da otomatik çalışır.
+
+### Bugfix 3 — RabbitMQ Management API Double URL Encoding
+**Sorun:** `GET /api/v1/admin/rabbit/queues` → 500, `"404 Not Found: Object Not Found"`. vhost `/` → `%2F` encode ediliyordu ama Spring `RestClient` bunu `%252F` olarak tekrar encode ediyordu.
+**Fix:** `RabbitMgmtClientConfig.java`'ya `DefaultUriBuilderFactory.EncodingMode.NONE` eklendi — RestClient pre-encoded URI segment'lerini yeniden encode etmez.
+
+### v4 Email Templates — Yeni Özellik
+**Hedef:** Classpath-bağımlı tek template'den panel üzerinden yönetilebilir, tenant-aware, DB-hosted template sistemine geçiş.
+
+**Mimari karar:** DB-first → classpath fallback. Tenant-specific template varsa o kullanılır, yoksa global (tenantId=null) template, o da yoksa classpath HTML dosyası.
+
+**Circular dependency çözümü:** `EmailTemplateService` → `EmailTemplateRenderer` → `IEmailTemplateService` döngüsü `EmailTemplateLookupService` ile kırıldı (ayrı bean, sadece `EmailTemplateRepository` bağımlılığı).
+
+**Yeni dosyalar:**
+| Dosya | Açıklama |
+|-------|----------|
+| `entity/EmailTemplate.java` | JPA entity, `tenant_id=null` = global, optimistic lock |
+| `repository/EmailTemplateRepository.java` | `findByTenantIdAndTemplateKey`, `findByTenantIdIsNull...` |
+| `dto/DtoEmailTemplate.java` + IU + Preview DTO'ları | API contract |
+| `service/IEmailTemplateService.java` + `EmailTemplateService.java` | CRUD + önbellek temizleme |
+| `service/impl/EmailTemplateLookupService.java` | `@Cacheable("emailTemplates")` ile tenant-aware cached load — circular dep çözümü |
+| `service/impl/EmailTemplateRenderer.java` | DB-first → classpath fallback Thymeleaf render |
+| `controller/IEmailTemplateController.java` + `EmailTemplateController.java` | `/api/v1/email-templates` CRUD + preview |
+| `config/EmailTemplateBootstrapRunner.java` | İlk deploy'da classpath + inline template'leri DB'ye seed eder (idempotent) |
+| `src/main/resources/migration/db-migration-email-templates-v4.sql` | Tablo + index migration |
+
+**Yeni permission'lar:** `EMAIL_TEMPLATES_READ`, `EMAIL_TEMPLATES_MANAGE` — `PermissionConstants.java` + `DataInitializer.syncRole`
+
+**Bootstrap seed template'leri (3 adet):**
+- `form-notification` — classpath'tan (zaten vardı)
+- `welcome` — inline HTML, kullanıcı kayıt hoşgeldin maili (`userName`, `dashboardUrl`)
+- `password-reset` — inline HTML, şifre sıfırlama maili (`userName`, `resetUrl`, `resetCode`, `expiresIn`)
+
+**Yeni endpoint'ler:**
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/api/v1/email-templates` | `email_templates:read` |
+| GET | `/api/v1/email-templates/{key}` | `email_templates:read` |
+| POST | `/api/v1/email-templates` | `email_templates:manage` |
+| PUT | `/api/v1/email-templates/{key}` | `email_templates:manage` |
+| DELETE | `/api/v1/email-templates/{key}` | `email_templates:manage` |
+| POST | `/api/v1/email-templates/{key}/preview` | `email_templates:read` |
+
+**DB migration:** 3 ayrı tenant DB'sine manuel `kubectl exec` ile uygulandı (basedb, tenant1, tenant2). ConfigMap `JPA_DDL_AUTO: validate` nedeniyle Hibernate schema oluşturmaz.
+
+**Production incident:** İlk deploy'da `CrashLoopBackOff` — circular dependency hatası. `EmailTemplateLookupService` refaktörü ile çözüldü, ikinci deploy başarılı.
+
+### SQL migration dosyaları `migration/` klasörüne taşındı
+`src/main/resources/migration/` altında organize edildi: `db-indexes.sql`, `db-migration-ratings.sql`, `db-migration-mail-form-v2.sql`, `db-migration-email-templates-v4.sql`, `db-migration-mail-accounts.sql`, `db-performance-indexes.sql`, `migration-add-token-version.sql`.
+
+### Dosyalar
+**Silinen:**
+- `src/main/java/com/cms/filter/ApiKeyFilter.java`
+
+**Değiştirilen:**
+- `src/main/java/com/cms/config/DataInitializer.java` — `syncRole` pattern
+- `src/main/java/com/cms/config/PermissionConstants.java` — 2 yeni permission
+- `src/main/java/com/cms/config/RabbitMgmtClientConfig.java` — `EncodingMode.NONE`
+- `src/main/java/com/cms/service/impl/EmailQueueService.java` — `EmailTemplateRenderer` entegre
+- `src/main/resources/application.properties` — `email.api.key` kaldırıldı
+- `docs/MAIL_GUIDE.md` — X-API-KEY anti-pattern notu
+- `.claude/agent-memory/team-lead/elly-admin-panel-integration-prompts.md` — URL düzeltmeleri, v4 template listesi
+
+---
+
 ## [2026-04-23] Mail v3 (Retry Endpoint) + v4 Tasarim + RabbitMQ Admin API
 **Tip:** ✨ Feature + 🏗 Tasarim | **Boyut:** Buyuk
 

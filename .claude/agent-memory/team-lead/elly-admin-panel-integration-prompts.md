@@ -1222,14 +1222,14 @@ export const formsKeys = {
 
    Her tenant DB'sinde bu migration'ı çalıştır.
 
-4. **v4 backend henüz yazılmadıysa:** Prompt 2 (Email Templates) çalışmaz —
-   endpoint 404 döner. Önce elly repo'sunda v4 endpoint'lerini yazdırmalısın.
-   **Hazır promptlar (deploy edilmiş ve çalışan):**
-   - Prompt 2 — Email Templates (`email_templates:read`, `email_templates:manage`) — v4 backend deploy edildi
+4. **Backend hazır — tüm endpoint'ler canlı (2026-04-23 itibarıyla):**
+   - Prompt 2 — Email Templates (`email_templates:read`, `email_templates:manage`) — v4 DB-hosted, 3 seed template (`form-notification`, `welcome`, `password-reset`) bootstrap runner ile idempotent gelir
    - Prompt 3 — RabbitMQ yönetim (`rabbit:read`, `rabbit:manage`)
-   - Prompt 4 — Email Logs (`emails:read`, `emails:retry`) — auth: JWT Bearer only, X-API-KEY yok
+   - Prompt 4 — Email Logs (`emails:read`, `emails:retry`) — auth: JWT Bearer only, **`X-API-KEY` header'ı yok** (legacy `ApiKeyFilter` kaldırıldı)
    - Prompt 5 — Mail Accounts (`mail:read/create/update/delete`)
    - Prompt 6 — Forms (`forms:read/create/update/delete`)
+
+   Panel agent'ı 404 ile karşılaşırsa path'i kontrol et (`/api/v1/...` prefix'i şart) — backend eksikliği değil, path yazım hatası ihtimali yüksek.
 
 5. **Stack uyuşmazlığı:** Projen shadcn/ui değil MUI kullanıyorsa, Prompt
    sonuna şunu ekle: *"Yukarıdaki örnek kodlar shadcn/ui varsayımıyla yazıldı.

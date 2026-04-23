@@ -8,7 +8,6 @@ import org.springframework.data.domain.Pageable;
 import com.cms.dto.DtoEmailTemplate;
 import com.cms.dto.DtoEmailTemplateIU;
 import com.cms.dto.DtoEmailTemplatePreviewResponse;
-import com.cms.entity.EmailTemplate;
 
 public interface IEmailTemplateService {
 
@@ -27,11 +26,4 @@ public interface IEmailTemplateService {
   boolean existsByKey(String tenantId, String key);
 
   void createGlobal(String key, String subject, String htmlBody, String description);
-
-  /**
-   * EmailTemplateRenderer tarafından çağrılır.
-   * Tenant-specific template varsa onu döner, yoksa global (tenantId=null) template'i döner.
-   * Her ikisi de yoksa null döner — renderer classpath'e düşer.
-   */
-  EmailTemplate loadTemplate(String tenantId, String templateKey);
 }

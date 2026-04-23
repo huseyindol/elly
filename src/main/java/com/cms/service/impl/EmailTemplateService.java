@@ -3,7 +3,6 @@ package com.cms.service.impl;
 import java.util.Map;
 
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -120,24 +119,6 @@ public class EmailTemplateService implements IEmailTemplateService {
     entity.setVersion(1);
     templateRepository.save(entity);
     log.info("Global EmailTemplate seed edildi: key={}", key);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  @Cacheable(value = "emailTemplates", key = "#templateKey")
-  public EmailTemplate loadTemplate(String tenantId, String templateKey) {
-    if (tenantId != null) {
-      EmailTemplate specific = templateRepository
-          .findByTenantIdAndTemplateKey(tenantId, templateKey)
-          .orElse(null);
-      if (specific != null && Boolean.TRUE.equals(specific.getActive())) {
-        return specific;
-      }
-    }
-    return templateRepository
-        .findByTenantIdIsNullAndTemplateKey(templateKey)
-        .filter(t -> Boolean.TRUE.equals(t.getActive()))
-        .orElse(null);
   }
 
   // ==================== HELPERS ====================

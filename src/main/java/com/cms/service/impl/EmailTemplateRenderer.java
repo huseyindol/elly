@@ -11,7 +11,6 @@ import org.thymeleaf.templateresolver.StringTemplateResolver;
 
 import com.cms.config.TenantContext;
 import com.cms.entity.EmailTemplate;
-import com.cms.service.IEmailTemplateService;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,14 +29,14 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 public class EmailTemplateRenderer {
 
-  private final IEmailTemplateService templateService;
+  private final EmailTemplateLookupService lookupService;
   private final TemplateEngine classpathEngine;
   private final TemplateEngine stringHtmlEngine;
   private final TemplateEngine stringTextEngine;
 
-  public EmailTemplateRenderer(IEmailTemplateService templateService,
+  public EmailTemplateRenderer(EmailTemplateLookupService lookupService,
       TemplateEngine classpathEngine) {
-    this.templateService = templateService;
+    this.lookupService = lookupService;
     this.classpathEngine = classpathEngine;
     this.stringHtmlEngine = buildStringEngine(TemplateMode.HTML);
     this.stringTextEngine = buildStringEngine(TemplateMode.TEXT);
@@ -49,7 +48,7 @@ public class EmailTemplateRenderer {
    */
   public RenderedEmail render(String templateKey, Map<String, Object> variables) {
     String tenantId = TenantContext.getTenantId();
-    EmailTemplate template = templateService.loadTemplate(tenantId, templateKey);
+    EmailTemplate template = lookupService.loadTemplate(tenantId, templateKey);
 
     if (template != null) {
       log.debug("EmailTemplate DB'den render ediliyor: key={}, tenant={}", templateKey, tenantId);

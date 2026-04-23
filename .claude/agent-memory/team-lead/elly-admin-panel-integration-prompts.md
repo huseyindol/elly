@@ -14,6 +14,8 @@ Prompt sırası (baştan sona):
 - **Prompt 2:** Email Templates sayfası (v4 feature)
 - **Prompt 3:** RabbitMQ yönetim sayfası
 - **Prompt 4:** Email Logs sayfası (v3 retry için)
+- **Prompt 5:** Mail Accounts sayfası (SMTP profil CRUD + test/verify — v2 DB-based)
+- **Prompt 6:** Forms sayfası (FormDefinition CRUD + Submissions + Mail+Form v2 bildirim alanları)
 
 Her prompt'un bağlamı **aynı CMS API**'ye dayanır — endpoint listeleri her promptta tekrar veriliyor ki agent diğer dokümanlara bakmak zorunda kalmasın.
 
@@ -597,6 +599,577 @@ Başlangıçta atla — ilerisinde çoklu seçim + "Retry Selected" eklenebilir.
 
 ---
 
+## Prompt 5 — Mail Accounts Sayfası (SMTP profil CRUD, v2 DB-based)
+
+**Ön koşul:** Prompt 1 tamamlandı. Bu endpoint'ler **CMS'te canlı** — bugün deploy edildi, test edebilirsin.
+
+```
+elly-admin-panel'e "Mail Accounts" admin sayfası ekle. Her tenant, kendi
+veritabanında birden fazla SMTP hesabı (ör. info@, sales@, support@) tutabilir.
+Bu sayfa onları CRUD eder + test/verify aksiyonları sağlar.
+
+## Bağlam — v2 DB-based Mail Architecture
+
+Mail+Form v2'de artık `application.properties`'te SMTP host/port/username/password
+YOK. Her tenant kendi `mail_accounts` tablosunda kayıtlı hesaplarını yönetir.
+`smtpPassword` alanı DB'de AES-256-CBC ile şifreli saklanır ve **API response'unda
+hiçbir zaman dönmez** (write-only).
+
+Form oluştururken admin bu listeden bir hesap seçer (`senderMailAccountId` FK).
+Pasif hesaplar form'da sender olarak seçilemez.
+
+## CMS Endpoint'leri
+
+| Method | Path | Permission | Açıklama |
+|---|---|---|---|
+| GET    | `/api/v1/mail-accounts` | `mail:read` | Tüm hesaplar (array) |
+| GET    | `/api/v1/mail-accounts/active` | `mail:read` | Sadece `active=true` — Form dropdown'unda kullanılır |
+| GET    | `/api/v1/mail-accounts/{id}` | `mail:read` | Detay |
+| POST   | `/api/v1/mail-accounts` | `mail:create` | Yeni hesap (201 Created) |
+| PUT    | `/api/v1/mail-accounts/{id}` | `mail:update` | Güncelle (password boşsa korunur) |
+| DELETE | `/api/v1/mail-accounts/{id}` | `mail:delete` | Sil |
+| POST   | `/api/v1/mail-accounts/{id}/test` | `mail:create` | Body: `{testTo: string}` — gerçek mail gönderir |
+| POST   | `/api/v1/mail-accounts/{id}/verify` | `mail:read` | Mail göndermeden SMTP bağlantısını test eder |
+
+## Request/Response Tipleri
+
+`types/cms.ts` dosyasına (yoksa) şu tipleri ekle:
+
+```typescript
+export interface MailAccount {
+  id: number;
+  name: string;               // Panel'de gösterilen ad (ör. "Satış Hesabı")
+  fromAddress: string;        // From header adresi (sales@firma.com)
+  smtpHost: string;           // smtp.gmail.com, smtp.office365.com vs.
+  smtpPort: number;           // 587 (STARTTLS), 465 (SSL), 25 (plaintext)
+  smtpUsername: string;       // genellikle email adresi
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  // NOT: smtpPassword response'ta YOK — sadece create/update isteğinde body'de
+}
+
+export interface MailAccountRequest {
+  name: string;
+  fromAddress: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUsername: string;
+  smtpPassword?: string;  // Update'te boş/null ise mevcut şifre korunur
+  active?: boolean;       // default: true
+}
+
+export interface MailTestRequest {
+  testTo: string;  // Test mailinin gideceği hedef adres
+}
+```
+
+## Görev
+
+### Dosyalar
+
+```
+app/(admin)/admin/mail-accounts/
+├── page.tsx                         # Liste sayfası
+├── loading.tsx
+├── new/
+│   └── page.tsx                     # Oluşturma formu
+├── [id]/
+│   ├── page.tsx                     # Edit sayfası
+│   └── _components/
+│       ├── MailAccountForm.tsx      # Create + Edit ortak
+│       ├── TestEmailDialog.tsx      # testTo alıp POST /test
+│       └── VerifyConnectionButton.tsx
+└── _components/
+    ├── MailAccountListTable.tsx
+    ├── ActiveBadge.tsx              # active=true → green, false → gray
+    └── DeleteConfirmDialog.tsx
+
+lib/api/mail-accounts.ts
+lib/hooks/mail-accounts/
+├── useMailAccounts.ts               # useQuery list (all)
+├── useActiveMailAccounts.ts         # useQuery active only — form dropdown'u kullanır
+├── useMailAccount.ts                # useQuery detail
+└── useMailAccountMutations.ts       # create/update/delete/test/verify
+```
+
+### Özellikler
+
+**Liste sayfası (`/admin/mail-accounts`)**
+- Server Component, `requirePermission('mail:read')`
+- Tablo kolonları:
+  - Ad (name, bold)
+  - From Adresi (fromAddress, mono font)
+  - SMTP Host:Port (ör. `smtp.gmail.com:587`)
+  - Kullanıcı Adı (smtpUsername)
+  - Durum (ActiveBadge)
+  - Güncelleme (relative time)
+  - Actions
+- Sağ üst: "Yeni Hesap" butonu (`mail:create` permission kontrolü)
+- Her satırda:
+  - Tıklanınca `/admin/mail-accounts/{id}` edit sayfasına gider
+  - "Test Mail" butonu → TestEmailDialog açar
+  - "Verify" butonu → quick SMTP ping (toast ile sonuç)
+  - "Sil" butonu → DeleteConfirmDialog
+- TanStack Query `staleTime: 60_000`
+- Empty state: "Henüz mail hesabı yok. İlk hesabı eklemek için..."
+
+**Oluşturma formu (`/new`)**
+- react-hook-form + zod:
+  ```typescript
+  const schema = z.object({
+    name: z.string().min(1).max(255),
+    fromAddress: z.string().email(),
+    smtpHost: z.string().min(1).max(255),
+    smtpPort: z.number().int().min(1).max(65535),
+    smtpUsername: z.string().min(1).max(255),
+    smtpPassword: z.string().min(1, 'Yeni hesap için şifre zorunludur'),
+    active: z.boolean().default(true),
+  });
+  ```
+- Alan hint'leri:
+  - SMTP Port yanında: "587 (STARTTLS, önerilen), 465 (SSL/TLS), 25 (plaintext)"
+  - SMTP Username yanında: "Çoğu sağlayıcıda e-posta adresinizle aynı"
+  - Gmail için küçük info bubble: "App Password kullanın (2FA gerekir, normal şifre çalışmaz)"
+- "Kaydet" → `POST /api/v1/mail-accounts` → 201 → edit sayfasına redirect
+- "Kaydet ve Test Et" → önce POST, sonra TestEmailDialog otomatik açılır
+
+**Edit sayfası (`/[id]`)**
+- URL'den `id` alır, `useMailAccount(id)` ile fetch
+- Form doldurur; **smtpPassword alanı boş gelir** — placeholder: "Değiştirmek için yeni şifre yaz, boş bırakırsan mevcut korunur"
+- Password zod schema update'te optional: `smtpPassword: z.string().optional()`
+- Sağ üst actions: Test | Verify | Sil (destructive)
+- Kaydet → `PUT /api/v1/mail-accounts/{id}`
+- Boş password → body'den smtpPassword field'ını **çıkar** (undefined olsa bile JSON'da yok olsun)
+
+**TestEmailDialog**
+- shadcn Dialog
+- Input: "Test maili gideceği adres" (email validation)
+- "Gönder" butonu → `POST /api/v1/mail-accounts/{id}/test` body `{testTo}`
+- Loading: "SMTP bağlantısı kuruluyor, mail gönderiliyor..." (5-10sn sürebilir)
+- Success: toast "Test maili gönderildi → {testTo}"
+- Error: toast error ile response mesajı (SMTP auth failure, port kapalı vs.)
+
+**VerifyConnectionButton**
+- Tek tıkla `POST /api/v1/mail-accounts/{id}/verify` (mail göndermez, sadece SMTP handshake)
+- Loading state: spinner + "Doğrulanıyor..."
+- Success: toast "SMTP bağlantısı başarılı"
+- Error: toast error — response mesajı detaylı gösterilsin (kullanıcı şifresini düzeltsin)
+
+**DeleteConfirmDialog**
+- "Onaylamak için hesap adını yaz: **Satış Hesabı**"
+- Input eşleşince "Sil" butonu aktif
+- Delete sonrası toast + liste sayfasına redirect
+- Uyarı mesajı: "Bu hesabı kullanan formlar 422 dönmeye başlayacak. Önce formları başka hesaba geçir."
+
+### Query Keys
+
+```typescript
+export const mailAccountsKeys = {
+  all: ['mail-accounts'] as const,
+  list: () => [...mailAccountsKeys.all, 'list'] as const,
+  active: () => [...mailAccountsKeys.all, 'active'] as const,
+  detail: (id: number) => [...mailAccountsKeys.all, 'detail', id] as const,
+};
+```
+
+Invalidation kuralları:
+- Create/Update/Delete → `mailAccountsKeys.all` invalidate (hem list hem active tazelenir)
+- Test/Verify → invalidate **etme** (hesap verisi değişmiyor)
+
+### Güvenlik Notları
+
+- **smtpPassword'u UI'da hiçbir zaman render etme** — response'ta zaten yok, ama yine de ekranda gösterilmesin
+- Form validation öncesi `fromAddress` ve `smtpUsername`'in aynı domain olup olmadığını **sadece uyarı** olarak göster (hard block değil — Gmail relay gibi senaryolarda farklı olabilir)
+- Permission yok → `/403` (requirePermission helper'ı yapsın)
+
+### Doğrulama
+
+- Create → 201 → edit sayfasına yönlenir, password alanı boş
+- Update → password boş → 200, değişmez; password dolu → 200, günceller
+- Active=false yapılan hesap, formlar sayfasındaki dropdown'da görünmez (Prompt 6 ile bağlantılı)
+- Test button: gerçek mail gönderir (dikkat: test adrese gerçek mail gider)
+- Verify button: mail göndermez, hızlı döner (< 5sn)
+- `npm run build` hatasız
+```
+
+---
+
+## Prompt 6 — Forms Sayfası (FormDefinition + Submissions + Mail+Form v2 bildirim alanları)
+
+**Ön koşul:** Prompt 1 + **Prompt 5 tamamlanmalı** (form sender dropdown'u aktif mail hesaplarına bağlı). Bu endpoint'ler **CMS'te canlı**.
+
+```
+elly-admin-panel'e "Forms" admin sayfası ekle. FormDefinition CRUD + submission
+görüntüleme. Mail+Form v2 ile her form submit'i otomatik bildirim maili tetikler
+— bu yüzden form tanımında **senderMailAccountId** ve **recipientEmail** zorunlu.
+
+## Bağlam — Mail+Form v2 Entegrasyonu
+
+Form oluşturulurken artık zorunlu iki yeni alan:
+1. **senderMailAccountId** (Long) — MailAccount tablosundan bir hesap seçilir.
+   Pasif hesap seçilirse backend 422 döner.
+2. **recipientEmail** (string, email) — Submit sonrası bildirimin gideceği adres
+   (v2'de tek adres; çoklu TO/CC/BCC v3'e ertelendi).
+
+Opsiyonel iki alan:
+3. **notificationSubject** (string) — Bildirim maili konusu. Boş ise backend
+   default değeri kullanır: `"Yeni form gönderimi: {form.title}"`.
+4. **notificationEnabled** (boolean, default true) — false ise form submit
+   yine 200 döner ama mail gönderilmez.
+
+Akış: Submit → FormSubmission kaydı + EmailLog(PENDING) + RabbitMQ'ya job →
+EmailQueueService consumer → `senderMailAccount`'tan AES-decrypt → Gmail SMTP.
+
+## CMS Endpoint'leri — FormDefinition
+
+| Method | Path | Permission | Açıklama |
+|---|---|---|---|
+| POST   | `/api/v1/forms` | `forms:create` | Yeni form tanımı |
+| PUT    | `/api/v1/forms/{id}` | `forms:update` | Güncelle |
+| GET    | `/api/v1/forms/{id}` | `forms:read` | Detay |
+| GET    | `/api/v1/forms/list` | `forms:read` | Tüm formlar (array) |
+| GET    | `/api/v1/forms/list/active` | `forms:read` | Sadece `active=true` |
+| GET    | `/api/v1/forms/list/paged?page=0&size=10&sort=id,asc` | `forms:read` | Paginated |
+| DELETE | `/api/v1/forms/{id}` | `forms:delete` | Sil |
+
+## CMS Endpoint'leri — Submissions
+
+| Method | Path | Permission | Açıklama |
+|---|---|---|---|
+| POST   | `/api/v1/forms/{formId}/submit` | `forms:create` | Test amaçlı panelden submit |
+| GET    | `/api/v1/forms/{formId}/submissions` | `forms:read` | Tüm gönderimler |
+| GET    | `/api/v1/forms/{formId}/submissions/paged?page&size&sort` | `forms:read` | Paginated |
+| GET    | `/api/v1/forms/submissions/{submissionId}` | `forms:read` | Gönderim detayı |
+| GET    | `/api/v1/forms/{formId}/submissions/count` | `forms:read` | Sayı |
+
+## Request/Response Tipleri
+
+`types/cms.ts`'e ekle (yoksa):
+
+```typescript
+// ===== FormSchema yapıları =====
+
+export type ConditionOperator = 'EQUALS' | 'NOT_EQUALS' | 'GT' | 'LT';
+
+export interface FormValidationRule {
+  min?: number | null;
+  max?: number | null;
+  pattern?: string | null;  // regex
+}
+
+export interface FormConditionRule {
+  field: string;             // başka bir field.id
+  operator: ConditionOperator;
+  value: unknown;
+}
+
+export interface FormFieldOption {
+  label: string;
+  value: unknown;
+}
+
+export interface FormFieldDefinition {
+  id: string;                // unique field ID
+  stepId?: string | null;    // multi-step form için step'e bağlanır
+  type: string;              // 'text' | 'email' | 'number' | 'select' | 'radio' | 'checkbox' | 'textarea' | ...
+  label: string;
+  required?: boolean;
+  validation?: FormValidationRule | null;
+  condition?: FormConditionRule | null;  // conditional visibility
+  options?: FormFieldOption[];           // select/radio/checkbox için
+}
+
+export interface FormStepDefinition {
+  id: string;
+  title: string;
+  description?: string;
+}
+
+export interface FormSchema {
+  config?: Record<string, unknown>;  // layout, styling, vs.
+  fields: FormFieldDefinition[];
+  steps?: FormStepDefinition[];      // wizard form'lar için
+}
+
+// ===== FormDefinition =====
+
+export interface FormDefinition {
+  id: number;
+  title: string;
+  version: number | null;
+  schema: FormSchema;
+  active: boolean;
+
+  // Mail+Form v2 alanları
+  senderMailAccountId: number;
+  senderMailAccountName: string;     // readonly — UI display
+  senderFromAddress: string;          // readonly — UI display
+  recipientEmail: string;
+  notificationSubject: string | null;
+  notificationEnabled: boolean;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FormDefinitionRequest {
+  title: string;
+  version?: number;
+  schema: FormSchema;
+  active?: boolean;
+  senderMailAccountId: number;       // zorunlu
+  recipientEmail: string;            // zorunlu
+  notificationSubject?: string;      // opsiyonel
+  notificationEnabled?: boolean;     // default true
+}
+
+// ===== FormSubmission =====
+
+export interface FormSubmission {
+  id: number;
+  formDefinitionId: number;
+  formTitle: string;
+  payload: Record<string, unknown>;  // kullanıcı cevapları
+  submittedAt: string;
+  createdAt: string;
+}
+```
+
+## Görev
+
+### Dosyalar
+
+```
+app/(admin)/admin/forms/
+├── page.tsx                         # Liste sayfası (paginated)
+├── loading.tsx
+├── new/
+│   └── page.tsx                     # Yeni form
+├── [id]/
+│   ├── page.tsx                     # Edit + Tab'li görünüm (Tanım | Gönderimler)
+│   └── _components/
+│       ├── FormDefinitionForm.tsx   # Create + Edit ortak
+│       ├── NotificationSection.tsx  # sender/recipient/subject/enabled bloğu
+│       ├── SenderMailAccountSelect.tsx  # /mail-accounts/active'den dropdown
+│       ├── SchemaEditor.tsx         # Monaco JSON editor + validate
+│       ├── SchemaPreview.tsx        # Alan sayısı özeti
+│       ├── SubmissionsTab.tsx
+│       ├── SubmissionDetailSheet.tsx
+│       └── TestSubmitDialog.tsx     # Admin'in test submit yapması için
+└── _components/
+    ├── FormListTable.tsx
+    └── DeleteConfirmDialog.tsx
+
+lib/api/forms.ts
+lib/hooks/forms/
+├── useForms.ts                      # paged list
+├── useForm.ts                       # detay
+├── useFormMutations.ts              # create/update/delete
+├── useFormSubmissions.ts            # paged submissions
+└── useTestSubmit.ts                 # test amaçlı submit
+```
+
+### Özellikler
+
+**Liste sayfası (`/admin/forms`)**
+- Server Component, `requirePermission('forms:read')`
+- URL search params: `?page=0&size=10&sort=id,asc`
+- Tablo kolonları:
+  - ID
+  - Başlık (title)
+  - Versiyon
+  - Gönderici (senderMailAccountName — "Satış Hesabı")
+  - Alıcı (recipientEmail — mono font)
+  - Bildirim (notificationEnabled → "Açık/Kapalı" badge)
+  - Durum (active badge)
+  - Güncelleme
+  - Actions: edit | sil
+- Sağ üst: "Yeni Form" butonu
+- `useForms` hook'u `/list/paged` endpoint'ini çağırır
+- Empty state: "Henüz form yok"
+
+**Oluşturma formu (`/new`)**
+- react-hook-form + zod:
+  ```typescript
+  const schema = z.object({
+    title: z.string().min(1).max(255),
+    version: z.number().int().optional(),
+    schema: z.object({
+      config: z.record(z.unknown()).optional(),
+      fields: z.array(z.object({
+        id: z.string().min(1),
+        type: z.string().min(1),
+        label: z.string().min(1),
+        required: z.boolean().optional(),
+        // ...
+      })).min(1, 'En az 1 alan olmalı'),
+      steps: z.array(z.object({ id: z.string(), title: z.string() })).optional(),
+    }),
+    active: z.boolean().default(true),
+    senderMailAccountId: z.number().int().positive('Bir gönderici seç'),
+    recipientEmail: z.string().email(),
+    notificationSubject: z.string().max(255).optional(),
+    notificationEnabled: z.boolean().default(true),
+  });
+  ```
+
+**FormDefinitionForm layout** — iki sütun:
+
+Sol sütun (form tanımı):
+- Başlık
+- Versiyon (opsiyonel)
+- Aktif toggle
+- SchemaEditor (Monaco JSON, yükseklik 500px)
+
+Sağ sütun — **NotificationSection** (kart içinde, "Bildirim Ayarları" başlığı):
+- `SenderMailAccountSelect` — `useActiveMailAccounts()` hook'undan dropdown
+  - Opsiyonlar: `{id} • {name} ({fromAddress})`
+  - Eğer hiç aktif hesap yoksa: kart yerine empty state gösterilir:
+    > ⚠ "Bildirim göndermek için önce aktif bir Mail Account oluştur."
+    > [Yeni Mail Account Oluştur] butonu → `/admin/mail-accounts/new`
+  - Seçim değişince UI altında preview: "Bu hesaptan gönderilecek: sales@firma.com"
+- `recipientEmail` — text input, email validation, placeholder `notifications@firma.com`
+- `notificationSubject` — text input (opsiyonel)
+  - Placeholder: `"Yeni form gönderimi: {title}"`
+  - Helper text: "Boş bırakırsan varsayılan kullanılır: Yeni form gönderimi: [form başlığı]"
+- `notificationEnabled` — switch, default ON
+  - Off durumunda uyarı: "⚠ Bu form submit edildiğinde mail gönderilmeyecek, sadece DB'ye kaydedilecek."
+
+**SchemaEditor**
+- Monaco JSON mode, dynamic import (`ssr: false`)
+- "Format" butonu (Shift+Alt+F trigger)
+- Validate butonu → zod ile schema parse, hataları alta listele
+- Sağ altta: "Alan sayısı: 5, Step sayısı: 2, Zorunlu: 3" sayaçları
+- **Visual form builder v5'e ertelendi** — şimdi raw JSON editor yeterli
+- Sample JSON (New sayfası default):
+  ```json
+  {
+    "config": {},
+    "fields": [
+      {
+        "id": "fullName",
+        "type": "text",
+        "label": "Ad Soyad",
+        "required": true,
+        "validation": { "min": 2, "max": 100 }
+      },
+      {
+        "id": "email",
+        "type": "email",
+        "label": "E-posta",
+        "required": true
+      },
+      {
+        "id": "country",
+        "type": "select",
+        "label": "Ülke",
+        "required": true,
+        "options": [
+          { "label": "Türkiye", "value": "TR" },
+          { "label": "Almanya", "value": "DE" }
+        ]
+      }
+    ],
+    "steps": []
+  }
+  ```
+
+**Edit sayfası (`/[id]`)** — Tab'li yapı
+
+- Tab 1: **Tanım** → `FormDefinitionForm` (aynı create form'u)
+- Tab 2: **Gönderimler** → `SubmissionsTab`
+- Tab 3: **Test** → `TestSubmitDialog` tetikleyicisi
+
+**SubmissionsTab**
+- Server Component, paged list `/api/v1/forms/{formId}/submissions/paged`
+- Üstte sayaç: `useQuery('submissions-count', formId)` → "Toplam 87 gönderim"
+- Tablo:
+  - ID | Gönderim Zamanı (relative + absolute tooltip) | Payload özet (ilk 3 field) | Actions: detay
+- Satır tıklanınca `SubmissionDetailSheet` açılır
+
+**SubmissionDetailSheet**
+- shadcn Sheet, right side (büyük — md:max-w-2xl)
+- İçerik:
+  - Başlık: `{formTitle} - Gönderim #{id}`
+  - Gönderim zamanı (absolute + relative)
+  - **Payload tablosu** — field.label → value (schema'dan label'ı eşle)
+    - type === 'checkbox' ise virgül ile birleştir
+    - null/empty → "—"
+  - Alt: raw JSON göster/gizle toggle
+
+**TestSubmitDialog**
+- Admin panelinden test amaçlı form submit — gerçek bildirim maili tetikler
+- Form schema'dan dinamik alan üret:
+  - type === 'text' → Input
+  - type === 'email' → Input email
+  - type === 'number' → Input number
+  - type === 'select' → Select with options
+  - type === 'textarea' → Textarea
+  - type === 'checkbox' → Checkbox group
+  - required alanlar kırmızı yıldızlı
+- "Test Submit" butonu → `POST /api/v1/forms/{formId}/submit` body `{payload: {...}}`
+- Success: toast "Gönderildi. Bildirim maili kuyrukta — Email Logs'tan takip edebilirsin"
+- Modal içinde "Email Logs'a git →" link'i (`/admin/email-logs?status=PENDING`)
+- Uyarı: "Bu gerçek bir mail tetikler — `recipientEmail` adresine mail gider."
+
+**DeleteConfirmDialog**
+- "Form silindiğinde mevcut gönderimler de silinir (cascade)"
+- "Onaylamak için form başlığını yaz: **{title}**"
+
+### Query Keys
+
+```typescript
+export const formsKeys = {
+  all: ['forms'] as const,
+  lists: () => [...formsKeys.all, 'list'] as const,
+  paged: (params: { page: number; size: number; sort: string }) =>
+    [...formsKeys.lists(), 'paged', params] as const,
+  active: () => [...formsKeys.all, 'active'] as const,
+  detail: (id: number) => [...formsKeys.all, 'detail', id] as const,
+  submissions: (formId: number) => [...formsKeys.all, 'submissions', formId] as const,
+  submissionsPaged: (formId: number, params: unknown) =>
+    [...formsKeys.submissions(formId), 'paged', params] as const,
+  submissionDetail: (submissionId: number) =>
+    [...formsKeys.all, 'submission', submissionId] as const,
+  submissionsCount: (formId: number) =>
+    [...formsKeys.submissions(formId), 'count'] as const,
+};
+```
+
+### Önemli UX kuralları
+
+1. **SenderMailAccountSelect** her zaman `/mail-accounts/active` kullansın
+   (tüm liste değil). Pasif hesaplar dropdown'da görünmesin.
+
+2. **Form kaydederken senderMailAccountId yoksa** → submit disabled. Hata
+   mesajı: "Gönderici mail hesabı seçilmeli — Yeni Mail Account Oluştur"
+   (link ile).
+
+3. **notificationEnabled=false iken recipientEmail validate etme** —
+   yine gir zorunlu ama vurgula: "Bildirim kapalı; gönderim iletilmeyecek."
+   (Backend her durumda recipientEmail bekliyor — boş bırakılamaz.)
+
+4. **422 Unprocessable Entity** → toast "Seçilen mail hesabı pasif —
+   başka bir hesap seç veya hesabı aktifleştir" + MailAccountEdit link'i
+
+5. **Optimistic invalidation:** Form update sonrası `formsKeys.all` ve
+   `formsKeys.detail(id)` invalidate; submit sonrası `submissions` ve
+   `submissionsCount` invalidate.
+
+### Doğrulama
+
+- Aktif mail hesabı yokken form oluşturma → empty-state + yönlendirme çalışıyor
+- Form create + submit test → Email Logs sayfasında PENDING olarak görünüyor
+- notificationEnabled=false ile submit → EmailLog oluşmuyor, FormSubmission oluşuyor
+- Submissions tab → sayaç ve tablo eş zamanlı gelir
+- 422 (pasif hesap) hatası düzgün UX ile handle ediliyor
+- Permission 403 → /403 redirect
+- `npm run build` hatasız
+```
+
+---
+
 ## Prompt'ları Kullanırken İpuçları
 
 1. **Prompt 0'ı mutlaka ilk çalıştır** — agent'ın stack'i bilmeden yazdığı
@@ -611,9 +1184,16 @@ Başlangıçta atla — ilerisinde çoklu seçim + "Retry Selected" eklenebilir.
 
    ```sql
    INSERT INTO permissions (name) VALUES
+     -- v4 templates
      ('email_templates:read'), ('email_templates:manage'),
-     ('emails:retry'),
-     ('rabbit:read'), ('rabbit:manage')
+     -- v3 retry + list
+     ('emails:read'), ('emails:retry'),
+     -- RabbitMQ admin
+     ('rabbit:read'), ('rabbit:manage'),
+     -- Mail accounts (v2 DB-based) — Prompt 5
+     ('mail:create'), ('mail:read'), ('mail:update'), ('mail:delete'),
+     -- Forms + submissions — Prompt 6
+     ('forms:create'), ('forms:read'), ('forms:update'), ('forms:delete')
    ON CONFLICT (name) DO NOTHING;
 
    INSERT INTO role_permissions (role_id, permission_id)
@@ -623,7 +1203,10 @@ Başlangıçta atla — ilerisinde çoklu seçim + "Retry Selected" eklenebilir.
    WHERE r.name = 'SUPER_ADMIN'
      AND p.name IN (
        'email_templates:read', 'email_templates:manage',
-       'emails:retry', 'rabbit:read', 'rabbit:manage'
+       'emails:read', 'emails:retry',
+       'rabbit:read', 'rabbit:manage',
+       'mail:create', 'mail:read', 'mail:update', 'mail:delete',
+       'forms:create', 'forms:read', 'forms:update', 'forms:delete'
      )
    ON CONFLICT DO NOTHING;
    ```
@@ -632,8 +1215,14 @@ Başlangıçta atla — ilerisinde çoklu seçim + "Retry Selected" eklenebilir.
 
 4. **v4 backend henüz yazılmadıysa:** Prompt 2 (Email Templates) çalışmaz —
    endpoint 404 döner. Önce elly repo'sunda v4 endpoint'lerini yazdırmalısın.
-   Prompt 3 (RabbitMQ) ve Prompt 4 (Email Logs) **hazır** — bugün deploy
-   edildi, çalışır.
+   **Hazır promptlar (bugün itibarıyla deploy edilmiş ve çalışan):**
+   - Prompt 3 — RabbitMQ yönetim
+   - Prompt 4 — Email Logs (v3 retry)
+   - Prompt 5 — Mail Accounts (v2 DB-based)
+   - Prompt 6 — Forms (Mail+Form v2 entegrasyonlu)
+
+   **Bekleyenler:**
+   - Prompt 2 — Email Templates (v4 backend yazılınca)
 
 5. **Stack uyuşmazlığı:** Projen shadcn/ui değil MUI kullanıyorsa, Prompt
    sonuna şunu ekle: *"Yukarıdaki örnek kodlar shadcn/ui varsayımıyla yazıldı.

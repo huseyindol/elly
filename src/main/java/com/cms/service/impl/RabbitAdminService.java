@@ -90,7 +90,7 @@ public class RabbitAdminService implements IRabbitAdminService {
   public List<DtoRabbitQueue> listQueues() {
     try {
       List<Map<String, Object>> raw = restClient.get()
-          .uri("/queues/{vhost}", encodedVhost)
+          .uri("/queues/" + encodedVhost)
           .retrieve()
           .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
 
@@ -114,7 +114,7 @@ public class RabbitAdminService implements IRabbitAdminService {
     validateName(name, "queue");
     try {
       Map<String, Object> raw = restClient.get()
-          .uri("/queues/{vhost}/{name}", encodedVhost, name)
+          .uri("/queues/" + encodedVhost + "/" + name)
           .retrieve()
           .body(new ParameterizedTypeReference<Map<String, Object>>() {});
       if (raw == null) {
@@ -147,7 +147,7 @@ public class RabbitAdminService implements IRabbitAdminService {
 
     try {
       List<Map<String, Object>> raw = restClient.post()
-          .uri("/queues/{vhost}/{name}/get", encodedVhost, queueName)
+          .uri("/queues/" + encodedVhost + "/" + queueName + "/get")
           .contentType(MediaType.APPLICATION_JSON)
           .body(body)
           .retrieve()
@@ -185,7 +185,7 @@ public class RabbitAdminService implements IRabbitAdminService {
     validateName(queueName, "queue");
     try {
       restClient.delete()
-          .uri("/queues/{vhost}/{name}/contents", encodedVhost, queueName)
+          .uri("/queues/" + encodedVhost + "/" + queueName + "/contents")
           .retrieve()
           .toBodilessEntity();
       log.warn("RabbitMQ queue purged: vhost={}, name={}", vhost, queueName);
@@ -215,7 +215,7 @@ public class RabbitAdminService implements IRabbitAdminService {
 
     try {
       Map<String, Object> response = restClient.post()
-          .uri("/exchanges/{vhost}/{exchange}/publish", encodedVhost, "amq.default")
+          .uri("/exchanges/" + encodedVhost + "/amq.default/publish")
           .contentType(MediaType.APPLICATION_JSON)
           .body(body)
           .retrieve()

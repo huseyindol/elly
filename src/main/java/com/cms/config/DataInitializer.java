@@ -98,7 +98,7 @@ public class DataInitializer implements CommandLineRunner {
     Set<Permission> allPermSet = new HashSet<>(allPermissions);
 
     // SUPER_ADMIN — tüm izinler
-    createRoleIfNotExists("SUPER_ADMIN", "Tam yetki - tüm servislere erişim", allPermSet);
+    syncRole("SUPER_ADMIN", "Tam yetki - tüm servislere erişim", allPermSet);
 
     // ADMIN — tüm izinler ama users:manage ve roles:* hariç
     Set<Permission> adminPerms = new HashSet<>();
@@ -107,7 +107,7 @@ public class DataInitializer implements CommandLineRunner {
         adminPerms.add(p);
       }
     }
-    createRoleIfNotExists("ADMIN", "Panel yönetimi - içerik ve ayarlar", adminPerms);
+    syncRole("ADMIN", "Panel yönetimi - içerik ve ayarlar", adminPerms);
 
     // EDITOR — içerik modülleri (CRUD), mail-cache-tenant hariç
     Set<Permission> editorPerms = new HashSet<>();
@@ -118,7 +118,7 @@ public class DataInitializer implements CommandLineRunner {
         editorPerms.add(p);
       }
     }
-    createRoleIfNotExists("EDITOR", "İçerik oluşturma ve düzenleme", editorPerms);
+    syncRole("EDITOR", "İçerik oluşturma ve düzenleme", editorPerms);
 
     // VIEWER — sadece read izinleri
     Set<Permission> viewerPerms = new HashSet<>();
@@ -127,20 +127,42 @@ public class DataInitializer implements CommandLineRunner {
         viewerPerms.add(p);
       }
     }
-    createRoleIfNotExists("VIEWER", "Sadece okuma yetkisi", viewerPerms);
+    syncRole("VIEWER", "Sadece okuma yetkisi", viewerPerms);
   }
 
-  private void createRoleIfNotExists(String name, String description, Set<Permission> permissions) {
+  /**
+   * Rol yoksa oluştur; varsa eksik permission'ları ekle (idempotent sync).
+   * Bu sayede PermissionConstants'a eklenen yeni permission'lar uygulama
+   * başladığında mevcut rollere de otomatik atanır.
+   */
+  private void syncRole(String name, String description, Set<Permission> expectedPermissions) {
     Optional<Role> existing = roleRepository.findByName(name);
     if (existing.isEmpty()) {
       Role role = new Role();
       role.setName(name);
       role.setDescription(description);
-      role.setPermissions(permissions);
+      role.setPermissions(expectedPermissions);
       roleRepository.save(role);
-      log.info("✅ Rol oluşturuldu: {} ({} permission)", name, permissions.size());
+      log.info("✅ Rol oluşturuldu: {} ({} permission)", name, expectedPermissions.size());
+      return;
+    }
+
+    Role role = existing.get();
+    Set<Permission> current = role.getPermissions() != null ? role.getPermissions() : new HashSet<>();
+    Set<Permission> missing = new HashSet<>();
+    for (Permission p : expectedPermissions) {
+      if (current.stream().noneMatch(c -> c.getName().equals(p.getName()))) {
+        missing.add(p);
+      }
+    }
+
+    if (!missing.isEmpty()) {
+      current.addAll(missing);
+      role.setPermissions(current);
+      roleRepository.save(role);
+      missing.forEach(p -> log.info("✅ {} rolüne permission eklendi: {}", name, p.getName()));
     } else {
-      log.info("ℹ️ Rol zaten mevcut: {}", name);
+      log.info("ℹ️ Rol sync'te değişiklik yok: {}", name);
     }
   }
 

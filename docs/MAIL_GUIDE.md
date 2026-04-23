@@ -37,7 +37,7 @@ Request Body: EmailRequest { to, subject, templateName, dynamicData (Map<String,
 
 Response: 202 Accepted ("Mail kuyruğa alındı, ID: ...").
 
-Güvenlik: Header'da X-API-KEY kontrolü yapan bir Interceptor veya Filter ekle.
+Güvenlik: Endpoint JWT Bearer token ile korunur. X-API-KEY veya ayrı bir API key filtresi ekleme — bu pattern RBAC sistemi ile çakışır. @PreAuthorize + PermissionConstants kullan.
 
 GET /api/v1/emails/templates:
 

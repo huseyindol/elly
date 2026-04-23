@@ -282,91 +282,590 @@ public class RabbitAdminController implements IRabbitAdminController {
 
 ---
 
-## Frontend (Panel Tarafında Yapılacak)
+## Frontend — elly-admin-panel (Next.js App Router)
 
-Bu repo ayrı — nasıl entegre edeceğin rehberi.
+> **Varsayılan stack:** Next.js 14+ (App Router), TypeScript, TanStack Query v5, shadcn/ui (Radix + Tailwind), TanStack Table, react-hook-form + zod, sonner (toast). Pages Router veya farklı UI kütüphanesi varsa parçalar birebir adapte edilebilir.
 
-### Sayfa: `/admin/infrastructure/rabbitmq`
-
-#### 1. Overview Card
-
-- Broker versiyon, cluster adı
-- Toplam mesaj / consumer / queue sayısı
-- Son 5 dk mesaj akış grafiği (opsiyonel, `messages_delivered_details.rate`'ten hesaplanabilir)
+### Dosya Yapısı
 
 ```
-┌─────────────────────────────┐
-│ RabbitMQ 3.13 · cluster-1   │
-│ 42 messages · 3 consumers   │
-│ 4 queues · 3 exchanges      │
-└─────────────────────────────┘
+elly-admin-panel/
+├─ app/
+│  └─ (admin)/
+│     └─ admin/
+│        └─ infrastructure/
+│           └─ rabbitmq/
+│              ├─ page.tsx                     # Server Component — prefetch + guard
+│              ├─ loading.tsx                  # Skeleton
+│              └─ _components/
+│                 ├─ OverviewCard.tsx          # Client — broker özeti
+│                 ├─ QueueTable.tsx            # Client — TanStack Table
+│                 ├─ QueueDetailSheet.tsx      # Client — shadcn Sheet (yandan drawer)
+│                 ├─ MessageList.tsx           # Peek edilmiş mesajları listeler
+│                 ├─ DestructiveConfirmDialog.tsx  # Queue adı yaz-onayla
+│                 └─ RepublishDialog.tsx       # DLQ → hedef queue modalı
+│
+├─ lib/
+│  ├─ api/
+│  │  └─ rabbit-admin.ts                       # Endpoint fonksiyonları
+│  ├─ hooks/
+│  │  └─ rabbit/
+│  │     ├─ useRabbitOverview.ts
+│  │     ├─ useRabbitQueues.ts
+│  │     ├─ useQueueMessages.ts
+│  │     └─ useRabbitMutations.ts              # purge / republish
+│  └─ auth/
+│     └─ permissions.ts                        # usePermission / requirePermission
+│
+└─ types/
+   └─ rabbit.ts                                 # DTO type tanımları
 ```
 
-#### 2. Queue Listesi Tablosu
+### 1. Tipler — `types/rabbit.ts`
 
-| Name | Ready | Unacked | Consumers | State | Actions |
-|---|---|---|---|---|---|
-| email-queue | 0 | 0 | 1 | running | [Peek] |
-| email-retry-queue | 0 | 0 | 0 | idle | [Peek] [Purge] |
-| email-dead-letter-queue | 2 | 0 | 0 | idle | [Peek] [Purge] [Requeue All] |
-
-Satır tıklanınca drawer açılır:
-- Queue detay (arguments: x-dead-letter-exchange, x-message-ttl, vs.)
-- "Son 10 mesajı göster" butonu → tablo
-  - Message ID, Payload (JSON viewer), Timestamp, Headers
-  - Her satırda "Requeue" ve "Delete" butonları
-
-#### 3. Destructive Actions — Confirm Modal
-
-Purge / Requeue / Delete butonları tıklanınca:
-```
-┌────────────────────────────────────────┐
-│ ⚠️  email-dead-letter-queue            │
-│                                        │
-│ Bu işlem 2 mesajı kalıcı olarak       │
-│ silecek. Emin misiniz?                 │
-│                                        │
-│ Queue adını yazın: [___________]       │
-│                                        │
-│              [İptal]  [Onayla]         │
-└────────────────────────────────────────┘
-```
-
-Queue adını yazdırmak = "oops önlemi" (GitHub repo delete UX'i).
-
-#### 4. API Client (panel tarafında)
+CMS'in dönen yapısına birebir mapping (sadece alanları listeliyorum, `RootEntityResponse` wrapper açıldıktan sonraki hal):
 
 ```typescript
-// panel/src/api/rabbit-admin.ts
+export interface RabbitOverview {
+  rabbitmqVersion: string | null;
+  erlangVersion: string | null;
+  clusterName: string | null;
+  totalMessages: number | null;
+  totalConsumers: number | null;
+  queueCount: number | null;
+  exchangeCount: number | null;
+  connectionCount: number | null;
+  channelCount: number | null;
+}
+
+export interface RabbitQueue {
+  name: string;
+  vhost: string;
+  messages: number | null;
+  messagesReady: number | null;
+  messagesUnacknowledged: number | null;
+  consumers: number | null;
+  state: string | null;            // "running" | "idle" | ...
+  arguments: Record<string, unknown>;
+  policy: string | null;
+  durable: boolean | null;
+  autoDelete: boolean | null;
+  exclusive: boolean | null;
+}
+
+export interface RabbitMessage {
+  payload: string;
+  payloadEncoding: 'string' | 'base64';
+  properties: Record<string, unknown>;
+  messageCount: number | null;
+  routingKey: string;
+  redelivered: boolean;
+  exchange: string;
+}
+
+export interface RepublishRequest {
+  targetQueue: string;
+  payload: string;
+  contentType?: string;
+}
+```
+
+### 2. API Client — `lib/api/rabbit-admin.ts`
+
+```typescript
+import { http } from './http';
+import type { RabbitOverview, RabbitQueue, RabbitMessage, RepublishRequest } from '@/types/rabbit';
+
 export const rabbitAdminApi = {
-  overview: () => http.get('/api/v1/admin/rabbit/overview'),
-  listQueues: () => http.get('/api/v1/admin/rabbit/queues'),
-  getQueue: (name: string) => http.get(`/api/v1/admin/rabbit/queues/${name}`),
+  overview: () =>
+    http.get<RabbitOverview>('/api/v1/admin/rabbit/overview'),
+
+  listQueues: () =>
+    http.get<RabbitQueue[]>('/api/v1/admin/rabbit/queues'),
+
+  getQueue: (name: string) =>
+    http.get<RabbitQueue>(`/api/v1/admin/rabbit/queues/${encodeURIComponent(name)}`),
+
   peekMessages: (name: string, count = 10) =>
-    http.get(`/api/v1/admin/rabbit/queues/${name}/messages`, { params: { count } }),
+    http.get<RabbitMessage[]>(
+      `/api/v1/admin/rabbit/queues/${encodeURIComponent(name)}/messages`,
+      { searchParams: { count } },
+    ),
+
   purgeQueue: (name: string) =>
-    http.post(`/api/v1/admin/rabbit/queues/${name}/purge`),
-  republish: (source: string, targetQueue: string, payload: string) =>
-    http.post(`/api/v1/admin/rabbit/queues/${source}/republish`, { targetQueue, payload }),
+    http.post<void>(`/api/v1/admin/rabbit/queues/${encodeURIComponent(name)}/purge`),
+
+  republish: (sourceQueue: string, body: RepublishRequest) =>
+    http.post<void>(
+      `/api/v1/admin/rabbit/queues/${encodeURIComponent(sourceQueue)}/republish`,
+      { json: body },
+    ),
 };
 ```
 
-#### 5. Rol Bazlı UI
+### 3. TanStack Query Hooks — `lib/hooks/rabbit/`
 
-- Kullanıcı `rabbit:read` yetkisine sahipse → sayfa görünür (read-only mode).
-- `rabbit:manage` yetkisi varsa → Purge/Delete/Requeue butonları aktif; yoksa disabled.
-- Permission kontrolü zaten mevcut JWT decode + permission store üzerinden.
+```typescript
+// useRabbitQueues.ts
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import { rabbitAdminApi } from '@/lib/api/rabbit-admin';
 
-#### 6. Özel Akış: "DLQ'dan email-queue'ya Requeue All"
+export const rabbitKeys = {
+  all: ['rabbit'] as const,
+  overview: () => [...rabbitKeys.all, 'overview'] as const,
+  queues: () => [...rabbitKeys.all, 'queues'] as const,
+  queue: (name: string) => [...rabbitKeys.all, 'queue', name] as const,
+  messages: (name: string) => [...rabbitKeys.all, 'messages', name] as const,
+};
 
-DLQ'daki tüm FAILED mesajları toplu yeniden göndermek için:
+export function useRabbitQueues() {
+  return useQuery({
+    queryKey: rabbitKeys.queues(),
+    queryFn: () => rabbitAdminApi.listQueues(),
+    refetchInterval: 5_000,        // canlı görünüm — her 5 saniyede yenile
+    staleTime: 2_000,
+  });
+}
+
+export function useRabbitOverview() {
+  return useQuery({
+    queryKey: rabbitKeys.overview(),
+    queryFn: () => rabbitAdminApi.overview(),
+    refetchInterval: 10_000,
+  });
+}
 ```
-DLQ detay drawer → "Tümünü Requeue" butonu → confirm modal
+
+```typescript
+// useRabbitMutations.ts
+'use client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { rabbitAdminApi } from '@/lib/api/rabbit-admin';
+import { rabbitKeys } from './useRabbitQueues';
+import type { RepublishRequest } from '@/types/rabbit';
+
+export function usePurgeQueue() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => rabbitAdminApi.purgeQueue(name),
+    onSuccess: (_, name) => {
+      qc.invalidateQueries({ queryKey: rabbitKeys.all });
+      toast.success(`Queue "${name}" purge edildi`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useRepublish(sourceQueue: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RepublishRequest) => rabbitAdminApi.republish(sourceQueue, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: rabbitKeys.all });
+      toast.success('Mesaj yeniden publish edildi');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
 ```
 
-Backend bu işlem için özel endpoint: `POST /api/v1/admin/rabbit/queues/email-dead-letter-queue/requeue-all?target=email-queue`
+### 4. Sayfa — `app/(admin)/admin/infrastructure/rabbitmq/page.tsx`
 
-Alternatif: Panel DLQ'yu peek ile okur, tek tek `republish` çağırır (N+1 problem). Bulk endpoint daha doğru.
+Server Component: permission guard + prefetch. UI kısmı client child'lere bırakılır.
+
+```tsx
+import { HydrationBoundary, QueryClient, dehydrate } from '@tanstack/react-query';
+import { requirePermission } from '@/lib/auth/permissions';
+import { rabbitAdminApi } from '@/lib/api/rabbit-admin';
+import { OverviewCard } from './_components/OverviewCard';
+import { QueueTable } from './_components/QueueTable';
+
+export const dynamic = 'force-dynamic';  // JWT cookie'si her request'te okunsun
+
+export default async function RabbitMqPage() {
+  await requirePermission('rabbit:read');
+
+  const qc = new QueryClient();
+  await Promise.all([
+    qc.prefetchQuery({ queryKey: ['rabbit', 'overview'],  queryFn: () => rabbitAdminApi.overview() }),
+    qc.prefetchQuery({ queryKey: ['rabbit', 'queues'],    queryFn: () => rabbitAdminApi.listQueues() }),
+  ]);
+
+  return (
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">RabbitMQ Yönetimi</h1>
+      <HydrationBoundary state={dehydrate(qc)}>
+        <OverviewCard />
+        <QueueTable />
+      </HydrationBoundary>
+    </div>
+  );
+}
+```
+
+### 5. Overview Card — shadcn `Card`
+
+```tsx
+// _components/OverviewCard.tsx
+'use client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useRabbitOverview } from '@/lib/hooks/rabbit/useRabbitQueues';
+import { Skeleton } from '@/components/ui/skeleton';
+
+export function OverviewCard() {
+  const { data, isLoading } = useRabbitOverview();
+
+  if (isLoading) return <Skeleton className="h-28 w-full" />;
+  if (!data) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          RabbitMQ {data.rabbitmqVersion} · <span className="text-muted-foreground">{data.clusterName}</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <Stat label="Toplam Mesaj"   value={data.totalMessages} />
+        <Stat label="Consumer"       value={data.totalConsumers} />
+        <Stat label="Queue"          value={data.queueCount} />
+        <Stat label="Exchange"       value={data.exchangeCount} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-2xl font-semibold tabular-nums">{value ?? '—'}</div>
+    </div>
+  );
+}
+```
+
+### 6. Queue Tablosu — TanStack Table + shadcn
+
+```tsx
+// _components/QueueTable.tsx
+'use client';
+import { useState } from 'react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useRabbitQueues } from '@/lib/hooks/rabbit/useRabbitQueues';
+import { usePermission } from '@/lib/auth/permissions';
+import { QueueDetailSheet } from './QueueDetailSheet';
+import { DestructiveConfirmDialog } from './DestructiveConfirmDialog';
+import { usePurgeQueue } from '@/lib/hooks/rabbit/useRabbitMutations';
+import type { RabbitQueue } from '@/types/rabbit';
+
+export function QueueTable() {
+  const { data: queues = [], isLoading } = useRabbitQueues();
+  const canManage = usePermission('rabbit:manage');
+  const purge = usePurgeQueue();
+  const [selected, setSelected] = useState<RabbitQueue | null>(null);
+  const [purgeTarget, setPurgeTarget] = useState<RabbitQueue | null>(null);
+
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Queue</TableHead>
+            <TableHead className="text-right">Ready</TableHead>
+            <TableHead className="text-right">Unacked</TableHead>
+            <TableHead className="text-right">Consumer</TableHead>
+            <TableHead>State</TableHead>
+            <TableHead className="w-32">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading && (
+            <TableRow><TableCell colSpan={6}>Yükleniyor…</TableCell></TableRow>
+          )}
+          {queues.map((q) => (
+            <TableRow key={q.name} className="cursor-pointer" onClick={() => setSelected(q)}>
+              <TableCell className="font-mono text-sm">{q.name}</TableCell>
+              <TableCell className="text-right tabular-nums">{q.messagesReady ?? 0}</TableCell>
+              <TableCell className="text-right tabular-nums">{q.messagesUnacknowledged ?? 0}</TableCell>
+              <TableCell className="text-right tabular-nums">{q.consumers ?? 0}</TableCell>
+              <TableCell>
+                <Badge variant={q.state === 'running' ? 'default' : 'secondary'}>
+                  {q.state ?? '—'}
+                </Badge>
+              </TableCell>
+              <TableCell onClick={(e) => e.stopPropagation()}>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={!canManage || (q.messages ?? 0) === 0}
+                  onClick={() => setPurgeTarget(q)}
+                >
+                  Purge
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      <QueueDetailSheet
+        queue={selected}
+        open={!!selected}
+        onOpenChange={(o) => !o && setSelected(null)}
+      />
+
+      <DestructiveConfirmDialog
+        open={!!purgeTarget}
+        onOpenChange={(o) => !o && setPurgeTarget(null)}
+        expectedText={purgeTarget?.name ?? ''}
+        title="Queue Purge"
+        description={purgeTarget && `"${purgeTarget.name}" kuyruğundaki ${purgeTarget.messages ?? 0} mesaj kalıcı olarak silinecek.`}
+        onConfirm={() => {
+          if (purgeTarget) purge.mutate(purgeTarget.name);
+          setPurgeTarget(null);
+        }}
+      />
+    </>
+  );
+}
+```
+
+### 7. Destructive Confirm Dialog — "queue adını yaz" UX
+
+```tsx
+// _components/DestructiveConfirmDialog.tsx
+'use client';
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  expectedText: string;
+  title: string;
+  description?: React.ReactNode;
+  onConfirm: () => void;
+}
+
+export function DestructiveConfirmDialog({
+  open, onOpenChange, expectedText, title, description, onConfirm,
+}: Props) {
+  const [value, setValue] = useState('');
+  const matches = value.trim() === expectedText;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setValue(''); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="text-destructive">⚠️ {title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <p className="text-sm">
+            Onaylamak için queue adını yaz: <code className="font-mono font-semibold">{expectedText}</code>
+          </p>
+          <Input
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={expectedText}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
+          <Button variant="destructive" disabled={!matches} onClick={onConfirm}>
+            Onayla
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+### 8. Queue Detail Sheet + Message List
+
+```tsx
+// _components/QueueDetailSheet.tsx
+'use client';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { MessageList } from './MessageList';
+import type { RabbitQueue } from '@/types/rabbit';
+
+interface Props {
+  queue: RabbitQueue | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function QueueDetailSheet({ queue, open, onOpenChange }: Props) {
+  if (!queue) return null;
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[640px] sm:max-w-none overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="font-mono">{queue.name}</SheetTitle>
+        </SheetHeader>
+
+        <section className="my-4 space-y-1 text-sm">
+          <KV k="State"    v={queue.state} />
+          <KV k="Durable"  v={String(queue.durable)} />
+          <KV k="Messages" v={String(queue.messages ?? 0)} />
+          <KV k="Consumers" v={String(queue.consumers ?? 0)} />
+        </section>
+
+        {queue.arguments && Object.keys(queue.arguments).length > 0 && (
+          <section className="my-4">
+            <h3 className="text-sm font-semibold mb-2">Arguments</h3>
+            <pre className="bg-muted p-3 rounded text-xs font-mono overflow-x-auto">
+              {JSON.stringify(queue.arguments, null, 2)}
+            </pre>
+          </section>
+        )}
+
+        <MessageList queueName={queue.name} />
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function KV({ k, v }: { k: string; v: string | null }) {
+  return <div><span className="text-muted-foreground w-24 inline-block">{k}</span>{v ?? '—'}</div>;
+}
+```
+
+```tsx
+// _components/MessageList.tsx
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
+import { rabbitAdminApi } from '@/lib/api/rabbit-admin';
+
+export function MessageList({ queueName }: { queueName: string }) {
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ['rabbit', 'messages', queueName],
+    queryFn: () => rabbitAdminApi.peekMessages(queueName, 10),
+    enabled: false,                // sadece butona basınca yükle (peek destructive hissedilmesin)
+  });
+
+  return (
+    <section className="my-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Son Mesajlar (peek)</h3>
+        <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? 'Yükleniyor…' : (data ? 'Yenile' : 'Göster')}
+        </Button>
+      </div>
+      {data && data.length === 0 && (
+        <p className="text-sm text-muted-foreground">Kuyrukta mesaj yok.</p>
+      )}
+      {data?.map((m, i) => (
+        <details key={i} className="border rounded p-2 text-xs">
+          <summary className="cursor-pointer font-mono">
+            #{i + 1} — {m.routingKey} {m.redelivered && <span className="text-amber-600">(redelivered)</span>}
+          </summary>
+          <pre className="mt-2 overflow-x-auto bg-muted p-2 rounded">{tryFormatJson(m.payload)}</pre>
+          <details className="mt-1">
+            <summary className="text-muted-foreground">properties</summary>
+            <pre className="overflow-x-auto bg-muted p-2 rounded mt-1">{JSON.stringify(m.properties, null, 2)}</pre>
+          </details>
+        </details>
+      ))}
+    </section>
+  );
+}
+
+function tryFormatJson(s: string): string {
+  try { return JSON.stringify(JSON.parse(s), null, 2); } catch { return s; }
+}
+```
+
+### 9. Permission Hook — `lib/auth/permissions.ts`
+
+```typescript
+// Server-side (Server Component / Server Action / Route Handler)
+'use server';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { decodeJwt } from 'jose';
+
+interface JwtPayload { permissions?: string[]; [k: string]: unknown; }
+
+export async function requirePermission(permission: string) {
+  const token = cookies().get('elly-jwt')?.value;
+  if (!token) redirect('/login');
+  try {
+    const p = decodeJwt<JwtPayload>(token);
+    if (!p.permissions?.includes(permission)) redirect('/403');
+  } catch { redirect('/login'); }
+}
+```
+
+```typescript
+// Client-side — auth store'dan permission listesi okur (Zustand/Jotai/Redux — projeniz neyse)
+'use client';
+import { useAuthStore } from '@/lib/auth/store';   // proje-özel
+
+export function usePermission(required: string): boolean {
+  const perms = useAuthStore((s) => s.permissions);
+  return perms.includes(required);
+}
+```
+
+Rol bazlı UI:
+- `rabbit:read` yoksa → `requirePermission` server'da `/403`'e yönlendirir; UI hiç render olmaz.
+- `rabbit:read` var, `rabbit:manage` yoksa → sayfa görünür ama Purge/Requeue butonları `disabled={!canManage}`.
+
+### 10. Route Segment Config
+
+Queue listesi canlı veri olduğu için:
+
+```tsx
+// app/(admin)/admin/infrastructure/rabbitmq/page.tsx üstünde:
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+```
+
+Canlı refetch TanStack Query'nin `refetchInterval`'ı ile yapılır (yukarıdaki hook'larda 5-10 sn).
+
+### 11. Özel Akış: "DLQ'dan Tümünü Requeue"
+
+**Yaklaşım 1 (basit, kısa vadede):** Panel DLQ'yu peek eder, her mesaj için CMS'in `POST /republish` endpoint'ine tek tek çağrı yapar. `Promise.allSettled` ile paralel — 10-20 mesaj için yeterli.
+
+```typescript
+async function requeueAll(sourceQueue: string, targetQueue: string) {
+  const msgs = await rabbitAdminApi.peekMessages(sourceQueue, 100);
+  const results = await Promise.allSettled(
+    msgs.map((m) => rabbitAdminApi.republish(sourceQueue, {
+      targetQueue,
+      payload: m.payload,
+      contentType: m.properties['content_type'] as string | undefined,
+    })),
+  );
+  const failed = results.filter((r) => r.status === 'rejected').length;
+  if (failed > 0) toast.warning(`${failed} mesaj tekrar publish edilemedi`);
+  else toast.success(`${msgs.length} mesaj kuyruğa geri alındı`);
+}
+```
+
+**Yaklaşım 2 (100+ mesaj için):** CMS'e bulk endpoint ekle — `POST /api/v1/admin/rabbit/queues/{source}/requeue-all?target={target}&limit=500`. Backend iterate eder, tek HTTP çağrısı. v5 kuyruğunda.
+
+### 12. Environment
+
+```env
+# .env.local
+NEXT_PUBLIC_ELLY_API_URL=https://api.huseyindol.com
+```
+
+JWT HttpOnly cookie olarak CMS tarafından set edildiği için tarayıcı otomatik gönderir; ek header yönetimi gerekmez. Server Component'lerde `cookies()` ile okunur.
 
 ---
 

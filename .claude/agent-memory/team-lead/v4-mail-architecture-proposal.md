@@ -2,6 +2,37 @@
 
 > Kullanıcı isteği: "elly-admin-panel projesinde template hazır edip buradan POST ile bilgileri elly-admin-panel'e gönderelim response'ta html döneyim buradan mail gönderimini yapalım." CMS'in yük almasını istemiyor — şu an sadece API barındırıyor.
 
+## TL;DR — Karar
+
+**Terimler:**
+- **"CMS"** = bu elly repo'su (Spring Boot API). CLAUDE.md'de de "multi-tenant CMS" diye geçiyor.
+- **"Panel"** = elly-admin-panel (Next.js UI). CMS'i tüketen yönetim arayüzü.
+- **"CMS hafif kalsın"** = kullanıcının sözü: *"bu proje sadece api barındırıyor ve ağırlaşmasını yük olmasını istemiyorum."* API projesi yeni sorumluluk almasın.
+
+**3 seçenek değerlendirildi:**
+
+| # | Yaklaşım | Kim Önerdi | Sonuç |
+|---|---|---|---|
+| A | Her mailde CMS → Panel HTTP render → HTML → CMS SMTP | Kullanıcı | ❌ Reddedildi |
+| B | Panel S3/Git'e push, CMS pull | Ben (alternatif) | ⚠️ Olur ama ekstra altyapı |
+| **C** | **Template'ler CMS DB'sinde, Panel sadece CRUD UI** | **Ben (öneri)** | **✅ Seçildi** |
+
+**A neden reddedildi:**
+1. Her mailde network hop (latency + consumer başına HTTP çağrısı)
+2. Panel down → mail gönderimi durur (tek arıza noktası)
+3. Yük CMS'ten panel'e taşır, azaltmaz
+4. Service-to-service auth (mTLS/JWT + rate limit) — kaçmak istenen karmaşıklık
+
+**C neden "hafif kalmayı" karşılıyor:**
+- CMS runtime'da panel'e HTTP çağrısı atmaz (cross-service latency = 0)
+- CMS'e eklenen: 1 tablo + 1 servis. PostgreSQL + Redis + Thymeleaf zaten var → **yeni teknoloji katmanı yok**
+- Template dosyası repo'dan çıkar (asıl hedef); panel admin UI'dan düzenlenir, DB'ye yazılır
+- CMS DB'den (Redis cache'li) okur, Thymeleaf ile yerel render eder → p99 latency aynı kalır
+
+Detay analiz aşağıda.
+
+---
+
 ---
 
 ## Tarihçe
@@ -222,36 +253,406 @@ public class EmailTemplateBootstrapRunner implements ApplicationRunner {
 }
 ```
 
-### Frontend (elly-admin-panel)
+### Frontend — elly-admin-panel (Next.js App Router)
 
-Bu repo ayrı, burada sadece nasıl entegre edileceği dökümanlanıyor.
+> **Varsayılan stack:** Next.js 14+ (App Router), TypeScript, TanStack Query v5, shadcn/ui (Radix + Tailwind), react-hook-form + zod, Monaco Editor (`@monaco-editor/react`), sonner (toast). Farklı bir stack (Pages Router, SWR, MUI vb.) kullanılıyorsa bu örnekler kolay adapte edilir.
 
-**Sayfa: `/admin/email-templates`**
+#### Dosya Yapısı
 
-- Liste tablosu (key, subject, updated_at, active)
-- "Yeni Template" butonu → form (key, subject, body Monaco editor ile HTML + Thymeleaf syntax highlight, description)
-- Satır tıklanınca detay/edit sayfası
-- "Preview" butonu → modal:
-  - Sol: dummy JSON input (örnek: `{"userName": "Ahmet", "link": "https://..."}`)
-  - Sağ: rendered HTML iframe
-- "Save" → optimistic lock versiyonu ile PUT
-- "Delete" → confirm modal + soft delete
+```
+elly-admin-panel/
+├─ app/
+│  └─ (admin)/
+│     └─ admin/
+│        └─ email-templates/
+│           ├─ page.tsx                         # Liste (Server Component)
+│           ├─ loading.tsx                      # Skeleton (Suspense boundary)
+│           ├─ new/
+│           │  └─ page.tsx                      # Yeni template formu
+│           ├─ [key]/
+│           │  ├─ page.tsx                      # Edit sayfası
+│           │  └─ _components/
+│           │     ├─ TemplateForm.tsx           # Client, react-hook-form
+│           │     ├─ MonacoBodyEditor.tsx       # Client, dynamic import
+│           │     └─ PreviewPanel.tsx           # Client, iframe srcDoc
+│           └─ _components/
+│              ├─ TemplateListTable.tsx         # Client, TanStack Table
+│              └─ DeleteConfirmDialog.tsx       # shadcn Dialog
+│
+├─ lib/
+│  ├─ api/
+│  │  ├─ http.ts                                # fetch wrapper (JWT + RootEntityResponse unwrap)
+│  │  └─ email-templates.ts                     # Endpoint fonksiyonları
+│  ├─ hooks/
+│  │  └─ email-templates/
+│  │     ├─ useEmailTemplates.ts                # useQuery list
+│  │     ├─ useEmailTemplate.ts                 # useQuery detay
+│  │     └─ useTemplateMutations.ts             # create/update/delete mutations
+│  └─ auth/
+│     └─ require-permission.ts                  # Server-side permission check
+│
+└─ types/
+   └─ email-template.ts                         # DTO type tanımları
+```
 
-**API Client (panel tarafında)**
+#### 1. Tip Tanımları — `types/email-template.ts`
 
 ```typescript
-// panel/src/api/email-templates.ts
+import { z } from 'zod';
+
+export const emailTemplateSchema = z.object({
+  id: z.number().optional(),
+  tenantId: z.string().nullable(),
+  templateKey: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/,
+    'Küçük harf, rakam ve tire kullan'),
+  subject: z.string().min(1).max(255),
+  htmlBody: z.string().min(1),
+  description: z.string().max(500).nullable().optional(),
+  active: z.boolean().default(true),
+  version: z.number().default(1),
+  optimisticLockVersion: z.number().default(0),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export type EmailTemplate = z.infer<typeof emailTemplateSchema>;
+export type EmailTemplateInput = Omit<EmailTemplate, 'id' | 'createdAt' | 'updatedAt'>;
+```
+
+#### 2. API Client — `lib/api/email-templates.ts`
+
+```typescript
+import { http } from './http';
+import type { EmailTemplate, EmailTemplateInput } from '@/types/email-template';
+
+export interface PreviewRequest {
+  data: Record<string, unknown>;
+}
+
+export interface PreviewResponse {
+  html: string;
+  subject: string;
+}
+
 export const emailTemplatesApi = {
-  list: (params) => http.get('/api/v1/email-templates', { params }),
-  get: (key) => http.get(`/api/v1/email-templates/${key}`),
-  create: (dto) => http.post('/api/v1/email-templates', dto),
-  update: (key, dto) => http.put(`/api/v1/email-templates/${key}`, dto),
-  remove: (key) => http.delete(`/api/v1/email-templates/${key}`),
-  preview: (key, data) => http.post(`/api/v1/email-templates/${key}/preview`, { data }),
+  list: (params?: { page?: number; size?: number; active?: boolean }) =>
+    http.get<EmailTemplate[]>('/api/v1/email-templates', { searchParams: params }),
+
+  get: (key: string) =>
+    http.get<EmailTemplate>(`/api/v1/email-templates/${key}`),
+
+  create: (body: EmailTemplateInput) =>
+    http.post<EmailTemplate>('/api/v1/email-templates', { json: body }),
+
+  update: (key: string, body: EmailTemplateInput) =>
+    http.put<EmailTemplate>(`/api/v1/email-templates/${key}`, { json: body }),
+
+  remove: (key: string) =>
+    http.delete<void>(`/api/v1/email-templates/${key}`),
+
+  preview: (key: string, body: PreviewRequest) =>
+    http.post<PreviewResponse>(`/api/v1/email-templates/${key}/preview`, { json: body }),
 };
 ```
 
-Authorization header'a admin JWT token eklenir (mevcut auth flow zaten panel'de var).
+`http` wrapper CMS'in `RootEntityResponse<T>` sarmalayıcısını (`{ result, message, data }`) açar, `data` döner; `result=false` ise `ApiError` fırlatır.
+
+#### 3. TanStack Query Hooks — `lib/hooks/email-templates/`
+
+```typescript
+// useEmailTemplates.ts
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import { emailTemplatesApi } from '@/lib/api/email-templates';
+
+export const emailTemplatesKeys = {
+  all: ['email-templates'] as const,
+  list: (params?: Record<string, unknown>) => [...emailTemplatesKeys.all, 'list', params] as const,
+  detail: (key: string) => [...emailTemplatesKeys.all, 'detail', key] as const,
+};
+
+export function useEmailTemplates(params?: { page?: number; size?: number }) {
+  return useQuery({
+    queryKey: emailTemplatesKeys.list(params),
+    queryFn: () => emailTemplatesApi.list(params),
+    staleTime: 30_000,
+  });
+}
+```
+
+```typescript
+// useTemplateMutations.ts
+'use client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { emailTemplatesApi } from '@/lib/api/email-templates';
+import { emailTemplatesKeys } from './useEmailTemplates';
+import type { EmailTemplateInput } from '@/types/email-template';
+
+export function useCreateTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EmailTemplateInput) => emailTemplatesApi.create(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: emailTemplatesKeys.all });
+      toast.success('Template oluşturuldu');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useUpdateTemplate(key: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EmailTemplateInput) => emailTemplatesApi.update(key, body),
+    onSuccess: (data) => {
+      qc.setQueryData(emailTemplatesKeys.detail(key), data);
+      qc.invalidateQueries({ queryKey: emailTemplatesKeys.list() });
+      toast.success('Kaydedildi');
+    },
+    onError: (e: Error) => {
+      if (e.message.includes('OptimisticLock')) {
+        toast.error('Bu template başka biri tarafından güncellenmiş — yeniden yükle');
+      } else {
+        toast.error(e.message);
+      }
+    },
+  });
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (key: string) => emailTemplatesApi.remove(key),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: emailTemplatesKeys.all });
+      toast.success('Silindi');
+    },
+  });
+}
+```
+
+#### 4. Liste Sayfası — `app/(admin)/admin/email-templates/page.tsx`
+
+Server Component → permission kontrolü + TanStack Query için `HydrationBoundary` ile prefetch:
+
+```tsx
+import { HydrationBoundary, QueryClient, dehydrate } from '@tanstack/react-query';
+import { requirePermission } from '@/lib/auth/require-permission';
+import { emailTemplatesApi } from '@/lib/api/email-templates';
+import { TemplateListTable } from './_components/TemplateListTable';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+
+export default async function EmailTemplatesPage() {
+  await requirePermission('email_templates:read');
+
+  const qc = new QueryClient();
+  await qc.prefetchQuery({
+    queryKey: ['email-templates', 'list', undefined],
+    queryFn: () => emailTemplatesApi.list(),
+  });
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Email Templates</h1>
+        <Button asChild>
+          <Link href="/admin/email-templates/new">Yeni Template</Link>
+        </Button>
+      </div>
+      <HydrationBoundary state={dehydrate(qc)}>
+        <TemplateListTable />
+      </HydrationBoundary>
+    </div>
+  );
+}
+```
+
+#### 5. Monaco Editor Bileşeni — Client, dynamic import
+
+```tsx
+// _components/MonacoBodyEditor.tsx
+'use client';
+import dynamic from 'next/dynamic';
+import type { OnChange } from '@monaco-editor/react';
+
+const Monaco = dynamic(() => import('@monaco-editor/react'), {
+  ssr: false,
+  loading: () => <div className="h-96 animate-pulse bg-muted rounded" />,
+});
+
+export function MonacoBodyEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: OnChange;
+}) {
+  return (
+    <Monaco
+      height="500px"
+      language="html"
+      value={value}
+      onChange={onChange}
+      options={{
+        minimap: { enabled: false },
+        wordWrap: 'on',
+        fontSize: 13,
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+      }}
+      theme="vs-dark"
+    />
+  );
+}
+```
+
+Thymeleaf syntax için özel tokenizer eklemek istenirse `monaco.languages.register({ id: 'thymeleaf' })` + `setMonarchTokensProvider` ile extend edilebilir; başlangıçta `html` yeterli.
+
+#### 6. Preview Panel — `iframe srcDoc` pattern
+
+```tsx
+// _components/PreviewPanel.tsx
+'use client';
+import { useMutation } from '@tanstack/react-query';
+import { emailTemplatesApi } from '@/lib/api/email-templates';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+
+export function PreviewPanel({ templateKey }: { templateKey: string }) {
+  const [payload, setPayload] = useState('{\n  "userName": "Ahmet",\n  "link": "https://..."\n}');
+  const [html, setHtml] = useState('');
+
+  const preview = useMutation({
+    mutationFn: () =>
+      emailTemplatesApi.preview(templateKey, { data: JSON.parse(payload) }),
+    onSuccess: (res) => setHtml(res.html),
+  });
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Dummy Data (JSON)</label>
+        <Textarea
+          value={payload}
+          onChange={(e) => setPayload(e.target.value)}
+          className="font-mono text-xs h-80"
+        />
+        <Button onClick={() => preview.mutate()} disabled={preview.isPending}>
+          {preview.isPending ? 'Render ediliyor…' : 'Preview'}
+        </Button>
+      </div>
+      <div className="border rounded">
+        <iframe
+          sandbox=""
+          srcDoc={html}
+          className="w-full h-80"
+          title="Template preview"
+        />
+      </div>
+    </div>
+  );
+}
+```
+
+`sandbox=""` → iframe içindeki script/form çalışmaz (XSS güvenliği). `srcDoc` ile API response'undaki HTML'i doğrudan render eder.
+
+#### 7. Server-Side Permission Guard — `lib/auth/require-permission.ts`
+
+```typescript
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { decodeJwt } from 'jose';
+
+interface JwtPayload {
+  permissions?: string[];
+  [k: string]: unknown;
+}
+
+export async function requirePermission(permission: string) {
+  const token = cookies().get('elly-jwt')?.value;
+  if (!token) redirect('/login');
+
+  try {
+    const payload = decodeJwt<JwtPayload>(token);
+    if (!payload.permissions?.includes(permission)) {
+      redirect('/403');
+    }
+  } catch {
+    redirect('/login');
+  }
+}
+```
+
+Client tarafında buton gizleme için paralel bir `usePermission()` hook'u — aynı cookie'den JWT okuyup decode eder (veya auth store'da permission listesi tutulur).
+
+#### 8. HTTP Wrapper — `lib/api/http.ts` (iskelet)
+
+```typescript
+import { cookies } from 'next/headers';
+
+const BASE_URL = process.env.NEXT_PUBLIC_ELLY_API_URL ?? 'https://api.huseyindol.com';
+
+interface Options {
+  json?: unknown;
+  searchParams?: Record<string, unknown>;
+}
+
+async function request<T>(method: string, path: string, opts: Options = {}): Promise<T> {
+  const url = new URL(path, BASE_URL);
+  if (opts.searchParams) {
+    Object.entries(opts.searchParams).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+    });
+  }
+
+  // Server component'te cookies(), client component'te document.cookie veya auth store
+  const token = typeof window === 'undefined'
+    ? cookies().get('elly-jwt')?.value
+    : getClientToken();
+
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: opts.json ? JSON.stringify(opts.json) : undefined,
+    cache: 'no-store',
+  });
+
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body?.result === false) {
+    throw new ApiError(body?.message ?? res.statusText, body?.errorCode, res.status);
+  }
+  return body.data as T;
+}
+
+export const http = {
+  get: <T>(path: string, opts?: Options) => request<T>('GET', path, opts),
+  post: <T>(path: string, opts?: Options) => request<T>('POST', path, opts),
+  put: <T>(path: string, opts?: Options) => request<T>('PUT', path, opts),
+  delete: <T>(path: string, opts?: Options) => request<T>('DELETE', path, opts),
+};
+
+export class ApiError extends Error {
+  constructor(message: string, public errorCode?: string, public status?: number) {
+    super(message);
+  }
+}
+function getClientToken(): string | undefined { /* auth store veya cookie okur */ return undefined; }
+```
+
+#### 9. Environment
+
+```env
+# .env.local
+NEXT_PUBLIC_ELLY_API_URL=https://api.huseyindol.com
+```
+
+Server-side'da cookie okunduğu için `NEXT_PUBLIC_` olmayan ek secret gerekmez — JWT HttpOnly cookie'de tutulur, tarayıcı otomatik gönderir.
 
 ### Dependencies (CMS)
 

@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.DefaultUriBuilderFactory;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -41,13 +42,19 @@ public class RabbitMgmtClientConfig {
   public RestClient rabbitMgmtRestClient(RestClient.Builder builder) {
     log.info("RabbitMQ management RestClient initialized: url={}, user={}", baseUrl, username);
 
-    SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-    factory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-    factory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
+    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
+    requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
+
+    // EncodingMode.NONE: RabbitAdminService already percent-encodes all path
+    // segments (e.g. vhost "/" → "%2F"). Letting Spring re-encode would produce
+    // double-encoded values like "%252F", causing 404 from the management API.
+    DefaultUriBuilderFactory uriBuilderFactory = new DefaultUriBuilderFactory(baseUrl);
+    uriBuilderFactory.setEncodingMode(DefaultUriBuilderFactory.EncodingMode.NONE);
 
     return builder
-        .baseUrl(baseUrl)
-        .requestFactory(factory)
+        .uriBuilderFactory(uriBuilderFactory)
+        .requestFactory(requestFactory)
         .defaultHeaders(headers -> {
           headers.setBasicAuth(username, password);
           headers.setAccept(List.of(MediaType.APPLICATION_JSON));

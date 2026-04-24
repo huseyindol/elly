@@ -138,7 +138,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @PostMapping("/{formId}/submit")
-  @PreAuthorize("hasAuthority('forms:create')")
+  @PreAuthorize("hasAnyAuthority('forms:create','forms:submit')")
   public RootEntityResponse<DtoFormSubmission> submitForm(
       @PathVariable Long formId,
       @RequestBody DtoFormSubmit dto) {

@@ -142,6 +142,9 @@ public class SecurityConfig {
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers(HttpMethod.GET, "/api/v1/public/**").permitAll()
+            // POST/PUT/DELETE: PublicApiFilter icindeki ALLOWED_WRITE_ENDPOINTS allowlist'i
+            // hangi yazma endpoint'lerine izin verilecegini belirler; eslesmeyenler 405 doner.
+            .requestMatchers(HttpMethod.POST, "/api/v1/public/**").permitAll()
             .requestMatchers("/api/v1/auth/**").permitAll()
             .requestMatchers("/oauth2/**").permitAll()
             .requestMatchers("/login/oauth2/**").permitAll()

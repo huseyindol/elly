@@ -57,6 +57,8 @@ public final class PermissionConstants {
   public static final String FORMS_READ = "forms:read";
   public static final String FORMS_UPDATE = "forms:update";
   public static final String FORMS_DELETE = "forms:delete";
+  /** Anonim public form submit yetkisi — sadece site ziyaretçisi POST'larında verilir. */
+  public static final String FORMS_SUBMIT = "forms:submit";
 
   // =============== RATINGS ===============
   public static final String RATINGS_CREATE = "ratings:create";

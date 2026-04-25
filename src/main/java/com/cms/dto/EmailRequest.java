@@ -2,7 +2,8 @@ package com.cms.dto;
 
 import java.util.Map;
 
-import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -17,7 +18,8 @@ import lombok.Setter;
 public class EmailRequest {
 
   @NotBlank(message = "Recipient email is required")
-  @Email(message = "Invalid email format")
+  @Pattern(regexp = "^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$", message = "Invalid email format. Use comma to separate multiple addresses.")
+  @Size(max = 1000, message = "Recipient email must be at most 1000 characters")
   private String to;
 
   @NotBlank(message = "Subject is required")

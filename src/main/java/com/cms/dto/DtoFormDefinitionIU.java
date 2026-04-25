@@ -2,7 +2,7 @@ package com.cms.dto;
 
 import com.cms.entity.form.FormSchema;
 
-import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -46,11 +46,11 @@ public class DtoFormDefinitionIU {
   private Long senderMailAccountId;
 
   /**
-   * Form submit bildiriminin gidecegi e-posta adresi (v1 tek adres).
+   * Form submit bildiriminin gidecegi e-posta adresi (coklu alici icin virgulle ayrilabilir).
    */
   @NotBlank(message = "recipientEmail zorunludur")
-  @Email(message = "Gecersiz recipientEmail formati")
-  @Size(max = 255, message = "recipientEmail en fazla 255 karakter olabilir")
+  @Pattern(regexp = "^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$", message = "Gecersiz e-posta formati. Birden fazla adres icin araya virgul koyunuz.")
+  @Size(max = 1000, message = "recipientEmail en fazla 1000 karakter olabilir")
   private String recipientEmail;
 
   /**

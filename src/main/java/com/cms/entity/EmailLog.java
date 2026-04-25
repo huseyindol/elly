@@ -29,7 +29,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class EmailLog extends BaseEntity {
 
-  @Column(nullable = false)
+  @Column(nullable = false, length = 1000)
   private String recipient;
 
   @Column(nullable = false)

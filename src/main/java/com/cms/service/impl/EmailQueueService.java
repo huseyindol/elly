@@ -1,5 +1,6 @@
 package com.cms.service.impl;
 
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -134,7 +135,15 @@ public class EmailQueueService implements IEmailQueueService {
     MimeMessage mime = sender.createMimeMessage();
     MimeMessageHelper helper = new MimeMessageHelper(mime, true, "UTF-8");
     helper.setFrom(from);
-    helper.setTo(to);
+    if (to != null && to.contains(",")) {
+      String[] addresses = Arrays.stream(to.split(","))
+          .map(String::trim)
+          .filter(s -> !s.isEmpty())
+          .toArray(String[]::new);
+      helper.setTo(addresses);
+    } else {
+      helper.setTo(to);
+    }
     helper.setSubject(subject);
     helper.setText(htmlContent, true);
     sender.send(mime);

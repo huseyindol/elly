@@ -25,7 +25,7 @@ import lombok.Setter;
  * <p>Mail+Form v2: Form submission otomatik mail bildirimi tetikler:
  * <ul>
  *   <li>{@code senderMailAccount}: Hangi SMTP hesabindan gonderilecegi (zorunlu)</li>
- *   <li>{@code recipientEmail}: Tek hedef adres (zorunlu, coklu TO/CC/BCC v3'e ertelendi)</li>
+ *   <li>{@code recipientEmail}: Bildirim hedef adresi (coklu alici icin virgulle ayrilabilir)</li>
  *   <li>{@code notificationSubject}: Bos ise varsayilan konu kullanilir</li>
  *   <li>{@code notificationEnabled}: Devre disi birakilabilir</li>
  * </ul>
@@ -60,10 +60,9 @@ public class FormDefinition extends BaseEntity {
   private MailAccount senderMailAccount;
 
   /**
-   * Form submit sonrasi bildirim alici adres (v1: tek adres).
-   * Coklu recipient (TO/CC/BCC) destegi v2'ye ertelendi.
+   * Form submit sonrasi bildirim alici adres (coklu alici icin virgulle ayrilabilir).
    */
-  @Column(name = "recipient_email", nullable = false, length = 255)
+  @Column(name = "recipient_email", nullable = false, length = 1000)
   private String recipientEmail;
 
   /**

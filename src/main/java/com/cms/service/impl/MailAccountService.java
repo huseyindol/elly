@@ -62,6 +62,7 @@ public class MailAccountService implements IMailAccountService {
     MailAccount saved = repository.save(entity);
     log.info("Mail hesabi olusturuldu: id={}, name={}, host={}:{}",
         saved.getId(), saved.getName(), saved.getSmtpHost(), saved.getSmtpPort());
+    warnIfGmailFromMismatch(saved);
     return mapper.toResponse(saved);
   }
 
@@ -85,6 +86,7 @@ public class MailAccountService implements IMailAccountService {
     mailSenderFactory.evict(saved.getId());
     log.info("Mail hesabi guncellendi: id={}, host={}:{}",
         saved.getId(), saved.getSmtpHost(), saved.getSmtpPort());
+    warnIfGmailFromMismatch(saved);
     return mapper.toResponse(saved);
   }
 
@@ -144,5 +146,33 @@ public class MailAccountService implements IMailAccountService {
   private MailAccount findOrThrow(Long id) {
     return repository.findById(id)
         .orElseThrow(() -> new ResourceNotFoundException("MailAccount", id));
+  }
+
+  /**
+   * Gmail SMTP, authenticated kullanicidan farkli bir From adresine gonderim
+   * yapildiginda From header'ini sessizce {@code smtpUsername}'a override eder
+   * (alias "Send mail as" listesinde verify edilmediyse). Bu durum mail
+   * gondermede hata uretmez ama kullaniciya beklenmedik gorunum olusturur.
+   * Bu yuzden mismatch'i WARN seviyesinde logla — zorlama yok (Workspace
+   * verified alias gibi mesru senaryolar icin).
+   */
+  private void warnIfGmailFromMismatch(MailAccount account) {
+    String host = account.getSmtpHost();
+    if (host == null || !host.toLowerCase().contains("gmail.com")) {
+      return;
+    }
+    String fromAddress = account.getFromAddress();
+    String smtpUsername = account.getSmtpUsername();
+    if (fromAddress == null || smtpUsername == null) {
+      return;
+    }
+    if (!fromAddress.toLowerCase().contains(smtpUsername.toLowerCase())) {
+      log.warn(
+          "Gmail SMTP From mismatch: mailAccountId={}, fromAddress='{}', smtpUsername='{}'. "
+              + "Gmail muhtemelen From header'ini '{}' olarak override edecek. "
+              + "Cozum: fromAddress'i smtpUsername ile ayni yapin VEYA Gmail 'Send mail as' "
+              + "ekraninda fromAddress'i verify edin.",
+          account.getId(), fromAddress, smtpUsername, smtpUsername);
+    }
   }
 }

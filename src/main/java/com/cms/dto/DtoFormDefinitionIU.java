@@ -14,12 +14,16 @@ import lombok.Setter;
 /**
  * DTO for creating/updating FormDefinition.
  *
- * <p>Mail+Form v2: Artik varsayilan mail hesabi yoktur. Form olustururken
+ * <p>Mail+Form v4: Bildirim opsiyonel.
  * <ul>
- *   <li>{@code senderMailAccountId} — hangi DB mail hesabindan gonderilecegi (zorunlu)</li>
- *   <li>{@code recipientEmail} — bildirim hedef adresi (zorunlu, tek adres)</li>
+ *   <li>{@code notificationEnabled} null/true ise: {@code senderMailAccountId} ve
+ *       {@code recipientEmail} zorunlu — service katmaninda
+ *       ({@code FormDefinitionService.validateNotificationConfig}) dogrulanir
+ *       ve hatali olursa 422 doner.</li>
+ *   <li>{@code notificationEnabled} false ise: bu iki alan bos birakilabilir.
+ *       Form submit edildiginde mail tetiklenmez.</li>
  * </ul>
- * her ikisi de istemciden alinir.
+ * Geriye uyumluluk: notificationEnabled belirtilmediyse default true (mail zorunlu).
  */
 @Getter
 @Setter
@@ -40,16 +44,19 @@ public class DtoFormDefinitionIU {
 
   /**
    * Form submit bildirimini gonderen mail hesabi (MailAccount.id).
-   * Ilgili hesap aktif ve ENV profili kullanilabilir olmalidir, aksi halde 422.
+   * notificationEnabled=true ise zorunlu — service katmaninda dogrulanir.
+   * Ilgili hesap aktif olmalidir, aksi halde 422.
    */
-  @NotNull(message = "senderMailAccountId zorunludur")
   private Long senderMailAccountId;
 
   /**
    * Form submit bildiriminin gidecegi e-posta adresi (coklu alici icin virgulle ayrilabilir).
+   * notificationEnabled=true ise zorunlu — service katmaninda format ve doluluk kontrolu yapilir.
+   * Pattern: tek veya virgulle ayrilmis email listesi (^$ kabul edilir; bos string null gibi).
    */
-  @NotBlank(message = "recipientEmail zorunludur")
-  @Pattern(regexp = "^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$", message = "Gecersiz e-posta formati. Birden fazla adres icin araya virgul koyunuz.")
+  @Pattern(
+      regexp = "^$|^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$",
+      message = "Gecersiz e-posta formati. Birden fazla adres icin araya virgul koyunuz.")
   @Size(max = 1000, message = "recipientEmail en fazla 1000 karakter olabilir")
   private String recipientEmail;
 

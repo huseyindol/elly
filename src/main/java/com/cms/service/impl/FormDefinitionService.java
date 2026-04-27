@@ -10,6 +10,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.regex.Pattern;
+
 import com.cms.entity.FormDefinition;
 import com.cms.entity.MailAccount;
 import com.cms.entity.form.FormSchema;
@@ -26,6 +28,10 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class FormDefinitionService implements IFormDefinitionService {
 
+  /** DtoFormDefinitionIU.recipientEmail icindeki regex ile uyumlu — backup format kontrolu. */
+  private static final Pattern RECIPIENT_PATTERN = Pattern.compile(
+      "^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$");
+
   private final FormDefinitionRepository formDefinitionRepository;
   private final ObjectMapper objectMapper;
 
@@ -36,7 +42,7 @@ public class FormDefinitionService implements IFormDefinitionService {
       @CacheEvict(value = "formSubmissions", allEntries = true)
   })
   public FormDefinition save(FormDefinition formDefinition) {
-    validateSender(formDefinition);
+    validateNotificationConfig(formDefinition);
 
     if (formDefinition.getId() == null) {
       // New entity: set version to 1
@@ -52,23 +58,41 @@ public class FormDefinitionService implements IFormDefinitionService {
   }
 
   /**
-   * Mail+Form v2: Sender MailAccount zorunludur, aktif olmali; recipientEmail
-   * bos olamaz. Aksi halde 422 ({@link ValidationException}).
+   * Mail+Form v4: Bildirim opsiyonel.
+   * <ul>
+   *   <li>{@code notificationEnabled} null ise default {@code true} ile devam edilir.</li>
+   *   <li>{@code notificationEnabled=true} ise: sender atanmis ve aktif olmali,
+   *       recipient bos olmamali ve format gecerli olmali — aksi halde 422.</li>
+   *   <li>{@code notificationEnabled=false} ise: sender ve recipient null/bos olabilir;
+   *       eger doluysalar normalize edilir ama dogrulama yapilmaz.</li>
+   * </ul>
    */
-  private void validateSender(FormDefinition form) {
+  private void validateNotificationConfig(FormDefinition form) {
+    if (form.getNotificationEnabled() == null) {
+      form.setNotificationEnabled(Boolean.TRUE);
+    }
+
+    if (!Boolean.TRUE.equals(form.getNotificationEnabled())) {
+      return; // Bildirim kapali — sender/recipient opsiyonel.
+    }
+
     MailAccount sender = form.getSenderMailAccount();
     if (sender == null || sender.getId() == null) {
-      throw new ValidationException("senderMailAccount zorunludur");
+      throw new ValidationException(
+          "notificationEnabled=true ise senderMailAccountId zorunludur");
     }
     if (!Boolean.TRUE.equals(sender.getActive())) {
       throw new ValidationException(
           "Secilen mail hesabi aktif degil (id=" + sender.getId() + ")");
     }
-    if (form.getRecipientEmail() == null || form.getRecipientEmail().isBlank()) {
-      throw new ValidationException("recipientEmail zorunludur");
+    String recipient = form.getRecipientEmail();
+    if (recipient == null || recipient.isBlank()) {
+      throw new ValidationException(
+          "notificationEnabled=true ise recipientEmail zorunludur");
     }
-    if (form.getNotificationEnabled() == null) {
-      form.setNotificationEnabled(Boolean.TRUE);
+    if (!RECIPIENT_PATTERN.matcher(recipient).matches()) {
+      throw new ValidationException(
+          "Gecersiz e-posta formati. Birden fazla adres icin araya virgul koyunuz.");
     }
   }
 

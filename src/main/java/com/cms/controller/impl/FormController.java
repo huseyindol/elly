@@ -72,10 +72,15 @@ public class FormController extends BaseController implements IFormController {
   }
 
   /**
-   * senderMailAccountId zorunludur (Mail+Form v1). Hesabin aktiflik/ENV-profil
-   * dogrulamasi {@link com.cms.service.impl.FormDefinitionService#save} icinde yapilir.
+   * Mail+Form v4: senderMailAccountId opsiyonel — yalnizca {@code notificationEnabled=true}
+   * iken {@link com.cms.service.impl.FormDefinitionService#save} icinde zorunlu kilinir.
+   * <p>Burada null gelirse null doneriz ki bildirim kapali formlarda lookup tetiklenmesin
+   * (aksi halde {@code findOrThrow(null)} -> 404 veya NPE).
    */
   private MailAccount resolveSenderMailAccount(Long senderMailAccountId) {
+    if (senderMailAccountId == null) {
+      return null;
+    }
     return mailAccountService.getEntityById(senderMailAccountId);
   }
 

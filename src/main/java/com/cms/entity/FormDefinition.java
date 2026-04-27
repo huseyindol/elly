@@ -22,12 +22,13 @@ import lombok.Setter;
  * The schema field contains the complete form structure including fields,
  * validation rules, and conditions.
  *
- * <p>Mail+Form v2: Form submission otomatik mail bildirimi tetikler:
+ * <p>Mail+Form v4: Bildirim opsiyonel hale getirildi:
  * <ul>
- *   <li>{@code senderMailAccount}: Hangi SMTP hesabindan gonderilecegi (zorunlu)</li>
- *   <li>{@code recipientEmail}: Bildirim hedef adresi (coklu alici icin virgulle ayrilabilir)</li>
+ *   <li>{@code senderMailAccount}: Bildirim acikken zorunlu, kapaliyken bos olabilir</li>
+ *   <li>{@code recipientEmail}: Bildirim acikken zorunlu (coklu alici icin virgulle ayrilabilir),
+ *       kapaliyken bos olabilir</li>
  *   <li>{@code notificationSubject}: Bos ise varsayilan konu kullanilir</li>
- *   <li>{@code notificationEnabled}: Devre disi birakilabilir</li>
+ *   <li>{@code notificationEnabled}: false ise mail gonderilmez ve sender/recipient zorunlu degil</li>
  * </ul>
  */
 @Entity
@@ -53,16 +54,18 @@ public class FormDefinition extends BaseEntity {
 
   /**
    * Form submit sonrasi bildirim gönderen profil.
+   * Bildirim acikken zorunlu (boş ise 422); kapaliyken null olabilir.
    * {@link MailAccount#getActive() active=false} ise form submit 422 döndürür.
    */
   @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "sender_mail_account_id", nullable = false)
+  @JoinColumn(name = "sender_mail_account_id")
   private MailAccount senderMailAccount;
 
   /**
    * Form submit sonrasi bildirim alici adres (coklu alici icin virgulle ayrilabilir).
+   * Bildirim acikken zorunlu; kapaliyken null/boş olabilir.
    */
-  @Column(name = "recipient_email", nullable = false, length = 1000)
+  @Column(name = "recipient_email", length = 1000)
   private String recipientEmail;
 
   /**

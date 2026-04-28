@@ -75,9 +75,7 @@ public class PublicApiFilter extends OncePerRequestFilter {
    * eklenmelidir; aksi halde filter 405 doner.
    */
   private static final List<PublicWriteEndpoint> ALLOWED_WRITE_ENDPOINTS = List.of(
-      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/forms/\\d+/submit$")),
-      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/register$")),
-      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/login$")));
+      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/forms/\\d+/submit$")));
 
   private final DataSourceConfig.TenantDataSourceProperties tenantDataSourceProperties;
 

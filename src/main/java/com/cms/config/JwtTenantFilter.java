@@ -73,12 +73,10 @@ public class JwtTenantFilter extends OncePerRequestFilter {
       String loginSource = jwtUtil.extractLoginSource(jwt);
       String path = request.getRequestURI();
 
-      boolean isBaseDbPath = path.startsWith("/api/v1/auth/")
-          || path.startsWith("/api/v1/users")
-          || path.startsWith("/api/v1/roles");
+      boolean isAuthOrUserPath = path.startsWith("/api/v1/auth/") || path.startsWith("/api/v1/user/");
 
-      // Admin login: auth, user ve role endpointleri her zaman basedb kullanır
-      if ("admin".equals(loginSource) && isBaseDbPath) {
+      // Admin login: auth ve user endpointleri her zaman basedb kullanır
+      if ("admin".equals(loginSource) && isAuthOrUserPath) {
         log.debug("Admin login source, forcing basedb for path: {}", path);
         return null;
       }

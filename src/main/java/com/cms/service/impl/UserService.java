@@ -45,6 +45,11 @@ public class UserService implements IUserService {
   @Value("${app.tenants.default-tenant:basedb}")
   private String defaultTenant;
 
+  // =============== Self (/me) Endpoints ===============
+  // Bu metodlar filter'ın set ettiği TenantContext'i kullanır:
+  //   - Panel (admin login) → JwtTenantFilter baseDB'ye yönlendirir
+  //   - Site (public)       → PublicApiFilter tenant DB'ye yönlendirir
+
   @Override
   public DtoUserResponse getMe(String username) {
     User user = findUserByUsername(username);
@@ -150,6 +155,9 @@ public class UserService implements IUserService {
         .build();
   }
 
+  // =============== Admin (SUPER_ADMIN) Endpoints ===============
+  // Her zaman baseDB'den okur (executeInDefaultTenant ile zorlanır)
+
   @Override
   public List<DtoUserResponse> getAllUsers() {
     return executeInDefaultTenant(() -> {
@@ -172,7 +180,7 @@ public class UserService implements IUserService {
   // =============== Helpers ===============
 
   /**
-   * User işlemleri her zaman defaultTenant (basedb) üzerinde yapılır.
+   * Admin-only endpoint'ler için: her zaman defaultTenant (basedb) üzerinde çalıştırır.
    */
   private <T> T executeInDefaultTenant(java.util.function.Supplier<T> action) {
     String originalTenant = TenantContext.getTenantId();
@@ -201,3 +209,4 @@ public class UserService implements IUserService {
         .orElseThrow(() -> new BadRequestException("User not found: " + username));
   }
 }
+

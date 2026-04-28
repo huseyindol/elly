@@ -1,9 +1,13 @@
 package com.cms.controller.impl;
 
+import java.util.List;
+
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +30,8 @@ import lombok.RequiredArgsConstructor;
 public class UserController extends BaseController implements IUserController {
 
   private final IUserService userService;
+
+  // =============== Self (authenticated user) ===============
 
   @Override
   @GetMapping("/me")
@@ -55,6 +61,24 @@ public class UserController extends BaseController implements IUserController {
     String username = getCurrentUsername();
     return ok(userService.getMyPermissions(username));
   }
+
+  // =============== Admin (SUPER_ADMIN only) ===============
+
+  @Override
+  @GetMapping
+  @PreAuthorize("hasAuthority('users:manage')")
+  public RootEntityResponse<List<DtoUserResponse>> getAllUsers() {
+    return ok(userService.getAllUsers());
+  }
+
+  @Override
+  @GetMapping("/{id}")
+  @PreAuthorize("hasAuthority('users:manage')")
+  public RootEntityResponse<DtoUserResponse> getUserById(@PathVariable Long id) {
+    return ok(userService.getUserById(id));
+  }
+
+  // =============== Helpers ===============
 
   private String getCurrentUsername() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

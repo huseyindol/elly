@@ -642,3 +642,199 @@ api.interceptors.response.use(
 ```
 
 5. **Yeni register olan kullanıcılara otomatik rol atanmaz.** Admin panelden manuel rol ataması yapılmalıdır. Register response'unda `roles` ve `permissions` boş dizi olarak döner.
+
+---
+
+## 8. Kullanıcı Yönetimi & Rol Atama (SUPER_ADMIN)
+
+**Sadece `SUPER_ADMIN` rolüne sahip kullanıcılar** bu endpoint'lere erişebilir. Alt roller (ADMIN, EDITOR, VIEWER) erişemez — backend `403 Forbidden` döner.
+
+### 8.1 Kullanıcı Listeleme — `GET /api/v1/users`
+
+**Permission:** `users:manage` (sadece SUPER_ADMIN)
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": [
+    {
+      "id": 1,
+      "username": "admin",
+      "email": "admin@example.com",
+      "firstName": "Admin",
+      "lastName": "User",
+      "provider": "local",
+      "isActive": true,
+      "managedTenants": ["basedb", "tenant1"],
+      "roles": ["SUPER_ADMIN"],
+      "createdAt": "2026-01-15T10:30:00.000+00:00"
+    },
+    {
+      "id": 2,
+      "username": "editor1",
+      "email": "editor@example.com",
+      "firstName": "Editor",
+      "lastName": "User",
+      "provider": "local",
+      "isActive": true,
+      "managedTenants": ["basedb"],
+      "roles": ["EDITOR"],
+      "createdAt": "2026-03-20T14:00:00.000+00:00"
+    }
+  ]
+}
+```
+
+### 8.2 Kullanıcı Detay — `GET /api/v1/users/{id}`
+
+**Permission:** `users:manage` (sadece SUPER_ADMIN)
+
+**Response:** Tek kullanıcı (yukarıdaki formatta)
+
+### 8.3 Tüm Rolleri Listele — `GET /api/v1/roles`
+
+**Permission:** `roles:read`
+
+Panel'de rol atama formu açıldığında mevcut rolleri dropdown'da göstermek için kullanılır.
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "SUPER_ADMIN",
+      "description": "Tam yetki - tüm servislere erişim",
+      "permissions": [
+        { "id": 1, "name": "posts:create", "description": "POSTS CREATE", "module": "POSTS" },
+        { "id": 2, "name": "posts:read", "description": "POSTS READ", "module": "POSTS" },
+        "..."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "ADMIN",
+      "description": "Panel yönetimi - içerik ve ayarlar",
+      "permissions": ["..."]
+    },
+    {
+      "id": 3,
+      "name": "EDITOR",
+      "description": "İçerik oluşturma ve düzenleme",
+      "permissions": ["..."]
+    },
+    {
+      "id": 4,
+      "name": "VIEWER",
+      "description": "Sadece okuma yetkisi",
+      "permissions": ["..."]
+    }
+  ]
+}
+```
+
+### 8.4 Kullanıcıya Rol Atama — `PUT /api/v1/roles/users/{userId}/roles`
+
+**Permission:** `users:manage` (sadece SUPER_ADMIN)
+
+> ⚠️ Bu endpoint **SET** semantiği ile çalışır — gönderilen `roleIds` kullanıcının **tüm rollerini** değiştirir (ekleme değil, üzerine yazma).
+
+**Request:**
+```json
+{
+  "roleIds": [2, 3]
+}
+```
+Bu örnekte userId'deki kullanıcıya ADMIN (id:2) ve EDITOR (id:3) rolleri atanır, önceki rolleri silinir.
+
+**Response:** `200 OK` (body: `{ "result": true, "data": null }`)
+
+### 8.5 Panel'de Kullanıcı Yönetim Sayfası Akışı
+
+```
+1. SUPER_ADMIN kullanıcı yönetimi sayfasını açar
+2. GET /api/v1/users → kullanıcı listesi yüklenir (her birinin roles alanı görünür)
+3. Bir kullanıcıya tıklar → rol atama modalı/formu açılır
+4. GET /api/v1/roles → mevcut roller dropdown'a yüklenir
+5. SUPER_ADMIN rolleri seçer ve kaydeder
+6. PUT /api/v1/roles/users/{userId}/roles → seçilen roleIds gönderilir
+7. Kullanıcı listesi yeniden çekilir (güncel roller görünsün)
+```
+
+### 8.6 Kullanıcı Yönetim Sayfası Panel Örnekleri
+
+```tsx
+// Sadece SUPER_ADMIN görebilir
+<PermissionGate permission="users:manage">
+  <SidebarItem href="/users" icon={Users} label="Kullanıcılar" />
+</PermissionGate>
+```
+
+```tsx
+// Kullanıcı listesi sayfası
+function UsersPage() {
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+
+  useEffect(() => {
+    // Kullanıcıları ve rolleri paralel çek
+    Promise.all([
+      api.get('/users'),
+      api.get('/roles')
+    ]).then(([usersRes, rolesRes]) => {
+      setUsers(usersRes.data.data);
+      setRoles(rolesRes.data.data);
+    });
+  }, []);
+
+  const handleAssignRoles = async (userId: number, roleIds: number[]) => {
+    await api.put(`/roles/users/${userId}/roles`, { roleIds });
+    // Listeyi yeniden çek
+    const res = await api.get('/users');
+    setUsers(res.data.data);
+  };
+
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <th>Kullanıcı</th>
+          <th>E-posta</th>
+          <th>Roller</th>
+          <th>İşlemler</th>
+        </tr>
+      </thead>
+      <tbody>
+        {users.map(user => (
+          <tr key={user.id}>
+            <td>{user.firstName} {user.lastName}</td>
+            <td>{user.email}</td>
+            <td>{user.roles.join(', ')}</td>
+            <td>
+              <RoleAssignButton
+                user={user}
+                allRoles={roles}
+                onAssign={handleAssignRoles}
+              />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  );
+}
+```
+
+### 8.7 Endpoint Özet Tablosu (Kullanıcı Yönetimi)
+
+| Method | Endpoint | Permission | Açıklama |
+|--------|----------|------------|----------|
+| `GET` | `/api/v1/users` | `users:manage` | Tüm kullanıcıları listele |
+| `GET` | `/api/v1/users/{id}` | `users:manage` | Kullanıcı detay |
+| `GET` | `/api/v1/users/me` | auth only | Kendi profili |
+| `GET` | `/api/v1/users/me/permissions` | auth only | Kendi izinleri |
+| `GET` | `/api/v1/roles` | `roles:read` | Tüm roller |
+| `GET` | `/api/v1/roles/permissions` | `roles:read` | Tüm izinler |
+| `PUT` | `/api/v1/roles/users/{userId}/roles` | `users:manage` | Kullanıcıya rol ata |

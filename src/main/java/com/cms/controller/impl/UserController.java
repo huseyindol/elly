@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.controller.IUserController;
 import com.cms.dto.DtoChangePassword;
+import com.cms.dto.DtoUserPermissions;
 import com.cms.dto.DtoUserResponse;
 import com.cms.dto.DtoUserUpdate;
 import com.cms.entity.RootEntityResponse;
@@ -48,6 +49,13 @@ public class UserController extends BaseController implements IUserController {
     return ok(null);
   }
 
+  @Override
+  @GetMapping("/me/permissions")
+  public RootEntityResponse<DtoUserPermissions> getMyPermissions() {
+    String username = getCurrentUsername();
+    return ok(userService.getMyPermissions(username));
+  }
+
   private String getCurrentUsername() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
     if (authentication != null && authentication.getPrincipal() instanceof UserDetails userDetails) {
@@ -56,3 +64,4 @@ public class UserController extends BaseController implements IUserController {
     throw new RuntimeException("User not authenticated");
   }
 }
+

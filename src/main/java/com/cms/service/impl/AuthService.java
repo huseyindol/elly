@@ -15,6 +15,8 @@ import com.cms.config.UserAuthCacheService;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
@@ -106,6 +108,7 @@ public class AuthService implements IAuthService {
     response.setEmail(savedUser.getEmail());
     response.setUserCode(userUtil.generateUserCode(savedUser));
     response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
+    populateRolesAndPermissions(response, savedUser);
 
     return response;
   }
@@ -185,6 +188,7 @@ public class AuthService implements IAuthService {
     response.setEmail(user.getEmail());
     response.setUserCode(userUtil.generateUserCode(user));
     response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
+    populateRolesAndPermissions(response, user);
 
     return response;
   }
@@ -263,6 +267,7 @@ public class AuthService implements IAuthService {
     response.setEmail(user.getEmail());
     response.setUserCode(userUtil.generateUserCode(user));
     response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
+    populateRolesAndPermissions(response, user);
 
     return response;
   }
@@ -274,6 +279,33 @@ public class AuthService implements IAuthService {
     }
     String token = jwtUtil.generateTenantToken(tenantId);
     return new DtoTenantTokenResponse(token, "Bearer", tenantId);
+  }
+
+  /**
+   * User entity'den rolleri ve izinleri çıkararak DtoAuthResponse'a set eder.
+   * User.roles FetchType.EAGER olduğu için ek DB sorgusu gerektirmez.
+   */
+  private void populateRolesAndPermissions(DtoAuthResponse response, User user) {
+    if (user.getRoles() == null || user.getRoles().isEmpty()) {
+      response.setRoles(List.of());
+      response.setPermissions(List.of());
+      return;
+    }
+
+    List<String> roles = user.getRoles().stream()
+        .map(role -> role.getName())
+        .sorted()
+        .collect(Collectors.toList());
+
+    List<String> permissions = user.getRoles().stream()
+        .flatMap(role -> role.getPermissions() != null ? role.getPermissions().stream() : java.util.stream.Stream.empty())
+        .map(permission -> permission.getName())
+        .distinct()
+        .sorted()
+        .collect(Collectors.toList());
+
+    response.setRoles(roles);
+    response.setPermissions(permissions);
   }
 
   private RefreshToken createRefreshTokenEntity(User user, String tokenString) {

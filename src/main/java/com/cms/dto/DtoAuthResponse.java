@@ -1,5 +1,7 @@
 package com.cms.dto;
 
+import java.util.List;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,4 +19,11 @@ public class DtoAuthResponse {
   private String email;
   private String userCode;
   private Long expiredDate;
+
+  /** Kullanıcının rolleri: ["SUPER_ADMIN", "ADMIN", ...] */
+  private List<String> roles;
+
+  /** Kullanıcının tüm izinleri: ["posts:create", "posts:read", ...] */
+  private List<String> permissions;
 }
+

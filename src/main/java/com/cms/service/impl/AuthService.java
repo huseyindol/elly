@@ -57,60 +57,71 @@ public class AuthService implements IAuthService {
   @Override
   @Transactional
   public DtoAuthResponse register(DtoRegister dtoRegister) {
-    // Email kontrolü
-    if (userRepository.existsByEmail(dtoRegister.getEmail())) {
-      throw new ConflictException("Email already exists: " + dtoRegister.getEmail());
+    String tenantId = dtoRegister.getTenantId();
+    String originalTenant = TenantContext.getTenantId();
+
+    // Tenant doğrulama ve context switch
+    if (tenantId != null && !tenantId.isBlank()) {
+      if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+        throw new BadRequestException("Tenant not found: " + tenantId);
+      }
+      TenantContext.setTenantId(tenantId);
     }
 
-    // Username kontrolü
-    if (userRepository.existsByUsername(dtoRegister.getUsername())) {
-      throw new ConflictException("Username already exists: " + dtoRegister.getUsername());
+    try {
+      // Email kontrolü
+      if (userRepository.existsByEmail(dtoRegister.getEmail())) {
+        throw new ConflictException("Email already exists: " + dtoRegister.getEmail());
+      }
+
+      // Username kontrolü
+      if (userRepository.existsByUsername(dtoRegister.getUsername())) {
+        throw new ConflictException("Username already exists: " + dtoRegister.getUsername());
+      }
+
+      // Yeni kullanıcı oluştur
+      User user = new User();
+      user.setUsername(dtoRegister.getUsername());
+      user.setEmail(dtoRegister.getEmail());
+      user.setPassword(passwordEncoder.encode(dtoRegister.getPassword()));
+      user.setFirstName(dtoRegister.getFirstName());
+      user.setLastName(dtoRegister.getLastName());
+      user.setProvider("local");
+      user.setIsActive(true);
+
+      if (dtoRegister.getManagedTenants() != null && !dtoRegister.getManagedTenants().isEmpty()) {
+        user.setManagedTenants(dtoRegister.getManagedTenants());
+      }
+
+      User savedUser = userRepository.save(user);
+
+      Long currentVersion = savedUser.getTokenVersion() != null ? savedUser.getTokenVersion() : 0L;
+      savedUser.setTokenVersion(currentVersion + 1);
+      savedUser = userRepository.save(savedUser);
+
+      String loginSource = (tenantId != null && !tenantId.isBlank()) ? "tenant" : "tenant";
+      String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername(),
+          savedUser.getTokenVersion(), tenantId, loginSource);
+
+      String refreshTokenString = jwtUtil.generateRefreshToken(savedUser.getId(), savedUser.getUsername(),
+          tenantId, loginSource);
+      RefreshToken refreshToken = createRefreshTokenEntity(savedUser, refreshTokenString);
+      refreshTokenRepository.save(refreshToken);
+
+      DtoAuthResponse response = new DtoAuthResponse();
+      response.setToken(token);
+      response.setRefreshToken(refreshTokenString);
+      response.setUserId(savedUser.getId());
+      response.setUsername(savedUser.getUsername());
+      response.setEmail(savedUser.getEmail());
+      response.setUserCode(userUtil.generateUserCode(savedUser));
+      response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
+      populateRolesAndPermissions(response, savedUser);
+
+      return response;
+    } finally {
+      TenantContext.setTenantId(originalTenant);
     }
-
-    // Yeni kullanıcı oluştur
-    User user = new User();
-    user.setUsername(dtoRegister.getUsername());
-    user.setEmail(dtoRegister.getEmail());
-    user.setPassword(passwordEncoder.encode(dtoRegister.getPassword()));
-    user.setFirstName(dtoRegister.getFirstName());
-    user.setLastName(dtoRegister.getLastName());
-    user.setProvider("local"); // Local kayıt için
-    user.setIsActive(true);
-
-    if (dtoRegister.getManagedTenants() != null && !dtoRegister.getManagedTenants().isEmpty()) {
-      user.setManagedTenants(dtoRegister.getManagedTenants());
-    }
-
-    User savedUser = userRepository.save(user);
-
-    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
-    // için)
-    Long currentVersion = savedUser.getTokenVersion() != null ? savedUser.getTokenVersion() : 0L;
-    savedUser.setTokenVersion(currentVersion + 1);
-    savedUser = userRepository.save(savedUser);
-
-    // JWT token oluştur (güncel version ile)
-    String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername(), savedUser.getTokenVersion(),
-        null, "tenant");
-
-    // Refresh token oluştur ve kaydet
-    String refreshTokenString = jwtUtil.generateRefreshToken(savedUser.getId(), savedUser.getUsername(),
-        null, "tenant");
-    RefreshToken refreshToken = createRefreshTokenEntity(savedUser, refreshTokenString);
-    refreshTokenRepository.save(refreshToken);
-
-    // Response oluştur
-    DtoAuthResponse response = new DtoAuthResponse();
-    response.setToken(token);
-    response.setRefreshToken(refreshTokenString);
-    response.setUserId(savedUser.getId());
-    response.setUsername(savedUser.getUsername());
-    response.setEmail(savedUser.getEmail());
-    response.setUserCode(userUtil.generateUserCode(savedUser));
-    response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
-    populateRolesAndPermissions(response, savedUser);
-
-    return response;
   }
 
   @Override

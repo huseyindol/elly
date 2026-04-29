@@ -27,8 +27,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import com.cms.config.JwtAuthenticationFilter;
-import com.cms.config.TenantContext;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -41,9 +39,6 @@ public class UserService implements IUserService {
   private final PasswordEncoder passwordEncoder;
   private final UserMapper userMapper;
   private final UserAuthCacheService userAuthCacheService;
-
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
 
   @Override
   public DtoUserResponse getMe(String username) {
@@ -152,37 +147,20 @@ public class UserService implements IUserService {
 
   @Override
   public List<DtoUserResponse> getAllUsers() {
-    return executeInDefaultTenant(() -> {
-      List<User> users = userRepository.findAll();
-      return users.stream()
-          .map(userMapper::toDtoUserResponse)
-          .collect(Collectors.toList());
-    });
+    List<User> users = userRepository.findAll();
+    return users.stream()
+        .map(userMapper::toDtoUserResponse)
+        .collect(Collectors.toList());
   }
 
   @Override
   public DtoUserResponse getUserById(Long id) {
-    return executeInDefaultTenant(() -> {
-      User user = userRepository.findById(id)
-          .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
-      return userMapper.toDtoUserResponse(user);
-    });
+    User user = userRepository.findById(id)
+        .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
+    return userMapper.toDtoUserResponse(user);
   }
 
   // =============== Helpers ===============
-
-  /**
-   * User işlemleri her zaman defaultTenant (basedb) üzerinde yapılır.
-   */
-  private <T> T executeInDefaultTenant(java.util.function.Supplier<T> action) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId(defaultTenant);
-      return action.get();
-    } finally {
-      TenantContext.setTenantId(originalTenant);
-    }
-  }
 
   /**
    * SecurityContext'ten mevcut kullanıcının authority'lerini al.

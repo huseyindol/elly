@@ -7,13 +7,13 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import java.util.List;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class DtoRegister {
+public class DtoAdminUserCreate {
+
   @NotBlank(message = "Username is required")
   @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
   private String username;
@@ -28,6 +28,4 @@ public class DtoRegister {
 
   private String firstName;
   private String lastName;
-  private List<String> managedTenants;
-  private String tenantId;
 }

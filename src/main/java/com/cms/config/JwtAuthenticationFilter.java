@@ -47,9 +47,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final UserAuthCacheService userAuthCacheService;
 
 
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
-
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     return Boolean.TRUE.equals(request.getAttribute(PublicApiFilter.PUBLIC_API_ATTRIBUTE));
@@ -148,52 +145,45 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
   /**
    * DB'den User'ı yükle, CachedUserDetails'a dönüştür ve Redis'e yaz.
+   * TenantContext JwtTenantFilter tarafından zaten set edilmiş olur:
+   * - admin JWT → null → defaultDataSource (basedb)
+   * - tenant JWT → tenantId → ilgili tenant DB'si
    */
   private CachedUserDetails loadUserFromDbAndCache(String username) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId(defaultTenant); // basedb'ye geç
+    User user = userRepository.findByUsername(username)
+        .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
+            "User not found: " + username));
 
-      User user = userRepository.findByUsername(username)
-          .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
-              "User not found: " + username));
-
-      // Authority string'lerini topla
-      Set<String> authorities = new HashSet<>();
-      if (user.getRoles() != null) {
-        for (Role role : user.getRoles()) {
-          authorities.add("ROLE_" + role.getName());
-          if (role.getPermissions() != null) {
-            for (Permission permission : role.getPermissions()) {
-              authorities.add(permission.getName());
-            }
+    Set<String> authorities = new HashSet<>();
+    if (user.getRoles() != null) {
+      for (Role role : user.getRoles()) {
+        authorities.add("ROLE_" + role.getName());
+        if (role.getPermissions() != null) {
+          for (Permission permission : role.getPermissions()) {
+            authorities.add(permission.getName());
           }
         }
       }
-
-      CachedUserDetails cached = CachedUserDetails.builder()
-          .id(user.getId())
-          .username(user.getUsername())
-          .password(user.getPassword())
-          .email(user.getEmail())
-          .isActive(user.getIsActive())
-          .tokenVersion(user.getTokenVersion())
-          .authorities(authorities)
-          .build();
-
-      // Redis'e yaz
-      try {
-        String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
-        redisTemplate.opsForValue().set(cacheKey, cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
-      } catch (Exception e) {
-        log.debug("Redis cache yazılamadı (user: {}): {}", username, e.getMessage());
-      }
-
-      return cached;
-
-    } finally {
-      TenantContext.setTenantId(originalTenant);
     }
+
+    CachedUserDetails cached = CachedUserDetails.builder()
+        .id(user.getId())
+        .username(user.getUsername())
+        .password(user.getPassword())
+        .email(user.getEmail())
+        .isActive(user.getIsActive())
+        .tokenVersion(user.getTokenVersion())
+        .authorities(authorities)
+        .build();
+
+    try {
+      String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
+      redisTemplate.opsForValue().set(cacheKey, cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+    } catch (Exception e) {
+      log.debug("Redis cache yazılamadı (user: {}): {}", username, e.getMessage());
+    }
+
+    return cached;
   }
 
   /**

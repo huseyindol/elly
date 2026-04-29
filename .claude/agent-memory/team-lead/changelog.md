@@ -5,6 +5,53 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-04-29] Multi-Tenant User Routing + Admin Tenant User Management
+**Tip:** 🔧 Bugfix + 🆕 Özellik | **Boyut:** Orta
+
+### Özet
+3 kritik bug düzeltildi ve panel admininin tenant DB'lerindeki kullanıcıları yönetebileceği yeni endpoint seti eklendi.
+
+### Bug Fix 1 — JwtAuthenticationFilter hardcoded basedb
+**Sorun:** `loadUserFromDbAndCache()` her zaman `TenantContext.setTenantId(defaultTenant)` yapıyordu. `JwtTenantFilter` doğru context'i set etse bile override ediliyordu.
+**Fix:** `TenantContext.setTenantId(defaultTenant)` satırı kaldırıldı. JwtTenantFilter'ın set ettiği context geçerli:
+- admin JWT → null → defaultDataSource (basedb)
+- tenant JWT → "tenant1" → tenant1 DB
+
+### Bug Fix 2 — AuthService.register() her zaman basedb'ye yazıyordu
+**Fix:** `register()` artık `DtoRegister.tenantId` alanını destekliyor. `tenantId` varsa o DB'ye switch edip kaydeder, finally'de restore eder.
+
+### Bug Fix 3 — UserService.executeInDefaultTenant() basedb'yi zorluyor
+**Fix:** `getAllUsers()` ve `getUserById()` methodlarındaki `executeInDefaultTenant()` wrapper'ı kaldırıldı. Mevcut TenantContext'e bırakıldı.
+
+### Yeni Özellik — Admin Tenant User Management
+**Endpoint seti:** `AdminLoginInterceptor` (loginSource=admin) + `users:manage` yetkisi gerektirir.
+
+| Method | Path | Açıklama |
+|--------|------|---------|
+| POST | `/api/v1/admin/tenants/{tenantId}/users` | Kullanıcı oluştur |
+| GET | `/api/v1/admin/tenants/{tenantId}/users` | Tüm kullanıcıları listele |
+| GET | `/api/v1/admin/tenants/{tenantId}/users/{id}` | Tek kullanıcı |
+| PUT | `/api/v1/admin/tenants/{tenantId}/users/{id}` | Güncelle |
+| DELETE | `/api/v1/admin/tenants/{tenantId}/users/{id}` | Sil |
+| PATCH | `/api/v1/admin/tenants/{tenantId}/users/{id}/status?isActive=` | Aktif/pasif |
+
+**Yeni dosyalar:**
+- `dto/DtoAdminUserCreate.java`, `dto/DtoAdminUserUpdate.java`
+- `service/ITenantUserService.java`, `service/impl/TenantUserService.java`
+- `controller/ITenantUserController.java`, `controller/impl/TenantUserController.java`
+
+**WebMvcConfig güncellendi:** AdminLoginInterceptor artık `/api/v1/admin/**` path'ini de kapsamaktadır.
+
+### Mimari Açıklama
+```
+basedb   → Panel admin kullanıcıları (loginSource="admin")
+tenant1  → Tenant1 site kullanıcıları (loginSource="tenant", tenantId="tenant1")
+tenant2  → Tenant2 site kullanıcıları
+```
+Panel guide: `docs/USER_ADMIN_GUIDE.md`
+
+---
+
 ## [2026-04-23] v4 Email Templates — Uygulama + Bugfix Oturumu
 **Tip:** 🆕 Özellik + 🔧 Bugfix + 🔒 Güvenlik | **Boyut:** Büyük
 

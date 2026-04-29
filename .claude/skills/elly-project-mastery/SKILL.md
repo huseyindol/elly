@@ -34,17 +34,17 @@ Bunu yaptıktan sonra kullanıcıya şunu sun:
 
 ---
 
-## PROJE DURUM SNAPSHOTU (2026-04-23)
+## PROJE DURUM SNAPSHOTU (2026-04-29)
 
 ### Tamamlanan Büyük Özellikler
 
 | Tarih | Özellik | Durum | Detay Dosyası |
 |-------|---------|-------|---------------|
+| 2026-04-29 | Multi-Tenant User Routing + Admin Tenant User Management | ✅ | changelog.md, docs/USER_ADMIN_GUIDE.md |
 | 2026-04-23 | v4 Email Templates — DB-hosted, tenant-aware, panel CRUD + preview | ✅ | changelog.md |
 | 2026-04-23 | RabbitMQ Admin Proxy API — CMS thin proxy, JWT korumalı | ✅ | rabbitmq-admin-api-design.md |
 | 2026-04-23 | Mail v3 — Email retry endpoint | ✅ | changelog.md |
 | 2026-04-21 | Mail+Form v2 — DB-based SMTP (AES) + Form-level sender/recipient secimi | ✅ | docs/MAIL_FORM_V2_GUIDE.md |
-| 2026-04-19 | Mail+Form v1 — ENV-based SMTP profil (v2'de geri alindi) | ↩️ SUPERSEDED | v2-mail-form-roadmap.md |
 | 2026-04-12 | Tenant-Based Gmail SMTP + RabbitMQ Retry | ✅ | tenant-mail-smtp.md |
 | 2026-04-10 | RBAC Permission System (Role/Permission/PreAuthorize) | ✅ | changelog.md |
 | 2026-04-10 | User Auth Redis Cache (auth:user:{username}) | ✅ | changelog.md |

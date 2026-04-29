@@ -54,6 +54,40 @@ void tearDown() {
 }
 ```
 
+## User Routing — Kritik Bilgi (2026-04-29'dan itibaren)
+
+### Kullanıcı Nerede Saklanır?
+```
+basedb   → Panel admin kullanıcıları  (loginSource="admin")
+tenant1  → Tenant1 site kullanıcıları (loginSource="tenant", tenantId="tenant1")
+tenant2  → Tenant2 site kullanıcıları
+```
+
+### JwtAuthenticationFilter — loadUserFromDbAndCache()
+Artık **hardcoded basedb kullanmıyor**. JwtTenantFilter'ın set ettiği TenantContext geçerli:
+- Admin JWT → JwtTenantFilter null set eder → defaultDataSource (basedb) → user basedb'den yüklenir
+- Tenant JWT → JwtTenantFilter "tenant1" set eder → tenant1 DataSource → user tenant1'den yüklenir
+
+### register() — Tenant DB'sine Kayıt
+```json
+POST /api/v1/auth/register
+{
+  "username": "ali",
+  "email": "ali@site.com",
+  "password": "123456",
+  "tenantId": "tenant1"   ← bu alan varsa tenant1 DB'sine kaydeder
+}
+```
+`tenantId` verilmezse mevcut TenantContext kullanılır (genellikle basedb).
+
+### Admin Panel → Tenant Kullanıcı Yönetimi
+Panel admin JWT ile tenant DB'lerindeki kullanıcılara erişim:
+```
+GET/POST/PUT/DELETE /api/v1/admin/tenants/{tenantId}/users
+PATCH               /api/v1/admin/tenants/{tenantId}/users/{id}/status
+```
+`TenantUserService.inTenantContext(tenantId, ...)` — her metod geçici switch yapar, finally'de restore eder.
+
 ## Hata Senaryoları
 - `TenantContext` null ise → `basedb`'ye fallback (DataSourceConfig'de tanımlı)
 - Bilinmeyen tenant adı → `IllegalArgumentException` fırlatılır

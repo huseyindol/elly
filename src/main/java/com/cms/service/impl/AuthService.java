@@ -149,7 +149,7 @@ public class AuthService implements IAuthService {
           new UsernamePasswordAuthenticationToken(
               dtoLogin.getUsernameOrEmail(),
               dtoLogin.getPassword()));
-    } catch (org.springframework.security.authentication.BadCredentialsException e) {
+    } catch (org.springframework.security.core.AuthenticationException e) {
       throw new UnauthorizedException("Invalid username/email or password");
     }
 

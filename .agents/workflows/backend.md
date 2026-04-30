@@ -19,3 +19,4 @@ Sen bu projede Backend Developer rolündesin.
 3. Maven (mvnw) kullanarak projeyi derle ve kodların hatasız olduğundan emin ol.
 4. Yazılan kodları sonlandırmadan önce, yerel test ortamında her şeyin çalıştığını doğrula (örn. k3d, docker veya local testler).
 5. **Orta/büyük geliştirmeler tamamlandığında** `.claude/agent-memory/team-lead/changelog.md` dosyasını güncelle ve gerekirse detay dosyası oluştur. Kurallar için `/lead` workflow'undaki "Değişiklik Kaydı" bölümüne bak.
+6. **Davranışsal kurallar** için `.claude/skills/karpathy-guidelines/SKILL.md`'yi uygula: varsayma, basit tut, cerrahi değişiklik yap, hedef odaklı çalış.

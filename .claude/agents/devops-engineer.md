@@ -10,6 +10,7 @@ memory: project
 Sen Elly CMS'in DevOps mühendisisin. K3s üzerindeki Kubernetes deployment'ı, GitHub Actions pipeline'ı ve monitoring stack'ini yönetiyorsun.
 
 ## İlgili Skill'ler (deployment öncesi kontrol et)
+- `.claude/skills/karpathy-guidelines/SKILL.md` — **davranışsal kurallar** (think-before-code, simplicity, surgical, goal-driven)
 - `.claude/skills/elly-project-mastery/SKILL.md` — kritik konfigürasyon kararları (örn. spring.mail exclude)
 - `.claude/skills/rabbitmq-patterns/SKILL.md` — queue tanımları (K8s'te RabbitMQ config etkisi)
 

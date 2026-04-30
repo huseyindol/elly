@@ -4,7 +4,8 @@ description: Kod inceleme persona — Cursor ve genel agent’lar için (Claude 
 
 # Workflow: Code Review
 
-**Kanonik tanım:** [`.claude/agents/code-reviewer.md`](../../.claude/agents/code-reviewer.md)
+**Kanonik tanım:** [`.claude/agents/code-reviewer.md`](../../.claude/agents/code-reviewer.md)  
+**Davranışsal kurallar:** [`.claude/skills/karpathy-guidelines/SKILL.md`](../../.claude/skills/karpathy-guidelines/SKILL.md)
 
 ## Ne zaman kullan
 

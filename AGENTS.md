@@ -57,11 +57,11 @@ Tanim dosyasi: `.claude/agents/<isim>.md`
 
 | Agent | Dosya | Kisa rol | Ilgili Skill'ler |
 |-------|--------|----------|------------------|
-| `team-lead` | [`team-lead.md`](./.claude/agents/team-lead.md) | Orchestrator, gorev dagitimi | elly-project-mastery, dev-session-tracker |
-| `java-architect` | [`java-architect.md`](./.claude/agents/java-architect.md) | Spring / JPA / multi-tenant mimari | elly-conventions, multitenant-routing, redis-cache-patterns, rabbitmq-patterns, error-handling-patterns, spring-security-patterns |
-| `code-reviewer` | [`code-reviewer.md`](./.claude/agents/code-reviewer.md) | Pattern, kalite, PR review | elly-conventions, redis-cache-patterns, error-handling-patterns, multitenant-routing |
-| `devops-engineer` | [`devops-engineer.md`](./.claude/agents/devops-engineer.md) | K8s, Docker, CI/CD, monitoring | elly-project-mastery, rabbitmq-patterns |
-| `security-guard` | [`security-guard.md`](./.claude/agents/security-guard.md) | JWT, OAuth2, tenant izolasyonu | spring-security-patterns, multitenant-routing, error-handling-patterns |
+| `team-lead` | [`team-lead.md`](./.claude/agents/team-lead.md) | Orchestrator, gorev dagitimi | **karpathy-guidelines**, elly-project-mastery, dev-session-tracker |
+| `java-architect` | [`java-architect.md`](./.claude/agents/java-architect.md) | Spring / JPA / multi-tenant mimari | **karpathy-guidelines**, elly-conventions, multitenant-routing, redis-cache-patterns, rabbitmq-patterns, error-handling-patterns, spring-security-patterns |
+| `code-reviewer` | [`code-reviewer.md`](./.claude/agents/code-reviewer.md) | Pattern, kalite, PR review | **karpathy-guidelines**, elly-conventions, redis-cache-patterns, error-handling-patterns, multitenant-routing |
+| `devops-engineer` | [`devops-engineer.md`](./.claude/agents/devops-engineer.md) | K8s, Docker, CI/CD, monitoring | **karpathy-guidelines**, elly-project-mastery, rabbitmq-patterns |
+| `security-guard` | [`security-guard.md`](./.claude/agents/security-guard.md) | JWT, OAuth2, tenant izolasyonu | **karpathy-guidelines**, spring-security-patterns, multitenant-routing, error-handling-patterns |
 
 Cursor'da ornek kullanim: *"`.claude/agents/java-architect.md` rolundeki gibi davran; su entity tasarimini oner."*
 
@@ -84,6 +84,7 @@ Her biri `SKILL.md` icinde: `.claude/skills/<skill-adi>/SKILL.md`
 ### Skill -> Agent Besleme Haritasi
 
 ```
+karpathy-guidelines ──── ★ tum agent'lar (cross-cutting davranissal)
 elly-conventions ──────── java-architect, code-reviewer
 multitenant-routing ───── java-architect, security-guard, code-reviewer
 spring-security-patterns  security-guard, java-architect

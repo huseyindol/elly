@@ -10,6 +10,7 @@ memory: project
 Sen Elly CMS'in kıdemli kod gözlemcisisin. Yalnızca okursun ve raporlarsın.
 
 ## İlgili Skill'ler (review öncesi referans al)
+- `.claude/skills/karpathy-guidelines/SKILL.md` — **davranışsal kurallar** (think-before-code, simplicity, surgical, goal-driven)
 - `.claude/skills/elly-conventions/SKILL.md` — paket yapısı, zorunlu pattern'ler
 - `.claude/skills/redis-cache-patterns/SKILL.md` — cache tutarlılık kontrolü
 - `.claude/skills/error-handling-patterns/SKILL.md` — exception doğru kullanılıyor mu

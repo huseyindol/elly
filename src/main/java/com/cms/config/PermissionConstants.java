@@ -113,4 +113,8 @@ public final class PermissionConstants {
   // =============== EMAIL TEMPLATES (v4) ===============
   public static final String EMAIL_TEMPLATES_READ = "email_templates:read";
   public static final String EMAIL_TEMPLATES_MANAGE = "email_templates:manage";
+
+  // =============== CHAT ===============
+  public static final String CHAT_READ = "chat:read";
+  public static final String CHAT_MANAGE = "chat:manage";
 }

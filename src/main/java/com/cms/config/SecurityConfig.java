@@ -150,6 +150,7 @@ public class SecurityConfig {
             .requestMatchers("/login/oauth2/**").permitAll()
             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
             .requestMatchers("/actuator/**").permitAll()
+            .requestMatchers("/ws/**").permitAll()
             .anyRequest().authenticated())
         .oauth2Login(oauth2 -> oauth2
             .loginPage("/api/v1/auth/login") // OAuth2 login sayfasını devre dışı bırak, API endpoint'e yönlendir

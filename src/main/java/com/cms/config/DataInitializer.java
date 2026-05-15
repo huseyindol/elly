@@ -112,7 +112,7 @@ public class DataInitializer implements CommandLineRunner {
     // EDITOR — içerik modülleri (CRUD), mail-cache-tenant hariç
     Set<Permission> editorPerms = new HashSet<>();
     Set<String> editorModules = Set.of("POSTS", "PAGES", "COMPONENTS", "WIDGETS",
-        "BANNERS", "ASSETS", "COMMENTS", "FORMS", "RATINGS", "CONTENTS", "BASIC_INFOS");
+        "BANNERS", "ASSETS", "COMMENTS", "FORMS", "RATINGS", "CONTENTS", "BASIC_INFOS", "CHAT");
     for (Permission p : allPermissions) {
       if (editorModules.contains(p.getModule())) {
         editorPerms.add(p);

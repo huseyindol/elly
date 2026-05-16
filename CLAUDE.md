@@ -1,5 +1,10 @@
 # Elly CMS — Claude Proje Bağlami
 
+## Git Kurallari
+
+- **Her zaman `main` branch'te calis.** Feature branch acma; degisiklikleri dogrudan `main`'e commit et ve push'la.
+- Bunu her oturumda hatirlatmana gerek yok — bu kural kalicidir.
+
 ## Cursor ve diger agent araclari
 
 Coklu agent rolleri, is akislari ve dosya haritasi icin repo kokundeki **[`AGENTS.md`](./AGENTS.md)** dosyasina bak. Cursor odakli kisa workflow'lar **[`.agents/workflows/`](./.agents/workflows/)** altinda; uzun tanimlar bu repoda **`.claude/agents/`** icinde kalir (tek kaynak).

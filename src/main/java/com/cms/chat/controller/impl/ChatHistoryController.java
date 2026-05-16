@@ -30,14 +30,14 @@ public class ChatHistoryController implements IChatHistoryController {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('chat:manage')")
+  @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatMessage>> editMessage(UUID messageId, String newContent) {
     return ResponseEntity.ok(
         RootEntityResponse.ok(messageService.editMessage(messageId, getCurrentUserId(), newContent)));
   }
 
   @Override
-  @PreAuthorize("hasAuthority('chat:manage')")
+  @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<Void> deleteMessage(UUID messageId) {
     messageService.deleteMessage(messageId, getCurrentUserId());
     return ResponseEntity.noContent().build();

@@ -24,7 +24,7 @@ public class ChatGroupController implements IChatGroupController {
   private final IChatGroupService groupService;
 
   @Override
-  @PreAuthorize("hasAuthority('chat:manage')")
+  @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatGroup>> createGroup(
       DtoChatGroupCreate dto) {
     Long userId = getCurrentUserId();
@@ -45,7 +45,7 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('chat:manage')")
+  @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatGroup>> getOrCreateDm(Long targetUserId) {
     return ResponseEntity.ok(RootEntityResponse.ok(groupService.getOrCreateDm(getCurrentUserId(), targetUserId)));
   }

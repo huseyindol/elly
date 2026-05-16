@@ -73,6 +73,13 @@ public class JwtTenantFilter extends OncePerRequestFilter {
       String loginSource = jwtUtil.extractLoginSource(jwt);
       String path = request.getRequestURI();
 
+      // Chat her zaman basedb'de calisir (tablolar sadece basedb'de),
+      // loginSource fark etmez. WebSocket de ayni davranisi sergiliyor.
+      if (path.startsWith("/api/v1/chat/")) {
+        log.debug("Chat path, forcing basedb: {}", path);
+        return null;
+      }
+
       boolean isBaseDbPath = path.startsWith("/api/v1/auth/")
           || path.startsWith("/api/v1/users")
           || path.startsWith("/api/v1/roles");

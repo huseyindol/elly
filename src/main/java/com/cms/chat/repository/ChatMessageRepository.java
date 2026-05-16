@@ -1,6 +1,7 @@
 package com.cms.chat.repository;
 
 import com.cms.chat.entity.ChatMessage;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,11 +18,10 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
         AND m.deletedAt IS NULL
         AND (:before IS NULL OR m.createdAt < :before)
       ORDER BY m.createdAt DESC
-      LIMIT :limit
       """)
   List<ChatMessage> findByGroupIdCursor(@Param("groupId") UUID groupId,
       @Param("before") Date before,
-      @Param("limit") int limit);
+      Pageable pageable);
 
   @Query("""
       SELECT m FROM ChatMessage m

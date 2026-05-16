@@ -13,9 +13,12 @@ import java.util.UUID;
 public interface ChatGroupRepository extends JpaRepository<ChatGroup, UUID> {
 
   @Query("""
-      SELECT DISTINCT g FROM ChatGroup g
-      LEFT JOIN ChatGroupMember m ON m.id.groupId = g.id AND m.id.userId = :userId
-      WHERE m.id.userId IS NOT NULL OR g.visibilityLevel <= :roleLevel
+      SELECT g FROM ChatGroup g
+      WHERE g.visibilityLevel <= :roleLevel
+         OR EXISTS (
+             SELECT 1 FROM ChatGroupMember m
+             WHERE m.id.groupId = g.id AND m.id.userId = :userId
+         )
       ORDER BY g.updatedAt DESC
       """)
   List<ChatGroup> findGroupsByUserIdAndRole(@Param("userId") Long userId, @Param("roleLevel") int roleLevel);

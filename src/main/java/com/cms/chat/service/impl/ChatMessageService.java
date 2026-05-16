@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -71,7 +72,7 @@ public class ChatMessageService implements IChatMessageService {
           .orElse(null);
     }
 
-    return messageRepository.findByGroupIdCursor(groupId, beforeDate, Math.min(limit, 100))
+    return messageRepository.findByGroupIdCursor(groupId, beforeDate, PageRequest.of(0, Math.min(limit, 100)))
         .stream()
         .map(this::toDto)
         .toList();

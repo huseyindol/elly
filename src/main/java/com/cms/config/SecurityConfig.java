@@ -18,6 +18,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
@@ -150,7 +151,12 @@ public class SecurityConfig {
             .requestMatchers("/login/oauth2/**").permitAll()
             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
             .requestMatchers("/actuator/**").permitAll()
-            .requestMatchers("/ws/**").permitAll()
+            // AntPathRequestMatcher kullanilir cunku Spring Security 6 + Spring MVC kombinasyonunda
+            // requestMatchers(String) MvcRequestMatcher olusturur. SockJS handler'i
+            // RequestMappingHandlerMapping'de kayitli olmadigi icin /ws/info eslesemiyor
+            // ve anyRequest().authenticated() kuralina dusuyor → 401.
+            // AntPathRequestMatcher dogrudan path stringi karsilastirir, MVC mapping aramaz.
+            .requestMatchers(AntPathRequestMatcher.antMatcher("/ws/**")).permitAll()
             .anyRequest().authenticated())
         .oauth2Login(oauth2 -> oauth2
             .loginPage("/api/v1/auth/login") // OAuth2 login sayfasını devre dışı bırak, API endpoint'e yönlendir

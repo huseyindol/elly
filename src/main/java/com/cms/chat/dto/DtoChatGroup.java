@@ -13,6 +13,7 @@ public class DtoChatGroup {
   private String description;
   private ChatGroupType type;
   private Long createdBy;
+  private int visibilityLevel;
   private Date createdAt;
   private Date updatedAt;
 }

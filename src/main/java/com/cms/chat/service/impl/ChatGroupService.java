@@ -8,7 +8,6 @@ import com.cms.chat.mapper.ChatMapper;
 import com.cms.chat.repository.ChatGroupMemberRepository;
 import com.cms.chat.repository.ChatGroupRepository;
 import com.cms.chat.service.IChatGroupService;
-import com.cms.entity.Role;
 import com.cms.entity.User;
 import com.cms.exception.ForbiddenException;
 import com.cms.exception.ResourceNotFoundException;
@@ -17,9 +16,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +38,7 @@ public class ChatGroupService implements IChatGroupService {
     group.setDescription(dto.getDescription());
     group.setType(ChatGroupType.GROUP);
     group.setCreatedBy(creatorId);
+    group.setVisibilityLevel(getUserRoleLevel(creatorId));
     group = groupRepository.save(group);
 
     addMemberInternal(group.getId(), creatorId, ChatMemberRole.OWNER);
@@ -62,6 +63,7 @@ public class ChatGroupService implements IChatGroupService {
           ChatGroup dm = new ChatGroup();
           dm.setType(ChatGroupType.DM);
           dm.setCreatedBy(currentUserId);
+          dm.setVisibilityLevel(4); // DMs are always private
           dm = groupRepository.save(dm);
           addMemberInternal(dm.getId(), currentUserId, ChatMemberRole.OWNER);
           addMemberInternal(dm.getId(), targetUserId, ChatMemberRole.MEMBER);
@@ -71,7 +73,8 @@ public class ChatGroupService implements IChatGroupService {
 
   @Override
   public List<DtoChatGroup> getMyGroups(Long userId) {
-    return groupRepository.findGroupsByUserId(userId)
+    int roleLevel = getUserRoleLevel(userId);
+    return groupRepository.findGroupsByUserIdAndRole(userId, roleLevel)
         .stream()
         .map(chatMapper::toGroupDto)
         .toList();
@@ -89,6 +92,14 @@ public class ChatGroupService implements IChatGroupService {
   public DtoChatMember addMember(UUID groupId, Long targetUserId, Long requesterId) {
     findGroupOrThrow(groupId);
     checkAccess(groupId, requesterId);
+
+    // Invite hierarchy: requester can only invite users with a lower role level.
+    // SUPER_ADMIN (level 4) is exempt and may invite anyone.
+    int requesterLevel = getUserRoleLevel(requesterId);
+    int targetLevel = getUserRoleLevel(targetUserId);
+    if (requesterLevel < 4 && targetLevel >= requesterLevel) {
+      throw new ForbiddenException("You can only invite users with a lower role than yours");
+    }
 
     if (memberRepository.existsByIdGroupIdAndIdUserId(groupId, targetUserId)) {
       throw new com.cms.exception.ConflictException("User is already a member of this group");
@@ -110,7 +121,7 @@ public class ChatGroupService implements IChatGroupService {
   @Transactional
   public void deleteGroup(UUID groupId, Long requesterId) {
     ChatGroup group = findGroupOrThrow(groupId);
-    if (!isSuperAdmin(requesterId) && !group.getCreatedBy().equals(requesterId)) {
+    if (getUserRoleLevel(requesterId) < 4 && !group.getCreatedBy().equals(requesterId)) {
       throw new ForbiddenException("Only the group owner or SUPER_ADMIN can delete this group");
     }
     groupRepository.delete(group);
@@ -137,15 +148,24 @@ public class ChatGroupService implements IChatGroupService {
   }
 
   void checkAccess(UUID groupId, Long userId) {
-    if (!isSuperAdmin(userId) && !isMember(groupId, userId)) {
+    if (getUserRoleLevel(userId) < 4 && !isMember(groupId, userId)) {
       throw new ForbiddenException("You are not a member of this group");
     }
   }
 
-  private boolean isSuperAdmin(Long userId) {
+  // Returns 4=SUPER_ADMIN, 3=ADMIN, 2=EDITOR, 1=VIEWER (highest role wins)
+  private int getUserRoleLevel(Long userId) {
     return userRepository.findById(userId)
-        .map(u -> u.getRoles().stream().anyMatch(r -> "SUPER_ADMIN".equals(r.getName())))
-        .orElse(false);
+        .map(u -> {
+          Set<String> roles = u.getRoles().stream()
+              .map(r -> r.getName())
+              .collect(Collectors.toSet());
+          if (roles.contains("SUPER_ADMIN")) return 4;
+          if (roles.contains("ADMIN")) return 3;
+          if (roles.contains("EDITOR")) return 2;
+          return 1;
+        })
+        .orElse(1);
   }
 
   private ChatGroupMember addMemberInternal(UUID groupId, Long userId, ChatMemberRole role) {

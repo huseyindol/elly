@@ -38,6 +38,10 @@ public class ChatGroup {
   @Column(name = "created_by", nullable = false)
   private Long createdBy;
 
+  // 1=VIEWER(public), 2=EDITOR+, 3=ADMIN+, 4=SUPER_ADMIN(private)
+  @Column(name = "visibility_level", nullable = false)
+  private int visibilityLevel = 1;
+
   @CreatedDate
   @Column(name = "created_at", nullable = false, updatable = false)
   private Date createdAt;

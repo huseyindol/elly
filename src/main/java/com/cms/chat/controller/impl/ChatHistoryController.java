@@ -10,35 +10,42 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
+@RequestMapping("/api/v1/chat")
 public class ChatHistoryController implements IChatHistoryController {
 
   private final IChatMessageService messageService;
 
   @Override
+  @GetMapping("/groups/{groupId}/messages")
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<List<DtoChatMessage>>> getHistory(
-      UUID groupId, UUID before, int limit) {
+      @PathVariable UUID groupId,
+      @RequestParam(required = false) UUID before,
+      @RequestParam(defaultValue = "50") int limit) {
     return ResponseEntity.ok(
         RootEntityResponse.ok(messageService.getHistory(groupId, getCurrentUserId(), before, limit)));
   }
 
   @Override
+  @PutMapping("/messages/{messageId}")
   @PreAuthorize("hasAuthority('chat:read')")
-  public ResponseEntity<RootEntityResponse<DtoChatMessage>> editMessage(UUID messageId, String newContent) {
+  public ResponseEntity<RootEntityResponse<DtoChatMessage>> editMessage(
+      @PathVariable UUID messageId, @RequestBody String newContent) {
     return ResponseEntity.ok(
         RootEntityResponse.ok(messageService.editMessage(messageId, getCurrentUserId(), newContent)));
   }
 
   @Override
+  @DeleteMapping("/messages/{messageId}")
   @PreAuthorize("hasAuthority('chat:read')")
-  public ResponseEntity<Void> deleteMessage(UUID messageId) {
+  public ResponseEntity<Void> deleteMessage(@PathVariable UUID messageId) {
     messageService.deleteMessage(messageId, getCurrentUserId());
     return ResponseEntity.noContent().build();
   }

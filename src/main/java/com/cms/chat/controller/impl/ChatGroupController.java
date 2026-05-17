@@ -10,6 +10,7 @@ import com.cms.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -23,14 +24,18 @@ import java.util.UUID;
 public class ChatGroupController implements IChatGroupController {
 
   private final IChatGroupService groupService;
+  private final SimpMessagingTemplate messagingTemplate;
 
   @Override
   @PostMapping("/groups")
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatGroup>> createGroup(
       @RequestBody DtoChatGroupCreate dto) {
+    DtoChatGroup created = groupService.createGroup(dto, getCurrentUserId());
+    // Tüm bağlı kullanıcılara yayınla; frontend visibilityLevel'a göre filtreler
+    messagingTemplate.convertAndSend("/topic/groups/new", created);
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(RootEntityResponse.ok(groupService.createGroup(dto, getCurrentUserId())));
+        .body(RootEntityResponse.ok(created));
   }
 
   @Override

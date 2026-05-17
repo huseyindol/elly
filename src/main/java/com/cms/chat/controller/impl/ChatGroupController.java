@@ -64,8 +64,11 @@ public class ChatGroupController implements IChatGroupController {
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<RootEntityResponse<DtoChatMember>> addMember(
       @PathVariable UUID groupId, @PathVariable Long userId) {
-    return ResponseEntity.status(HttpStatus.CREATED)
-        .body(RootEntityResponse.ok(groupService.addMember(groupId, userId, getCurrentUserId())));
+    DtoChatMember member = groupService.addMember(groupId, userId, getCurrentUserId());
+    // Davet edilen kullanıcıya kişisel topic'ten grubu gönder
+    DtoChatGroup group = groupService.getGroupById(groupId, getCurrentUserId());
+    messagingTemplate.convertAndSend("/topic/user/" + userId + "/groups/joined", group);
+    return ResponseEntity.status(HttpStatus.CREATED).body(RootEntityResponse.ok(member));
   }
 
   @Override

@@ -5,6 +5,7 @@ import com.cms.entity.RootEntityResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -20,4 +21,7 @@ public interface IChatHistoryController {
 
   @Operation(summary = "Mesajı sil (soft delete)")
   ResponseEntity<Void> deleteMessage(UUID messageId);
+
+  @Operation(summary = "Chat dosya yükle")
+  ResponseEntity<RootEntityResponse<String>> uploadFile(MultipartFile file);
 }

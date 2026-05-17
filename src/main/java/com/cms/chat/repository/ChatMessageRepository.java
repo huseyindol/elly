@@ -16,10 +16,18 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
       SELECT m FROM ChatMessage m
       WHERE m.groupId = :groupId
         AND m.deletedAt IS NULL
-        AND (:before IS NULL OR m.createdAt < :before)
       ORDER BY m.createdAt DESC
       """)
-  List<ChatMessage> findByGroupIdCursor(@Param("groupId") UUID groupId,
+  List<ChatMessage> findByGroupId(@Param("groupId") UUID groupId, Pageable pageable);
+
+  @Query("""
+      SELECT m FROM ChatMessage m
+      WHERE m.groupId = :groupId
+        AND m.deletedAt IS NULL
+        AND m.createdAt < :before
+      ORDER BY m.createdAt DESC
+      """)
+  List<ChatMessage> findByGroupIdBefore(@Param("groupId") UUID groupId,
       @Param("before") Date before,
       Pageable pageable);
 

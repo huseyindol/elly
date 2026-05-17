@@ -72,7 +72,11 @@ public class ChatMessageService implements IChatMessageService {
           .orElse(null);
     }
 
-    return messageRepository.findByGroupIdCursor(groupId, beforeDate, PageRequest.of(0, Math.min(limit, 100)))
+    int safeLimit = Math.min(limit, 100);
+    List<ChatMessage> msgs = (beforeDate == null)
+        ? messageRepository.findByGroupId(groupId, PageRequest.of(0, safeLimit))
+        : messageRepository.findByGroupIdBefore(groupId, beforeDate, PageRequest.of(0, safeLimit));
+    return msgs
         .stream()
         .map(this::toDto)
         .toList();

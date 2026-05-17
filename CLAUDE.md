@@ -57,6 +57,17 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Serialization:** Jackson2JsonMessageConverter
 - **Consumer'da TenantContext:** Baslangicta `setTenantId()`, finally'de `clear()` — ZORUNLU
 
+## Chat Sistemi
+- **Paket:** `com.cms.chat.*` — entity, repository, service, controller, websocket, dto, mapper
+- **DB:** Sadece `basedb`'de 5 tablo (chat_groups, chat_group_members, chat_messages, chat_message_reads, chat_message_edits)
+- **Routing:** `JwtTenantFilter` `/api/v1/chat/` yolunu zorla basedb'ye yonlendirir (tenantId override)
+- **WebSocket:** `${API}/ws` (SockJS+STOMP), CONNECT'te `Authorization: Bearer` zorunlu
+- **Permission:** `chat:read` (tum kullanicilar), `chat:manage` (EDITOR+)
+- **Visibility:** VIEWER=1 (herkese acik) → EDITOR=2 → ADMIN=3 → SUPER_ADMIN=4 (gizli), DM her zaman 4
+- **Davet hiyerarsisi:** Davet eden, kendi rol seviyesinden dusuk kullanicilari davet edebilir; SUPER_ADMIN herkesi
+- **Topic'ler:** `/topic/groups/new`, `/topic/groups/deleted`, `/topic/user/{userId}/groups/joined`, `/topic/group/{groupId}` (mesaj/typing/read), `/topic/presence`
+- **Detay:** `chat-patterns` skill'i acilir; query/topic ornekleri orada
+
 ## Build & Calistirma
 ```bash
 ./mvnw clean package -DskipTests   # Build
@@ -98,6 +109,8 @@ Proje-spesifik bilgi birikimi `.claude/skills/` altinda tutulur. Agent'lar gorev
 | `redis-cache-patterns` | Cache key, TTL, invalidation, graceful fallback |
 | `rabbitmq-patterns` | Queue/exchange ekleme, consumer pattern, retry/DLQ |
 | `error-handling-patterns` | BaseException hiyerarsisi, GlobalExceptionHandler |
+| `chat-patterns` | WebSocket+STOMP, visibilityLevel, davet hiyerarsisi, topic semasi |
+| `mail-smoke-test` | Mail gonderim akisini end-to-end dogrulama playbook'u |
 | `dev-session-tracker` | Uzun gorevlerde ilerleme takibi, changelog |
 | `karpathy-guidelines` | Davranissal kurallar: overengineering'i onle, surgical degisim, goal-driven loop |
 

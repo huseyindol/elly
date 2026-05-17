@@ -5,6 +5,85 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-05-17] Chat Sistemi — Role-Based Visibility + Real-time Broadcast
+**Tip:** 🆕 Özellik + 🔧 Bugfix | **Boyut:** Büyük
+
+### Özet
+Tam fonksiyonel real-time chat sistemi: WebSocket+STOMP, rol bazlı görünürlük, davet hiyerarşisi, dosya yükleme, canlı bildirimler.
+
+### Yeni Özellikler
+
+**Chat çekirdek (`com.cms.chat.*`):**
+- Entity: `ChatGroup` (visibilityLevel 1-4), `ChatGroupMember`, `ChatMessage`, `ChatMessageRead`, `ChatMessageEdit`
+- 5 tablo: `chat_groups`, `chat_group_members`, `chat_messages`, `chat_message_reads`, `chat_message_edits` — sadece `basedb`'de
+- REST: `/api/v1/chat/groups`, `/api/v1/chat/groups/{id}/messages`, `/api/v1/chat/dm/{userId}`, `/api/v1/chat/files`
+- WebSocket: `${API}/ws` (SockJS+STOMP), STOMP CONNECT'te `Authorization: Bearer` header zorunlu
+- `chat:read` + `chat:manage` permission'ları — DataInitializer otomatik atar (VIEWER hariç hepsine manage)
+
+**Rol bazlı görünürlük:**
+- `visibilityLevel`: VIEWER=1 (herkese açık), EDITOR=2, ADMIN=3, SUPER_ADMIN=4 (gizli)
+- `createGroup()` creator'ın rolünden otomatik `visibilityLevel` set ediyor
+- `getMyGroups()` query: `visibilityLevel <= userRoleLevel OR EXISTS(member)`
+- DM grupları her zaman `visibilityLevel=4` (sadece taraflar görür)
+
+**Davet hiyerarşisi:**
+- EDITOR (2) → VIEWER davet edebilir
+- ADMIN (3) → EDITOR, VIEWER
+- SUPER_ADMIN (4) → herkes
+- `addMember()` service-level enforcement: `requesterLevel < 4 && targetLevel >= requesterLevel` → ForbiddenException
+
+**Real-time broadcast topic'leri:**
+| Topic | Tetikleyen |
+|---|---|
+| `/topic/groups/new` | Grup oluşturulunca (frontend visibilityLevel ile filtreler) |
+| `/topic/groups/deleted` | Grup silinince — tüm bağlı kullanıcılara yayılır |
+| `/topic/user/{userId}/groups/joined` | Kullanıcı davet edilince — sadece o kullanıcıya |
+| `/topic/group/{groupId}` | Yeni mesaj |
+| `/topic/group/{groupId}/typing` | Yazıyor sinyali |
+| `/topic/group/{groupId}/read` | Okundu bilgisi |
+| `/topic/presence` | Online/offline durumu |
+
+**Dosya yükleme:**
+- `POST /api/v1/chat/files` (multipart) → `IFileService.saveFile(file, "chat")` → `assets/chat/{filename}` döner
+- Frontend: `${API}/{returnedPath}` ile tam URL oluşturur
+
+### Bug Fix'ler
+
+| # | Sorun | Çözüm |
+|---|-------|-------|
+| 1 | Chat endpoint'leri 401 | `WebMvcConfig`'den `/api/v1/chat/**` AdminLoginInterceptor'dan çıkarıldı |
+| 2 | Tenant admin chat grubunu oluşturamıyor | `JwtTenantFilter` chat path'lerini zorla `basedb`'ye yönlendiriyor |
+| 3 | `/ws/info` 401 (SockJS) | `SecurityConfig`'de `AntPathRequestMatcher.antMatcher("/ws/**")` — MvcRequestMatcher SockJS handler'ı bulamıyordu |
+| 4 | `@RequestMapping` interface'de tespit edilmiyor | Tüm HTTP annotation'ları impl class'a taşındı (Spring 6 davranışı) |
+| 5 | Messages 500 — `LIMIT :limit` JPQL | `Pageable.of(0, limit)` kullanımı |
+| 6 | Messages 500 — `(:before IS NULL OR ...)` PostgreSQL tip çıkarımı | İki ayrı query: `findByGroupId` ve `findByGroupIdBefore` |
+| 7 | SUPER_ADMIN ADMIN grubunu görmüyor | JPQL LEFT JOIN ON embedded-id güvenilmez — `EXISTS` subquery |
+| 8 | Production'da `visibility_level` kolonu yok | Migration SQL'e `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` eklendi |
+
+### Konfigürasyon Değişiklikleri
+- `jwt.expiration`: 180000 (3 dk) → 14400000 (4 saat)
+- `jwt.refresh.expiration`: 3600000 (1 saat) → 15552000000 (6 ay)
+- `cookie.access-token.expiration`: 1800 → 14400
+- `cookie.refresh-token.expiration`: 3600 → 15552000
+- `chat.rate-limit.max-messages-per-second=10`, `chat.message.max-length=4000`
+
+### Yeni Dosyalar
+- `chat/entity/` — 6 entity
+- `chat/repository/` — 5 repository (ChatGroup, Member, Message, MessageRead, MessageEdit)
+- `chat/service/` — IChatGroupService, IChatMessageService, ChatPresenceService, ChatTypingService, ChatRateLimitService
+- `chat/controller/` — IChatGroupController, IChatHistoryController + impl
+- `chat/websocket/` — WebSocketConfig, ChatWebSocketController, ChatWebSocketSecurityConfig
+- `chat/dto/` — 8 DTO
+- `chat/mapper/ChatMapper.java`
+- `resources/migration/db-migration-chat.sql`
+
+### Frontend (admin panel) Notları
+- JWT **JWE encrypted** — `atob` çalışmaz. Roller JWT'de yok.
+- Kullanıcı rolü için `GET /api/v1/users/me/permissions` endpoint'i kullanılır.
+- Frontend: `@stomp/stompjs` + `sockjs-client`, Zustand store, `useChatConnection()` hook.
+
+---
+
 ## [2026-04-29] Multi-Tenant User Routing + Admin Tenant User Management
 **Tip:** 🔧 Bugfix + 🆕 Özellik | **Boyut:** Orta
 

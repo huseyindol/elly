@@ -88,6 +88,7 @@ public class ChatGroupController implements IChatGroupController {
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<Void> deleteGroup(@PathVariable UUID groupId) {
     groupService.deleteGroup(groupId, getCurrentUserId());
+    messagingTemplate.convertAndSend("/topic/groups/deleted", groupId.toString());
     return ResponseEntity.noContent().build();
   }
 

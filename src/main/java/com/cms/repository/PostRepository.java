@@ -23,7 +23,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
   @EntityGraph(attributePaths = { "seoInfo" })
   List<Post> findAllWithRelations();
 
-  @Query("SELECT new com.cms.dto.DtoPostSummary(p.id, p.title, p.slug, p.status, p.orderIndex) FROM Post p")
+  @Query("SELECT new com.cms.dto.DtoPostSummary(p.id, p.title, p.slug, p.status, p.orderIndex, p.description, p.category, p.coverImage, p.publishedAt, p.author, p.readingTime) FROM Post p")
   List<DtoPostSummary> findAllWithSummary();
 
   Optional<Post> findBySlug(String slug);
@@ -33,6 +33,6 @@ public interface PostRepository extends JpaRepository<Post, Long> {
   @EntityGraph(attributePaths = { "seoInfo" })
   Page<Post> findAllWithRelationsPaged(Pageable pageable);
 
-  @Query(value = "SELECT new com.cms.dto.DtoPostSummary(p.id, p.title, p.slug, p.status, p.orderIndex) FROM Post p", countQuery = "SELECT count(p) FROM Post p")
+  @Query(value = "SELECT new com.cms.dto.DtoPostSummary(p.id, p.title, p.slug, p.status, p.orderIndex, p.description, p.category, p.coverImage, p.publishedAt, p.author, p.readingTime) FROM Post p", countQuery = "SELECT count(p) FROM Post p")
   Page<DtoPostSummary> findAllWithSummaryPaged(Pageable pageable);
 }

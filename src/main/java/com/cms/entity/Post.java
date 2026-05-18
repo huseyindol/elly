@@ -1,5 +1,7 @@
 package com.cms.entity;
 
+import java.util.Date;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,6 +39,14 @@ public class Post extends BaseEntity {
   private String template;
   private Integer orderIndex;
   private Boolean status;
+
+  @Column(columnDefinition = "TEXT")
+  private String description;
+  private String category;
+  private String coverImage;
+  private Date publishedAt;
+  private String author;
+  private String readingTime;
 
   @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
   @JoinColumn(name = "seo_info_id", referencedColumnName = "id")

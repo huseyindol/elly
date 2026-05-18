@@ -31,6 +31,13 @@ public class PostService implements IPostService {
   }
 
   @Override
+  @Transactional
+  @CacheEvict(value = "posts", allEntries = true)
+  public List<Post> bulkSavePosts(List<Post> posts) {
+    return postRepository.saveAll(posts);
+  }
+
+  @Override
   @Cacheable(value = "posts", key = "#id")
   public Post getPostById(Long id) {
     return postRepository.findById(id)

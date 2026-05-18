@@ -47,6 +47,15 @@ public class PostController extends BaseController implements IPostController {
   }
 
   @Override
+  @PostMapping("/bulk")
+  @PreAuthorize("hasAuthority('posts:create')")
+  public RootEntityResponse<List<DtoPost>> bulkCreatePosts(@RequestBody List<DtoPostIU> posts) {
+    List<Post> entities = posts.stream().map(postMapper::toPost).toList();
+    List<Post> saved = postService.bulkSavePosts(entities);
+    return ok(postMapper.toDtoPostList(saved));
+  }
+
+  @Override
   @PutMapping("/{id}")
   @PreAuthorize("hasAuthority('posts:update')")
   public RootEntityResponse<DtoPost> updatePost(@PathVariable Long id, @RequestBody DtoPostIU dtoPostIU) {

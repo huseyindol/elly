@@ -1,5 +1,7 @@
 package com.cms.dto;
 
+import java.util.Date;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import lombok.AllArgsConstructor;
@@ -18,4 +20,10 @@ public class DtoPostSummary {
   private String slug;
   private Boolean status;
   private Integer orderIndex;
+  private String description;
+  private String category;
+  private String coverImage;
+  private Date publishedAt;
+  private String author;
+  private String readingTime;
 }

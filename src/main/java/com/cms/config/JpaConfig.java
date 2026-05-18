@@ -37,7 +37,7 @@ import lombok.extern.slf4j.Slf4j;
  * ApplicationReadyEvent'te her tenant datasource'unda ayni stratejiyi tetikler.
  */
 @Configuration
-@EnableJpaRepositories(basePackages = {"com.cms.repository", "com.cms.chat.repository"})
+@EnableJpaRepositories(basePackages = {"com.cms.repository"})
 @EnableJpaAuditing
 @EnableTransactionManagement
 @RequiredArgsConstructor
@@ -59,7 +59,7 @@ public class JpaConfig {
   public LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource dataSource) {
     LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
     em.setDataSource(dataSource);
-    em.setPackagesToScan("com.cms.entity", "com.cms.chat.entity");
+    em.setPackagesToScan("com.cms.entity");
 
     HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
     // generateDdl sadece ddl-auto != none/validate icin anlamli

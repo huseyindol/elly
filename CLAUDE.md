@@ -5,6 +5,40 @@
 - **Her zaman `main` branch'te calis.** Feature branch acma; degisiklikleri dogrudan `main`'e commit et ve push'la.
 - Bunu her oturumda hatirlatmana gerek yok — bu kural kalicidir.
 
+## Proje Yapisi Kurallari — KESIN KURAL
+
+Bu kurallar tartismasizdir. Degistirmeden once kullanici ile mutlaka konusulmalidir.
+
+### Paket yapisi (layer-based — degistirilemez)
+
+```
+com.cms.controller/       ← tum IController interface'leri
+com.cms.controller.impl/  ← tum Controller implementasyonlari (@RestController)
+com.cms.service/          ← tum IService interface'leri + yardimci @Service siniflari
+com.cms.service.impl/     ← tum Service implementasyonlari
+com.cms.repository/       ← tum Repository'ler (JpaRepository)
+com.cms.entity/           ← tum @Entity siniflari + enum'lar
+com.cms.dto/              ← tum DTO siniflari (Dto* prefix zorunlu)
+com.cms.mapper/           ← tum MapStruct @Mapper siniflari
+com.cms.config/           ← tum @Configuration, Filter, SecurityConfig siniflari
+com.cms.exception/        ← tum exception siniflari
+com.cms.util/             ← yardimci utility siniflari
+```
+
+**YASAK:** `com.cms.<modul>/` seklinde feature-package olusturma. Yeni bir ozellik (chat, blog, vb.) eklendiginde dosyalar yukardaki katmanlara dagitilir; ayri bir alt paket altinda toplanmaz.
+
+### Yapiya aykiri bir degisiklik gormeden once dur
+
+Eger mevcut kodun bu kurala uymadigi gorulurse (orn. feature-package mevcut) kullaniciya bildir ve duzeltme oneri sun — sessizce devam etme.
+
+### Kontrol listesi — her yeni sinif icin
+
+- [ ] Package adi `com.cms.<katman>` seklinde mi? (feature sub-package degil)
+- [ ] Controller interface mi yoksa impl mi? (`IXxx` → controller/, `Xxx` → controller/impl/)
+- [ ] DTO sinifi `Dto` prefix'i ile mi basliyor?
+- [ ] `@RequestMapping` impl class'ta mi? (interface'te degil — Spring 6 kuralı)
+- [ ] Mevcut benzer bir sinif var mi? Tekrar etme.
+
 ## Cursor ve diger agent araclari
 
 Coklu agent rolleri, is akislari ve dosya haritasi icin repo kokundeki **[`AGENTS.md`](./AGENTS.md)** dosyasina bak. Cursor odakli kisa workflow'lar **[`.agents/workflows/`](./.agents/workflows/)** altinda; uzun tanimlar bu repoda **`.claude/agents/`** icinde kalir (tek kaynak).

@@ -1,0 +1,139 @@
+---
+title: 'Elly Admin Panel Mimarisi: Next.js App Router'
+description: "Elly-admin-panel geliştirilirken Next.js'in SSR yeteneklerini ve App Router esnekliklerini kullandık..."
+publishedAt: '2026-04-17'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 5
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Elly-admin-panel geliştirilirken Next.js'in SSR yeteneklerini ve App Router esnekliklerini kullandık. Layout pattern'i ile yetkilendirme katmanları, Server Actions üzerinden data mutasyonları sağlandı.
+
+Elly CMS sisteminin yönetim paneli ihtiyaçları doğrultusunda, SEO'ya duyarlı olmanın ötesinde çok hızlı karar alabilen bir "Server-Driven" arayüz gerekiyordu. İçerik yönetimi, kullanıcı rolleri (RBAC), form oluşturma ve tenant bazlı yapılandırma gibi karmaşık operasyonları barındıran bu panel, doğrudan Next.js'in App Router mimarisi ile güçlü bir entegrasyon gerektirdi.
+
+Mimari kurguyu oluştururken `(site)` ve `(admin)` şeklinde route group'ları kullandık. Bu sayede admin paneli tamamen farklı bir layout (Sidebar + TopBar) kullanırken, site tarafı (Header + Footer) kendi layout'unda yaşıyor. Her iki taraf da aynı codebase'de ama birbirini etkilemeden geliştirilebiliyor.
+
+```
+src/app/
+├── (site)/          # Public site layout (Header + Footer)
+│   ├── page.tsx
+│   ├── blog/
+│   └── about/
+├── (admin)/         # Admin layout (Sidebar + TopBar)
+│   ├── layout.tsx   # Auth guard + RBAC middleware burada
+│   ├── dashboard/
+│   ├── contents/
+│   └── users/
+└── layout.tsx       # Root layout (Theme, Providers)
+```
+
+Yükleme sürelerini minimize etmek için istemci (Client) ve sunucu (Server) bileşenleri arasındaki sınırları (boundaries) net çizgilerle ayırdık. Sayfanın ana veri çekme işlemleri async Server Component'lerde yapılırken, yalnızca kullanıcı etkileşimi gerektiren parçalar (modal, form, dropdown) `'use client'` direktifiyle işaretlendi. Bu strateji sayesinde admin panelinin JavaScript bundle boyutu %40 azaldı.
+
+```tsx
+// app/(admin)/contents/page.tsx — Server Component
+export default async function ContentsPage() {
+  const contents = await getContentsService({ page: 0, size: 20 })
+  return (
+    <div>
+      <ContentFilters /> {/* Client — arama/filtreleme */}
+      <ContentTable data={contents.data} /> {/* Server — statik tablo */}
+    </div>
+  )
+}
+```
+
+Oturum yönetimi için `middleware.ts` katmanında JWT token kontrolü yapılıyor ve yetkisiz istekler `/login` sayfasına yönlendiriliyor. Rol bazlı erişim kontrolü (RBAC) ise layout seviyesinde uygulanıyor: her admin sayfası render edilmeden önce kullanıcının ilgili permission'a sahip olup olmadığı Redis cache üzerinden kontrol ediliyor.
+
+Verinin işlendiği yere en yakın noktada çekilmesi, paneller arası geçişlerde sıfıra yakın bir hissiyat yarattı. `revalidateTag` ve `revalidatePath` API'leri ile CMS'te yapılan içerik değişiklikleri anında public siteye yansıyor, cache invalidation süreci tamamen otomatik.
+
+## Loading ve Streaming UX
+
+`loading.tsx` ile rota bazlı skeleton sunmak, özellikle yavaş veri kaynaklarında algılanan performansı iyileştirmez ama beklemeyi yönetilebilir kılar. `Suspense` sınırlarını gereksiz parçalamak yerine anlamlı chunk’lar seçmek streaming verimini artırır.
+
+## Server Actions ve Doğrulama
+
+Sunucuya giden mutasyonlarda Zod ile doğrulama ve RBAC kontrolünü aksatmamak kritiktir — istemci doğrulaması “kullanıcı deneyimi” içindir, güvenlik sınırı sunucudadır.
+
+## Çok Kiracılı (Multi-Tenant) UI
+
+Tenant bağlamının layout veya header’da seçili kalması ve tüm isteklerde taşınması, yanlış veri gösterimini önler; cache anahtarlarına tenant kimliği eklenmelidir.
+
+## Erişilebilirlik ve Yoğun Formlar
+
+Admin panellerinde çok adımlı formlarda odak sırası, hata bildirimi ve klavyeyle tam tamamlama beklentisi yüksektir. Sunucudan gelen doğrulama hataları client’ta görünür hale gelmeden yayın yapılmamalıdır; özellikle çok kiracılı senaryoda yanlış tenant’a giden uyarı bile operasyonel risktir.
+
+## Gözlem ve Denetlenebilirlik
+
+Admin aksiyonlarının yapısal log ile izlenmesi (kim, ne zaman, hangi tenant’ta hangi içeriği değiştirdi) denetim ve destek süreçlerini kısaltır; bu loglar frontend’den değil sunucunun yetkisiyle yazılmalıdır.
+
+## Dev ve Prod Paritesi
+
+Ortamlar arası feature flag ile kapanan deney özellikleri, staging’te açılıp prod’da unutulan “surprise divergence” yaratabilir. Feature flag yaşam döngüsü ve temizlik maddesi olmadan sürdürülmez.
+
+## Performans Bütçesi
+
+Admin sayfaları içerik yöneticilerince yoğun kullanılabilir; gereksiz client hook’ları ve büyük chart kütüphaneleri sınır ötesi seçilmelidir. Veri görselleştirme sunucuya yakın yapılabiliyorsa önce orada düşünülür.
+
+## Yetki Körlüğü ve UI Yerleşimi
+
+RBAC görünmez kaldığında güvenilir paneller üretilemez; gizlenmiş ama doğrudan URL ile erişilebilir sayfalar “görsel güvenlik illüzyonu” yaratır. Menü yapısı, rota düzeyi guard ve aksiyon bazlı mikro kontroller üçlüsü için net bir matris tutulması gerekir. Bu matris zamanla yaşayan döküman olmalı; yeni özellik geldiğinde unutulan izin kutucuğu sıkça yaşanan regresyonların kaynağıdır.
+
+## Arama ve Filtreleme Deneyimi
+
+İçerik listelerinde arama parametreleri URL’ye yazılmışsa kullanıcı paylaşılabilir durum yakalar ve destek daha hızlı teşhis koyar. Sunucuya giden sorgunun da aynı parametrelerle sıralı doğrulanması gerekiyorsa parametre tuzakları (regex, max length, kaçınılması gereken karakterler) netleştirilir.
+
+## Hata Kurtarma ve Türkçe Mesaj Stratojisi
+
+Yöneticiler teknik jargonla değil operasyon dilinde mesaj bekler; fakat yanlış yönlendirici “her şey yolunda” metinleri de sakıncalıdır. Hata tipi, izlenebilir kısa kod ve destek ekibinin takip edebileceği korelasyon kimliği birlikte sunulduğunda MTTR düşer.
+
+## Geniş Ekran ve Yoğun Tablo Erişimi
+
+Admin tarafında yatay scroll kaçınılmaz olabilir ancak kritik aksiyon sütununun görünür kalması ve klavyeden satır seçilebilmesi ergonomiyi artırır. Tablodaki sık sık güncellenen alanların server’dan küçük parça halinde tazelenmesi, gereksiz tam sayfa refresh ihtiyacını düşürür.
+
+## Migrasyonlar ve Yayın Güvenliği
+
+Büyük içerik migrasyonları panel üzerinden tetiklenecekse süre uzun sürebilir; arka plan job’ları, ilerleme göstergesi ve yeniden deneme politikası kullanıcıyı bekletmezken tutarlı durum yakalar.
+
+## Güvenilirlik Beklentisi ve Bakım Saatleri
+
+Planlı bakım penceresi varsa bile arayüzde net banner ve beklenen geri dönüş saati yazılmazsa destek talepleri havaya uçar. Bu iletişim katmanı ürün operasyonunun parçasıdır ve geliştirici PR’larında unutulmamalıdır.
+
+## İçerik Taslak ve Yayın Workflow’u
+
+Taslak, inceleme, planlı yayın ve geri çekme (unpublish) adımları net durum makinesiyse yanlışlıkla canlı çıkan içerik azalır. Her durum geçişinde audit log yazılması özellikle çok kullanıcılı ekipte şart.
+
+## Medya Yükleme ve Antivirüs Katmanı
+
+Dosya yükleme yüzünde MIME doğrulama, boyut limiti ve tarama pipeline’ı unutulursa zararlı payload riski oluşur. Bu kontroller BFF üzerinden de tekrarlanmalıdır; istemci doğrulaması yeterli sayılmamalıdır.
+
+## Kısmi Yetki Rollerinin UI İfadesi
+
+Roller sadece metin olarak veritabanında durmamalıdır; aksiyon butonları görsel olarak ya devre dışı ya da gizli olmalı, fakat güvenlik yine sunucuda doğrulanmalıdır. Görsel saklama + sunucu guard birlikte çalışır.
+
+## Deney ve A/B Yerleştirme
+
+Admin özelinde özellik denemelerinde bayrak bileşeni render ağacını gereksiz yere karmaşıklaştırmadan konumlanmalıdır; aksi halde görsel regressions yakalanamaz.
+
+## Güvenilirlik Göstergeleri ve SLO
+
+Dashboard gecikmelerinin kullanıcıya görünür hale gelmesi, operasyon güven duygusunu artırır ve destek bileti hacmini düşürür.
+
+## Dokümantasyon ve Admin Self-Serve
+
+Kullanıcı dokümantasyonu doğrudan panele gömülmezse operasyon ekibi geliştiriciye bağımlı kalır; bağlama duyarlı yardım balonları ve sık sorulan senaryolar yaşam kalitesini yükseltir.
+
+## İki Faktör ve Oturum Sertliği
+
+Hassas admin işlemlerinde MFA zorunluluğu ve kısa oturum ömrü, çalınmış oturum riskini küçültür; kullanıcıya net yeniden doğrulama akışı sunulmadan sertlik dayatılırsa ise destek maliyeti büyür.
+
+App Router ile kurulan admin yüzü, doğru sınırlar ve gözlemle birlikte hem hızlı hem güvenilir kalır.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

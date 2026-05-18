@@ -1,0 +1,142 @@
+---
+title: 'NPM Paketlerinde Semantik Versiyonlama (SemVer)'
+description: 'Yüzlerce farklı uygulamaya giden NPM paketinin güncellemelerinde hata oluşmaması için Breaking Chang...'
+publishedAt: '2026-04-18'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1542831371-29b0f74f9713?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Yüzlerce farklı uygulamaya giden NPM paketinin güncellemelerinde hata oluşmaması için Breaking Change yönetimi, Git flow senkronizasyonu ve Semantic Versioning ilkelerini uyguladık.
+
+Paylaşımlı bir NPM paketi ekosistemi yönetiyorsanız, en büyük kabusunuz masum görünen bir güncellemenin downstream projelerini çökertmesidir. Biz bunu acı tecrübeyle öğrendik: UI Kit'in Button bileşeninde prop adını değiştirdiğimizde, 3 farklı projenin build'i aynı anda kırıldı. O günden sonra Semantic Versioning'i (SemVer) katı bir disiplinle uygulamaya başladık.
+
+SemVer'in kuralı basittir ama uygulaması disiplin gerektirir: `MAJOR.MINOR.PATCH` formatında, breaking change → MAJOR, yeni özellik → MINOR, hata düzeltme → PATCH. Bu kuralları `changesets` aracıyla otomatikleştirdik. Her PR'da developer bir changeset dosyası oluşturur ve değişikliğin seviyesini belirtir.
+
+```bash
+# Changeset oluşturma
+bunx changeset
+
+# Soru: Bu değişiklik hangi seviyede?
+# ○ patch — Hata düzeltme
+# ○ minor — Yeni özellik (geriye uyumlu)
+# ● major — Breaking change
+```
+
+Her release'de otomatik oluşturulan `CHANGELOG.md` dosyası, tüketici projelerin geliştiricilerine hangi versiyonda ne değiştiğini net olarak gösterir.
+
+```markdown
+## @huseyindol/ui-kit@2.0.0
+
+### Major Changes
+
+- **BREAKING**: Button bileşeninin 'type' prop'u 'variant' olarak yeniden adlandırıldı
+- Migration guide: type="primary" → variant="default"
+
+### Minor Changes
+
+- Yeni Badge bileşeni eklendi
+- Toast bileşenine 'duration' prop'u eklendi
+```
+
+Ayrıca lockfile stratejisi de kritiktir. Tüm projelerde `bun.lock` dosyası versiyon kontrolüne dahil ediliyor. Bu sayede "bende çalışıyor" mazeretleri sona eriyor, CI ortamında `--frozen-lockfile` flag'iyle tam deterministik build garantileniyor. PeerDependencies doğru tanımlanıyor ve React versiyon uyumsuzlukları derleme aşamasında yakalanıyor.
+
+## 0.x Sürümleri ve Ön Yayın Etiketleri
+
+`0.y.z` aralığında SemVer farklı yorumlanır: MINOR yükseliş bile breaking kabul edilebilir. Kütüphane `1.0.0` öncesindeyken tüketicilere hangi güncellemenin güvenli olduğunu açık yazmak gerekir. `beta`, `rc`, `next` gibi **dist-tag** ile NPM’de kararlı (`latest`) kanalı deneysel kanaldan ayırmak, yanlış paket çekimini engeller.
+
+## Aralık Semveri ve Sabitleme
+
+Caret (`^`) uygulama tarafında rahatlık sağlar; kütüphane tüketicisi beklenmedik MINOR ile yeni API davranışı görebilir. Kritik yüzeylerde pin + otomatik güncelleme botu ile kontrollü yükseltme tercih ediyoruz. `peerDependenciesMeta` ile opsiyonel peer’ları işaretlemek peer uyarı gürültüsünü azaltır.
+
+## Monorepo Senkronizasyonu
+
+Birden fazla dahili paket aynı depoda ise Changeset ile sürüm sıçramalarını koordine etmek; aksi halde A paketi `2.1` iken B’nin `2.0` kalması iç import kırılmalarına yol açabilir.
+
+## Deprecate ve Migration Rehberi
+
+Hatalı yayın sonrası `npm deprecate` ve CHANGELOG’da adım adım migration, ekiplerin geri dönüş süresini kısaltır.
+
+## Ekip İçi Sürüm Sözleşmesi
+
+SemVer yalnızca sayı değildir; “hangi değişiklik major sayılır?” sorusu ürün ve mühendislik dilinde netleşmelidir. Görsel olarak geriye dönük görünen ama DOM yapısını değiştiren bir düzeltme, ekiplerin pratikte kırdığı entegrasyonlar nedeniyle major olabilir. Bu yüzden release notlarında gerekçe ve etki alanı (runtime, types, styles) açık yazılır.
+
+## Tüketici Projelerde Yükseltme Planı
+
+Downstream uygulamalar `^` ile otomatik MINOR alır; bu sırada tip veya runtime davranışı değişmiş olabilir. Haftalık dependency otomasyonu (örn. Renovate) ile küçük PR’lar açılır, snapshot ve E2E ile güvence sağlanır. Kritik haftalarda pin + manuel gözden geçirme tercih edilebilir.
+
+## Önizleme Kanalları ve Canary
+
+İç ekiplere `next` veya `canary` dist-tag ile erken sürüm vermek, prod’a çıkmadan geri bildirim toplamayı sağlar. Tag isimlendirmesi ve README’deki kurulum talimatları karışırsa yanlış kanal çekimi artar; dokümantasyon sürüm notuyla birlikte güncellenir.
+
+## Tip Paketleri ve Çift Yayın
+
+`types` alanı veya ayrı `@types` paketi yönetimi sürüm uyumunu etkiler; types-only breaking değişikliklerde tüketici TS sürümü ve `moduleResolution` farkları gözlenir. CHANGELOG’da minimum TypeScript sürümü belirtmek destek yükünü düşürür.
+
+## Lisans ve Telif Notları
+
+Paket metadata’sında lisans alanı eksik veya yanlış olursa kurumsal tüketiciler paketi reddeder. Major geçişlerde lisans değişikliği ayrı bir hukuk incelemesi gerektirir ve sürüm notunda vurgulanmalıdır.
+
+## Sonuç
+
+SemVer + otomasyon + net iletişim birlikte çalıştığında paylaşımlı kütüphane ekosistemi sürdürülebilir kalır; tek başına kural seti yeterli değildir.
+
+## Yayın Günlükleri ve Müşteri Desteği
+
+CHANGELOG dışında, Slack veya dahili wiki’de “breaking spotlight” özeti çıkarmak destek ekibinin hazırlık yapmasına yardım eder. Sürüm notu jargonu ile destek dilinin uyumlu olması, yanlış yönlendirmeleri azaltır.
+
+## Geriye Uyumlu Küçük Yollar
+
+Kullanımı yaygın ama yanlış isimlendirilmiş prop’ları aniden silmek yerine geçiş döneminde deprecated uyarısı ve codemod veya eslint kuralı sunmak daha az acıdır. Bu geçiş penceresi policy ile sınırlanmalıdır; süresiz çift API taşımak da borç üretir.
+
+## Kaynak Kod ve Tag Hizalaması
+
+Git tag’i ile NPM sürümü eşleşmezse hata ayıklama zorlaşır. Release job’u tag oluşturup ardından publish edecek şekilde tek atomik akışta kurgulanmalıdır.
+
+## Çoklu Maintainer ve CODEOWNERS
+
+Paket sınırı dosyalarında CODEOWNERS tanımı, habersiz API değişikliğini azaltır. İki maintainer onayı kuralı küçük ekiplerde bile kriz anında faydalıdır.
+
+## Sözleşme Testleri ve Tüketici Örnekleri
+
+Kütüphanenin kendi birim testleri yetmez; downstream’de görülen kırılımları yakalamak için minimal “consumer project” örneği veya integration testleri depoda yaşatılır. Bu örnek, her release öncesi `bun install` ve smoke build ile doğrulanır; böylece tip ve runtime davranışı birlikte incelenmiş olur.
+
+## SemVer Sınır Tartışmaları
+
+Davranış değişikliği yanlışlıkla PATCH altında çıktıysa ve tüketiciler güvenilirlik kaybına uğradıysa iletişim şeffaf olmalı, gerekirse hızlı hotfix PATCH ve açıklayıcı postmortem paylaşılmalıdır. İtibar, mükemmellikten çok doğru toparlama ile korunur.
+
+## Bağımlılık Derinliği
+
+Transitive bağımlılıklar yüzünden güvenlik açığı zinciri oluşabilir; doğrudan bağımlılıkları düşük tutmak ve gerektiğinde `overrides` stratejisini dokümante etmek sorumluluğun görünür olmasına yardım eder.
+
+## Sürüm Öncesi İnsan Kontrolü
+
+Otomatik changeset haricinde yayın gözden geçirmesi kısa bir checklist ile yapılır: README örnekleri, peer aralığı, minimum Node sürümü ve changelog tonu uyumlu mu? Bu son bakış özellikle major’larda hata maliyetini düşürür.
+
+## Sürdürülebilir Ritim
+
+Aşırı sık PATCH ya da nadir MINOR da güven hissini zedeler; yayın sıklığı ekip kapasitesiyle uyumlu planlanır ve ani “hotfix sırası” oluşması azaltılır.
+
+SemVer’nin özü, tüketen ekiplerin planlanabilir yükseltme yapmasıdır; bu yüzden communication channel’ları ve örnek migration snippet’leri sürüm notunun ayrılmaz parçasıdır.
+
+Uzun süre yaşayan paketlerde “deprecated runway” yaklaşımı, ani kırılım yerine öngörülü güncelleme kültürü oluşturur.
+
+Pratik öneri: küçük ekiplerde bile changelog girişi PR şablonuna bir madde olarak eklenir; kimse eklemeyi unutamaz ve review sırasında sürüm seviyesi tekrar sorgulanır.
+
+Bu disiplini koruyan ekipler, major yükseltmelerinde panik yerine takvimlenmiş göç senaryosu konuşmaya başlar.
+
+Kısacası SemVer kültürünü yazılı hale getiren ekipler daha az sürpriz ve daha çok öngörülebilirlik yaşar.
+
+Release notu okunabilirliği, teknik detay ile iş etkisini aynı paragrafta dengelediğinde paydaşlar aynı sayfada buluşur.
+
+Bu dengeyi yakalayan ekip, sürümü hem mühendislik hem ürün diliyle aynı anda anlatmış olur.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

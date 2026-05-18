@@ -1,0 +1,259 @@
+---
+title: 'JJWT ile JWE: signWith ve encryptWith Birlikte Kullanılamaz'
+description: 'Spring Boot Elly projesinde JJWT ile JWS+JWE kombinasyonu denemesi, AES-256-GCM geçişi ve token rotasyonu ile güvenli oturum yönetimi nasıl kurulur?'
+publishedAt: '2026-04-16'
+category: 'Backend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?q=80&w=2000&auto=format&fit=crop'
+readingTime: '10'
+order: 2
+---
+
+Elly CMS projesinin auth katmanını yazarken aynı anda iki iş yapmak istedim: token'ı hem imzalamak (JWS) hem şifrelemek (JWE). Sonuç sıfır hata, ama çalışmayan token'lar. Bu makale o deneyimin — yani JJWT kütüphanesinde `signWith` ve `encryptWith` arasındaki ölümcül çelişkinin — ve doğru çözümün hikayesidir.
+
+## Sorun: İkisini Birden Yapmak İstedim
+
+JWT'nin üç katmanı vardır: header, payload, signature. JWS (JSON Web Signature) token'ı imzalar — başkası değiştiremez. JWE (JSON Web Encryption) token'ı şifreler — başkası okuyamaz. Teorik olarak ikisini birleştirmek mümkün: önce şifrele, sonra imzala. Ama JJWT bu kombinasyonu desteklemez.
+
+```java
+// ❌ Bu kod derlenir ama çalışmaz — JJWT'de signWith + encryptWith birlikte kullanılamaz
+String token = Jwts.builder()
+    .subject(userId)
+    .claim("tenantId", tenantId)
+    .expiration(expiry)
+    .signWith(getSigningKey())       // JWS imzası
+    .encryptWith(                    // JWE şifreleme
+        getEncryptionKey(),
+        Jwts.ENC.A256GCM
+    )
+    .compact();
+```
+
+`compact()` çağrıldığında JJWT hata vermez, ama üretilen token ne tam JWS ne de tam JWE formatındadır. Doğrulama yaparken `parseSignedClaims()` veya `parseEncryptedClaims()` ile parse etmeye çalıştığında her ikisi de başarısız olur.
+
+> **Temel sorun:** JJWT, JWS ve JWE'yi tek `builder()` chain'inde birleştirmeye izin vermez. JWS oluşturmak için `signWith()` + `parseSignedClaims()`, JWE için `encryptWith()` + `parseEncryptedClaims()` birbirinden bağımsız, alternatif yollardır.
+
+## JWS vs JWE: Ne Fark Eder?
+
+| Özellik       | JWS (İmzalı)          | JWE (Şifreli)                 |
+| ------------- | --------------------- | ----------------------------- |
+| Hedef         | Bütünlük garantisi    | Gizlilik                      |
+| İçerik        | Okunabilir (Base64)   | Şifreli, okunamaz             |
+| Doğrulama     | `parseSignedClaims()` | `parseEncryptedClaims()`      |
+| Payload       | Herkes görebilir      | Yalnızca alıcı okuyabilir     |
+| JJWT API      | `.signWith(key)`      | `.encryptWith(key, alg, enc)` |
+| Elly'de seçim | ❌ kaldırıldı         | ✅ tercih edildi              |
+
+Elly bir CMS backend'i. Token'ların içinde `tenantId`, `userId`, `tokenVersion` gibi hassas veriler var. Bu verilerin payload'da açık okunması — loglara düşmesi, proxy'lerin görmesi — kabul edilemez. Bu yüzden JWE doğru tercihtir.
+
+Peki imza olmadan bütünlük nasıl sağlanıyor? Cevap **AES-256-GCM**'in kendi doğasında.
+
+## AES-256-GCM: Hem Şifreliyor Hem Doğruluyor
+
+AES-256-GCM, **Authenticated Encryption with Associated Data (AEAD)** kategorisindedir. GCM (Galois/Counter Mode), şifreleme işlemi sırasında otomatik olarak bir **authentication tag** üretir. Token üzerinde tek bit değişikliği bu tag'i geçersiz kılar.
+
+```java
+// ✅ Doğru yaklaşım: Sadece encryptWith — hem gizlilik hem bütünlük
+String token = Jwts.builder()
+    .subject(userId.toString())
+    .claim("tenantId", tenantId)
+    .claim("loginSource", loginSource)
+    .claim("tokenVersion", tokenVersion)
+    .expiration(expiry)
+    .issuedAt(now)
+    .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
+    .compact();
+```
+
+```java
+// Token parse etme — şifre çözme + authentication tag doğrulama tek adımda
+private Claims extractAllClaims(String token) {
+    return Jwts.parser()
+        .decryptWith(getEncryptionKey())
+        .build()
+        .parseEncryptedClaims(token)
+        .getPayload();
+}
+```
+
+GCM tag doğrulaması başarısız olursa `JwtException` fırlatılır — token manipüle edilmiş ya da yanlış anahtarla oluşturulmuş demektir. Ayrı bir `signWith` adımına ihtiyaç yoktur.
+
+## 32-Byte Anahtar Normalizasyonu
+
+AES-256 için tam olarak 256 bit (32 byte) anahtar gerekir. Ortam değişkeninden gelen secret farklı uzunlukta olabilir. Elly'de key normalizasyonu şöyle çözüldü:
+
+```java
+private SecretKey getEncryptionKey() {
+    String secret = jwtSecret; // @Value("${jwt.secret}")
+    byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+
+    if (keyBytes.length < 32) {
+        // Kısa key: SHA-256 ile 32 byte'a genişlet
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        keyBytes = digest.digest(keyBytes);
+    } else if (keyBytes.length > 32) {
+        // Uzun key: İlk 32 byte'ı kullan
+        keyBytes = Arrays.copyOf(keyBytes, 32);
+    }
+
+    return Keys.hmacShaKeyFor(keyBytes);
+}
+```
+
+> **Gerçek hata:** Elly'de ilk versiyonda `jwt.secret` değeri 33 karakter yazılmıştı. AES-256 tam 32 byte ister, 33 değil. Bu yüzden `commit ccb337f` ile düzeltildi: "AES default key 33→32 karakter düzeltmesi". Ortam değişkenlerine güvenmek yerine normalizasyon kodu kritik öneme sahip.
+
+## Token Rotasyonu: Refresh Token Güvenliği
+
+İlk JWT implementasyonunun en büyük güvenlik açığı şuydu: kullanıcı logout yaptıktan sonra eski access token 1 saat daha geçerliydi. Refresh token çalınırsa sonsuz yeni token üretebiliyordu.
+
+Çözüm: **token version** sistemi.
+
+```java
+// User entity'de tokenVersion alanı
+@Entity
+public class User {
+    @Column(name = "token_version")
+    private Integer tokenVersion = 0; // Her refresh/logout'ta +1 artar
+}
+```
+
+```java
+// Token üretiminde version claim eklenir
+String token = Jwts.builder()
+    .subject(userId.toString())
+    .claim("tokenVersion", user.getTokenVersion()) // ← kritik claim
+    .claim("tenantId", tenantId)
+    .expiration(expiry)
+    .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
+    .compact();
+```
+
+```java
+// Token doğrulamada version kontrolü
+public boolean validateToken(String token, User user) {
+    Claims claims = extractAllClaims(token);
+    Integer tokenVersion = claims.get("tokenVersion", Integer.class);
+
+    if (!tokenVersion.equals(user.getTokenVersion())) {
+        throw new InvalidTokenVersionException("Token version mismatch — token revoked");
+    }
+
+    return !isTokenExpired(claims);
+}
+```
+
+Refresh token kullanıldığında `tokenVersion` artırılır. Eski access token'ların `tokenVersion` değeri artık User'dakiyle eşleşmez — geçersizdir.
+
+```java
+// Refresh token işleminde version güncelleme — native query ile atomik işlem
+@Modifying
+@Query(value = """
+    UPDATE users
+    SET token_version = token_version + 1
+    WHERE id = :userId
+    """, nativeQuery = true)
+void incrementTokenVersion(@Param("userId") Long userId);
+```
+
+Native query kullanılmasının nedeni: `@Modifying` + JPQL bazen cache'i temizlemez, native query daha güvenilirdir.
+
+## Refresh Token Tablosu: Upsert Pattern
+
+Her login/refresh işleminde yeni bir refresh token satırı oluşturmak tablonun büyümesine yol açar. Elly'de `ON CONFLICT DO UPDATE` (upsert) pattern'i kullanılır:
+
+```java
+@Modifying
+@Query(value = """
+    INSERT INTO refresh_tokens (user_id, token, expires_at, created_at)
+    VALUES (:userId, :token, :expiresAt, NOW())
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+        token = EXCLUDED.token,
+        expires_at = EXCLUDED.expires_at,
+        created_at = NOW()
+    """, nativeQuery = true)
+void upsertRefreshToken(
+    @Param("userId") Long userId,
+    @Param("token") String token,
+    @Param("expiresAt") LocalDateTime expiresAt
+);
+```
+
+Kullanıcı başına her zaman en fazla **bir** refresh token satırı bulunur. Conflict, `user_id` üzerindeki unique constraint'ten gelir.
+
+## loginSource Claim: Çok Cihaz Yönetimi
+
+Elly'de mobil, web ve admin panel aynı auth endpoint'ini kullanır. Hangi kaynaktan login yapıldığını `loginSource` claim'i takip eder:
+
+```java
+public enum LoginSource {
+    WEB, MOBILE, ADMIN
+}
+```
+
+```java
+// OAuth2 login success handler
+String token = jwtUtil.generateToken(
+    user.getId(),
+    tenantId,
+    LoginSource.WEB.name(),  // loginSource claim
+    user.getTokenVersion()
+);
+```
+
+Bu bilgi loglamada, analytics'te ve ileride source-specific token revocation için kullanılabilir.
+
+## OAuth2 Handler ile JWT Uyumu
+
+Elly'de OAuth2 (Google/GitHub) ile login sonrası JWT üretilir. İlk başta `OAuth2AuthenticationSuccessHandler`'daki `generateToken` çağrısının imzası yanlış parametrelerle yazılmıştı — `loginSource` parametresi sonradan eklendi ve handler güncellenmemişti.
+
+```java
+// ❌ Eski imza — loginSource yoktu
+public String generateToken(Long userId, String tenantId, Integer tokenVersion)
+
+// ✅ Yeni imza — loginSource zorunlu parametre
+public String generateToken(Long userId, String tenantId, String loginSource, Integer tokenVersion)
+```
+
+```java
+// OAuth2AuthenticationSuccessHandler güncelleme
+@Override
+public void onAuthenticationSuccess(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    Authentication authentication) {
+    CustomOAuth2User oAuth2User = (CustomOAuth2User) authentication.getPrincipal();
+    String token = jwtUtil.generateToken(
+        oAuth2User.getUserId(),
+        oAuth2User.getTenantId(),
+        LoginSource.WEB.name(), // ← eksik parametreyi ekle
+        oAuth2User.getTokenVersion()
+    );
+    // ...
+}
+```
+
+Bu tür parametre uyumsuzlukları compile-time'da yakalanır — ancak yalnızca tüm çağrı noktaları güncellenmişse. Elly'de `commit 0b2555d` bu yüzden açıkça "signature mismatch" diye etiketlenmiş.
+
+## Özet: Güvenli JWT Mimarisi
+
+Elly'deki nihai auth mimarisi şu prensiplere oturdu:
+
+```
+1. JWE (AES-256-GCM) → Hem şifreli hem bütünlük garantili
+2. signWith() kaldırıldı → Gereksiz ve JJWT'de JWE ile uyumsuz
+3. tokenVersion claim → Refresh/logout sonrası eski token'lar geçersiz
+4. Upsert refresh token → Kullanıcı başına tek satır
+5. loginSource claim → Çok cihaz takibi
+6. 32-byte key normalizasyonu → AES-256 ihlali önleme
+```
+
+Bu aşamaların her biri bir commit, bir hata, bir düzeltme ile geldi. JWT implementasyonu "ekle ve unut" değil, güvenlik gereksinimleri netleştikçe gelişen bir süreçtir.
+
+---
+
+## Önerilen Kaynaklar
+
+- [JJWT dokümantasyonu — JWE Builder](https://github.com/jwtk/jjwt#jwe)
+- [RFC 7516 — JSON Web Encryption (JWE)](https://datatracker.ietf.org/doc/html/rfc7516)
+- [NIST AES-GCM açıklaması](https://csrc.nist.gov/publications/detail/sp/800-38d/final)
+- [OWASP JWT Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)

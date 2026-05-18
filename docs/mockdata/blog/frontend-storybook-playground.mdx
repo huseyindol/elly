@@ -1,0 +1,140 @@
+---
+title: 'Storybook: UI Bileşenleri İçin İzole Oyun Alanı'
+description: 'Geliştirdiğimiz UI-Kit NPM paketinin içerisindeki bileşenleri takım arkadaşlarına ve tasarımcılarına...'
+publishedAt: '2026-04-19'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Geliştirdiğimiz UI-Kit NPM paketinin içerisindeki bileşenleri takım arkadaşlarına ve tasarımcılarına tanıtmak adına Storybook kullanarak elde ettiğimiz hız kazanımlarını değerlendiriyoruz.
+
+Geliştirdiğiniz bir Button bileşeninin loading, disabled, error, success, farklı boyut ve renk varyasyonlarını görmek için projeyi çalıştırıp ilgili sayfaya navigasyonla ulaşmak, o state'i manuel oluşturmak ve ekran görüntüsü almak — bu akış 10 dakikanızı alır ve tekrar edilemez. Storybook ile bu 10 dakika 5 saniyeye düşer.
+
+"Component-Driven Development" (CDD) kültürü ile her bileşeni projenin routing, state management ve API bağımlılıklarından tamamen kopararak izole bir sandbox'ta geliştiriyoruz. Storybook her bileşen için bir "hikaye" (story) dosyası tutar ve bu hikâyeler bileşenin tüm olası durumlarını sergiler:
+
+```tsx
+// Button.stories.tsx
+import type { Meta, StoryObj } from '@storybook/react'
+import { Button } from './Button'
+
+const meta: Meta<typeof Button> = {
+  title: 'UI/Button',
+  component: Button,
+  tags: ['autodocs'], // Otomatik doküman oluştur
+}
+
+export default meta
+type Story = StoryObj<typeof Button>
+
+export const Default: Story = { args: { children: 'Kaydet' } }
+export const Loading: Story = {
+  args: { children: 'Yükleniyor...', isLoading: true },
+}
+export const Disabled: Story = { args: { children: 'Pasif', disabled: true } }
+export const Destructive: Story = {
+  args: { children: 'Sil', variant: 'destructive' },
+}
+```
+
+Ekibin yazılımcı olmayan üyeleri — tasarımcılar, ürün sahipleri, QA mühendisleri — Storybook'un deploy edilmiş web arayüzüne girip bileşen kataloğunu sanki bir vitrin inceler gibi gezebiliyor. "Bu butonun hover rengini değiştirelim" gibi geri bildirimler, artık Slack mesajlarında değil doğrudan bileşenin yanında comment olarak bırakılıyor.
+
+Storybook aynı zamanda visual regression testing için de temel oluşturuyor: Chromatic entegrasyonuyla her PR'da bileşenlerin pixel-level karşılaştırması yapılıyor, istem dışı görsel değişiklikler anında yakalanıyor.
+
+## CSF3 ve Katalog Hiyerarşisi
+
+Component Story Format 3 ile `meta` içinde `title`, `component`, `tags` merkezi durur; story’ler sade kalır. `Design System / Forms / Input` gibi slash başlıkları sol panelde anlamlı gruplama sağlar.
+
+## Global Decorator ve Gerçek Bağlam
+
+`ThemeProvider`, i18n veya veri sağlayıcıları üretimde zorunluysa `.storybook/preview.tsx` içinde global decorator ile Storybook’a eklenmeli; aksi halde katalog ile canlı UI ayrışır.
+
+## Statik Yayın
+
+`storybook build` ile tek URL üzerinden bileşen dokümantasyonu paylaşılır; tasarım–mühendis iletişimi tek kaynağa bağlanır.
+
+## MSW ve Sahte API ile Kararlı Hikâyeler
+
+Sunucuya gerçek istek atan bileşeni Storybook’da bağlam içinde göstermek için Mock Service Worker handler’ları ortak fixtures ile yazıyoruz. Böylece Chromatic görüntüleri flaky olmadan güncellenir ve “story’de yeşil, prod’da kırmızı” uyumsunu erken yakalarız. Mock şemayı olabildiğince OpenAPI ile hizalı tutmak bağlam bütünlüğünü artırır.
+
+## Play Fonksiyonları ve Etkileşim Paneli
+
+Küçük kullanıcı senaryolarını story içinde doğrulamak PR öncesi hızlı güvence katmanı sağlar. Form gönderimi, klavye odak sırası gibi aksiyonlar interactions panelinden izlenirken A11y addon kontrast çıktılarını paralel görürsünüz.
+
+## Erişilen Katalog ve Erişim Politikası
+
+Statik çıktının URL’si tasarımcıların paylaşım diline girer; gerekirse major sürüme göre arşiv instance tutmak kurumsal tüketiciler için faydalıdır. Sürekli güncellenen tek “latest” bağlantısı iletişim maliyetini düşürür.
+
+## Sürdürülebilirlik: Ölü Hikâyeler
+
+Kaldırılan bileşen prop’unun story’de yaşaması “hala böyle kullanılıyor” yanılgısı yaratır. PR politikasına hafif bir “obsolete story cleanup” maddesi eklemek borcu küçültür.
+
+## Tasarımcı ile Ortak Ritüel
+
+Haftalık kısa “story doğrulama” oturumunda bileşen listesi gözden geçirilir; bu toplantının çıktısı backlog’a işlenir ve mühendis tasarımcı uyumsuzluğunu erken kapatır.
+
+## Karmaşık Düzenler ve Breakpoint Öyküleri
+
+Viewport addon ile mobil ve geniş masaüstü yan yana doğrulanır; responsive kusurların üretim ortamına taşınmasını engeller. Bu adım özellikle grid tabanlı dashboard parçalarında zorunlu hâle gelir.
+
+## Taslak ve Deneysel Hikâyeler
+
+Uzun sürecek deneyleri ayrı başlık altında işaretlemek (örnek WIP etiketi) katalog karmaşasını azaltır; kararlı API ile laboratuvar ayrımı yapılmazsa tüketiciler yanlış API’yi kopyalayabilir.
+
+## Sonuç: Hız Yerine Süreklilik
+
+Storybook yatırımının geri dönüşü tek seferlik hız değil sürekli uyumdur; bağlam ve mock disiplinine sadık kaldığınızda ölçeklenen tasarım–mühendis iş birliği elde edersiniz.
+
+## Kod İncelemesinde Storybook Checkpoint
+
+PR şablonuna “screenshot ya da Chromatic bağlantısı” kutucuğu eklemek görünür değişiklikleri hızlı filtreler. Bu küçük kural çıplak kod diff’inden kaçırılan margin kaymalarını azaltır.
+
+## Tasarım Sistem Dokümantasyonu ve MDX
+
+Bileşen kararları (ne zaman Outline, ne zaman Ghost kullanılır) MDX sayfalarında yaşarsa onboarding süresi kısalır. Story yalnızca durum göstergesi değil, karar günlüğü işlevi de görür.
+
+## Performans: Build Süresi ve Code Splitting
+
+Çok fazla üçüncü parti addon build süresini uzatır; ihtiyaç bazlı seçim yapılmalıdır. Büyük tema dosyaları lazy import edilirse ilk storybook açılışı ferahlar.
+
+## Ekip Büyüdükçe
+
+Paydaş sayısı arttığında bileşen isimleri ve token sözlüğü tutarlı kalmalı; aksi takdirde iki farklı prefix ile aynı Button hissi oluşur ve refactor kaçınılmaz olur. Merkezi sözlük story başlığı hiyerarşisinde de yansımaya devam etmelidir.
+
+## Test Verisi ve anonimleştirme
+
+Story’de kullanılan örnek kullanıcı kayıtları üretim ile benzer yapıda ancak kişisel veri içermemelidir; bu disiplin yanlışlıkla ekran görüntüsü sızıntısını önler ve paylaşılabilir asset üretimini kolaylaştırır.
+
+## Geçiş Süreci Sonrası Kontrol
+
+Çıplak React’tan Storybook’a taşınan modüllerde import path ve global stil bağımlılıkları sıklıkla kırılır; taşıma PR’ında “story green” gate’i ile bu risk kapanır. Kısa süreli workaround yerine kalıcı decorator çözümü tercih etmek sonraki özellikleri hızlandırır.
+
+## Kapanış
+
+Component driven thinking sadece araç değil alışkanlıktır; süreç olarak benimsendiğinde QA ve ürün görüşlerinin erken devreye girmesi kaçınılmaz hâle gelir ve üretilen arayüz kalitesi istikrarlı biçimde yükselir.
+
+## Uluslararasılaştırma Notu
+
+Storybook’ta iki dil için ayrı global decorator dalları oluşturmak RTL testlerini kolaylaştırır ve çeviri anahtarı eksiklerini yakalar. Erişilebilirlik etiketi ve odak sırasının dil değişiminde sapmamasına dikkat edilmelidir; aksi takdirde sadece sol üst köşeden kontrol ile geçilmiş gibi görünen ama aksiyonda kırılgan bileşenler çıkar.
+
+## Versiyon Uyumu
+
+Storybook ana sürüm yükseltmelerinde config dosyası kırılımları yaşanır; yükseltme PR’ında tüm kritik story’leri smoke çalıştırmak zorunlu tutulmalıdır. Aksi takdirde sessiz görsel regressions backlog’a birikir.
+
+## Paydaş Geri Bildirim Döngüsü
+
+Storybook URL’sine yorum araçları bağlayıp tasarım onayını asenkron yapmak bekleme sürelerini düşürür; kısa süreli blokajlar yerine net karar kayıtları tutulur ve ekip hafızası dağılmaz.
+
+Teknik borç olarak story dosyasında kalan geçici isimlendirme ve TODO yorumları yeni gelen geliştiriciler için hız kesicidir; her sprint sonunda küçük temizlik maddesi olarak ele alınırlarsa sürdürülebilir kalite çıtası yükselmeye devam eder.
+
+Playroom benzeri hızlı deneme sayfaları ile Storybook’un odaklı hikaye katmanını birbirine karıştırmamak gerekiyor; araç seçimi net ise mental model daha az yoruluyor ve bakım için tek kaynak daha az kayboluyor.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

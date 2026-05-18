@@ -1,0 +1,150 @@
+---
+title: 'Kurumsal UI Kit İnşası: NPMJS Üzerinde Paketleme'
+description: 'Firmamın frontend projelerindeki karmaşayı çözmek için geliştirdiğimiz UI-Kit çalışmasının hikayesi....'
+publishedAt: '2026-04-18'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Firmamın frontend projelerindeki karmaşayı çözmek için geliştirdiğimiz UI-Kit çalışmasının hikayesi. Button, Badge, Banner, Newsletter alanı gibi componentleri nasıl izole bir pakete dönüştürdük?
+
+Büyüyen yazılım ekiplerinin birbirinden kopuk projeler geliştirdiğinde yaşadığı en büyük kriz tutarsızlıktır: bir projede buton yeşil, diğerinde mavi; birinde border-radius 4px, diğerinde 8px. Kullanıcılar farklı ürünler arasında gezinirken marka algısı zedelenir. Elly ekosisteminde 3 farklı frontend projesi (public site, admin panel, mobile web) aynı marka kimliğini taşıması gerekiyordu.
+
+Bu sorunu çözmek için firmanın tasarım sistemini (Design System) kapsayan bir NPM paketi oluşturduk. Button, Badge, Banner, Input, Modal, Toast gibi 25+ temel bileşeni, Tailwind CSS theme token'ları ve utility fonksiyonlarla birlikte tek bir pakete sardık. Paket, tree-shakeable yapıda olduğu için tüketici projeler yalnızca kullandıkları bileşenleri bundle'a dahil ediyor.
+
+```tsx
+// UI Kit paket yapısı
+packages/ui-kit/
+├── src/
+│   ├── components/
+│   │   ├── Button/
+│   │   │   ├── Button.tsx
+│   │   │   ├── Button.stories.tsx
+│   │   │   ├── Button.test.tsx
+│   │   │   └── index.ts
+│   │   ├── Badge/
+│   │   ├── Input/
+│   │   └── Modal/
+│   ├── tokens/
+│   │   ├── colors.ts    // Marka renk paleti
+│   │   ├── spacing.ts
+│   │   └── typography.ts
+│   └── index.ts         // Public API — barrel export
+├── package.json
+└── tsup.config.ts       // Build konfigürasyonu
+```
+
+Paketin build sürecinde `tsup` kullanarak hem ESM hem CJS formatında çıktı üretiyoruz. TypeScript tip tanımları otomatik oluşturuluyor, böylece tüketici projelerde IntelliSense desteği tam çalışıyor.
+
+```bash
+# Kurulum
+bun add @huseyindol/ui-kit
+
+# Kullanım
+import { Button, Badge, Input } from '@huseyindol/ui-kit';
+```
+
+Bu yaklaşımın en büyük getirisi, ürün yönetimi yeni bir platform sipariş ettiğinde geliştirici ekibinin sıfırdan tasarım yazmakla uğraşmamasıdır. Markanın hazır bloklarını bir araya getirerek %40 efor tasarrufuyla yayına çıkılabiliyor. Ayrıca tasarım değişikliği yapıldığında (örneğin marka rengi güncellemesi) tek pakette yapılan değişiklik, tüm projelere otomatik yansıyor.
+
+## `package.json` Export Haritası
+
+`exports` alanı ile `./button`, `./tokens` gibi alt yolları açıkça tanımlamak, derleyicinin yanlış dosyayı çözmesini engeller. `sideEffects: false` (veya gerçek yan etkili dosyaları listeleyerek) tree-shaking’i güçlendirir.
+
+## Peer ve Tüketici Kurulumu
+
+React tabanlı kit için `peerDependencies` ile tek React kopyası zorunlu kılınır; tüketici projede Tailwind preset veya PostCSS eklentisi gerekiyorsa README’de “kurulum kontrol listesi” sunmak destek yükünü azaltır.
+
+## Sürüm ve Geriye Uyumluluk
+
+Kurumsal kit’te küçük görsel değişiklikler bile ürün hissi etkiler; SemVer ve CHANGELOG disiplini, tüketici ekiplerin güvenle yükseltmesini sağlar.
+
+## Tasarım–Kod Eşlemesi
+
+Token dosyaları ile Figma değişkenleri birebir eşlenmezse “tek kaynak” illüzyonu çöker. Renk isimleri, spacing ölçeği ve tipografi ölçekleri ürün dilinde ortak bir sözlükte tutulur; PR incelemesinde tasarım gözü de bu sözlüğe bakar.
+
+## Dokümantasyon ve Örnekler
+
+README’de minimal kurulum akışı, peer bağımlılık tablosu ve sık karşılaşılan hatalar (ör. PostCSS eksikliği) kısa maddelerle yazılır. Storybook veya dokümantasyon sitesi, bileşen API’sinin canlı örneğidir; kod örnekleri gerçek prop isimleriyle güncel tutulur.
+
+## Test ve Görsel Regresyon
+
+Paket içi birim testleri props sözleşmesini korur; görsel regresyon ise spacing ve tema değişimlerinde drift’i erken gösterir. CI’da paket build + test + story smoke üçlüsü minimum kalite şerididir.
+
+## Çoklu Tüketici Senaryosu
+
+Bir uygulama Next 15, diğeri legacy webpack kullanıyorsa export haritası ve `sideEffects` ayarı her iki bundler’da doğrulanmalıdır. Aksi halde tree-shaking farklılıkları “bir projede çalışıp diğerinde şişme” üretir.
+
+## Güvenlik ve Tedarik Zinciri
+
+Scoped registry, imzalı commit ve bağımlılık taraması (Dependabot vb.) paket üreticisi için de geçerlidir; çünkü kit’in kırılması onlarca uygulamayı aynı anda etkiler.
+
+## Yol Haritası ve Geri Bildirim
+
+Tüketici ekiplerden gelen istekler public discussion veya iç portalda toplanır; roadmap netleşmezse shadow fork’lar doğar ve merkezi kit anlamını yitirir.
+
+## Performans Bütçesi ve Bundle Analizi
+
+Kit tüketicilerinin bundle boyutu hassasiyeti yüksektir. Her major’da `size-limit` veya benzeri eşikler ve rapor artefaktları PR’da paylaşılır. Küçük bir yardımcı fonksiyon bile yanlış export ile tüm paketi şişirebilir; export haritası ve `sideEffects` bu yüzden periyodik denetlenir.
+
+## Erişilebilirlik ve Uluslararasılaştırma
+
+Bileşenlerin iç metinleri i18n hook’larına uygun tasarılmış olmalı; sabit Türkçe/İngilizce string’ler kit içinde kalırsa çok dillilik tek tek uygulamada patch’lenir ve drift başlar.
+
+## Sürdürülebilir Süre Ownership
+
+Paket için net bir ekipleşmiş owner listesi rotation ile güncellenir; tek kişiye bağımlı kit bus factor riskidir.
+
+## Story Driven Geliştirme
+
+Storybook içindeki kullanım örnekleri canlı dokümantasyondur; prop tablosunun otomatik üretildiği bileşenlerde story eksikliği kullanıcı hatasını davet eder. Her sprint’te küçük “story completeness” checklist’i uygulanabilir bir ritüeldir.
+
+## Erişilebilirlik Yakalama Alanı
+
+Liste, tablo ve focus yönetimi gibi yüzeylerde kit’in kendi içinde axe veya benzeri taramalar kalite şeridine eklenir; erişilebilirlik dışarıda düşünülürse marka bileşeni “güzel görünür ama kullanılmaz” hâline gelebilir.
+
+## Marka Güncelleme Süreci
+
+Marka yenilemesinde token dosyaları ve örnek ekranlar birlikte güncellenir; sadece renk kodu değiştirip spacing’i unutmak yüzlerce ekranda ince uyumsuzluk bırakır.
+
+## Kullanım Analitiği ve Deprecation Önceliği
+
+Hangi bileşenin gerçekten kullanıldığını codebase taraması veya telemetry ile bilmek, temizlik ve major planını veriye bağlar; tahmine dayalı kaldırma kararları boşa kürek çektirir.
+
+## Sonuç
+
+Kurumsal UI kit yaşayan bir üründür; dokümantasyon, test ve topluluk geri bildirimi bir arada olduğunda NPM üzerinden dağıtım anlamlı hız ve tutarlılık getirir.
+
+Kısa süreli spike’lar yerine sürekli küçük iyileştirmeler backlog’a yazılabilir bileşen borcunu daha yönetilebilir yapar ve katalog genişlemesini kontrollü tutar.
+
+Geriye dönük uyumluluğu güç bileşenlerde feature flag yaklaşımı veya paralel legacy export, büyük tüketicilerin sırayla göç etmesine izin verir.
+
+Tüketici eğitimi için kısa “office hours” veya yazılı Slack kanalı, blokajları küçültür ve yanlış import örneklerinin yayılmasını geri sarar.
+
+Kütüphanenin hikâyesini anlatan kısa mimari görsel bile paydaş uyumunu kolaylaştırır çünkü soyut NPM paketi somut bileşenlere bağlanmış olur.
+
+Nihai hedef mükemmel katalog değil, güvenle evrilen ve ölçülebilir kalite çıtası taşıyan katalogdur.
+
+Bunu başaran ekip, bileşeni ürün hızına hizmet eden araç olarak konumlandırır, tersine paket süreci ürünü yavaşlayan sürtünme olmaktan çıkar.
+
+Kit stratejisi ürün road map’i ile senkron tutulmadığı sürece kısa vadeli çıkarlar uzun vadede tutarsızlığa mal olur.
+
+Bu yüzden tasarım ve ürün liderleriyle çeyreklik hizalama oturumu, teknik borcu görünür kılar.
+
+Son söz: kit, paylaşılan güven sözleşmesidir; güven sarsılırsa tekrar inşa etmek yüzlerce saat alır.
+
+Küçük doğruluklar birikince büyük güven doğar; tutarsızlıklar da aynı şekilde birikir.
+
+Bu yüzden kit backlog’unda hem “yeni bileşen” hem “drift düzeltme” kalemleri birlikte görünür olmalıdır.
+
+Sürdürülebilir kit yalnızca koddan ibaret değildir; görünür roadmap, net ownership ve yaşayan dökümantasyon üçlüsüyle ayakta kalır.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

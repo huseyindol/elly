@@ -1,0 +1,203 @@
+---
+title: 'React Native FlatList Performans İpuçları'
+description: 'Binlerce verinin mobil ekranda kasma donma yaşamadan listelenebilmesi için memoization, keyextractor...'
+publishedAt: '2026-04-21'
+category: 'Mobile'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **Mobile** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Binlerce verinin mobil ekranda kasma donma yaşamadan listelenebilmesi için memoization, keyextractor ve getItemLayout optimizasyon adımları.
+
+React Native'in tartışmasız en büyük kronik rahatsızlıklarından biri çok miktarda kaydırılabilir veriyi (Infinite Fetch/List) ekrana dizerken yaşanan tıkanmalar ve RAM tüketimidir. Bunun için doğru render optimizasyonuna yönelmek zorundayız.
+
+## FlatList Konfigürasyon Stratejisi
+
+Kullanıcıların yüzlerce öğeyi "pürüzsüz" ve 0 frame-drop ile kaydırabilmesi için FlatList komponentini spesifik render kotalarıyla entegre ediyoruz. Her prop'un performans üzerindeki etkisini ölçerek optimum değerleri belirledik.
+
+```tsx
+<FlatList
+  data={feed}
+  keyExtractor={item => item.id}
+  renderItem={renderItem}
+  // Ekran dışında render edilecek görünmez alan sayısı
+  windowSize={11}
+  initialNumToRender={10}
+  maxToRenderPerBatch={5}
+  // Sabit yükseklikli item'larda scroll hesaplamasını optimize eder
+  getItemLayout={(data, index) => ({
+    length: ITEM_HEIGHT,
+    offset: ITEM_HEIGHT * index,
+    index,
+  })}
+  // Scroll durduğunda render tetiklenmesini geciktir
+  updateCellsBatchingPeriod={50}
+  removeClippedSubviews={true}
+/>
+```
+
+`windowSize` değeri ne kadar düşükse RAM'den o kadar tasarruf edilir ancak hızlı kaydırmada beyaz ekran (blank flash) riski artar. Projemizde 11 değeri ile optimal dengeyi bulduk.
+
+## Memoization: Gereksiz Re-render'ların Önlenmesi
+
+List Item'leri `React.memo` ile sarmak işin en kritik virajıdır. Ancak memo tek başına yetmez; callback referanslarının da stabilize edilmesi gerekir.
+
+```tsx
+const OrderItem = memo(({ item, onPress }: OrderItemProps) => {
+  return (
+    <Pressable onPress={() => onPress(item.id)}>
+      <Text>{item.title}</Text>
+      <Text>{item.price}</Text>
+    </Pressable>
+  )
+})
+
+// Parent component'te callback stabilizasyonu
+const handlePress = useCallback(
+  (id: string) => {
+    navigation.navigate('OrderDetail', { orderId: id })
+  },
+  [navigation],
+)
+
+const renderItem = useCallback(
+  ({ item }: { item: Order }) => (
+    <OrderItem item={item} onPress={handlePress} />
+  ),
+  [handlePress],
+)
+```
+
+## Görsel Optimizasyonu: Image Caching ve Placeholder
+
+Liste içindeki görseller en büyük performans katilidir. `react-native-fast-image` ile HTTP cache ve memory cache katmanları oluşturuyoruz.
+
+```tsx
+import FastImage from 'react-native-fast-image'
+;<FastImage
+  source={{
+    uri: item.imageUrl,
+    priority: FastImage.priority.normal,
+    cache: FastImage.cacheControl.immutable,
+  }}
+  style={{ width: 80, height: 80, borderRadius: 8 }}
+  resizeMode={FastImage.resizeMode.cover}
+/>
+```
+
+Ayrıca backend tarafında thumbnail versiyonları (80x80, 160x160) üretilerek listeye küçük boyutlu görseller yükleniyor, detay ekranına geçildiğinde full-size görsel lazy load ediliyor.
+
+## Infinite Scroll ve Pagination
+
+Binlerce kayıt içeren listelerde tüm veriyi tek seferde çekmek yerine cursor-based pagination kullanıyoruz. TanStack Query'nin `useInfiniteQuery` hook'u ile entegrasyon sağlanıyor.
+
+```tsx
+const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  useInfiniteQuery({
+    queryKey: ['orders'],
+    queryFn: ({ pageParam = 0 }) =>
+      fetchOrders({ cursor: pageParam, limit: 20 }),
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+  })
+
+<FlatList
+  data={data?.pages.flatMap(page => page.items) ?? []}
+  onEndReached={() => hasNextPage && fetchNextPage()}
+  onEndReachedThreshold={0.5}
+  ListFooterComponent={isFetchingNextPage ? <ActivityIndicator /> : null}
+/>
+```
+
+## Performans Ölçümü: Flipper ve Profiling
+
+Optimizasyonların gerçekten işe yarayıp yaramadığını ölçmek için Flipper'ın Performance plugin'ini ve React DevTools Profiler'ı kullanıyoruz. JS frame rate ve UI frame rate metriklerini ayrı ayrı izleyerek darboğazın hangi thread'de olduğunu tespit ediyoruz.
+
+Yüksek resource'lu görsel medyalarla bile uygulamanın FPS çökmesini bertaraf edebiliyor, kullanıcının sanki native Kotlin/Swift dilinde yazılmış bir uygulamada geziyormuş hissiyatını güçlendiriyoruz.
+
+## FlashList ve Yeni Mimari Seçimi
+
+Çok daha agresif recycling ile `FlashList`, belirli senaryolarda FlatList’ten daha iyi düşük uçlu cihaz FPS’i verir; migration maliyeti vardır fakat liste ağırlıklı ürünlerde POC değer.
+
+## InteractionManager ve Navigasyon
+
+Ağır listeyi açmadan önce `InteractionManager.runAfterInteractions` ile geçiş animasyonunun bitmesini beklemek, giriş anındaki frame düşüşünü yumuşatır.
+
+## SectionList ve Karmaşık Düzen
+
+Başlık + grid karışımı gerekiyorsa `SectionList` veya iki sütunlu `numColumns` yerine doğru araç seçimi ölçülmelidir; yanlış yapı `_keyExtractor` ve recycle sorunları doğurur.
+
+## Bellek Üst Sınırı
+
+`maxToRenderPerBatch` ile oynamak tek başına yetmez — görsel önbellek ve liste uzunluğu birlikte izlenmeli; düşük bellek uyarılarında küçültülmüş küçük resim politikası hayat kurtarır.
+
+## Hermes ve JS Thread Gözlemi
+
+Hermes motoru ve yeni mimari kombinasyonu cihaz sınıfına göre farklı kare hızı verir; tek cihazda ölçülen sonuç her zaman genellenemez. Düşük RAM’li Android cihaz seti smoke testlerinde tutulmalıdır.
+
+## Animasyon ve Liste Birlikte
+
+Liste scroll sırasında ağır `Animated` interpolasyonları JS thread’e baskı yapabilir; native driver kullanımı ve basitleştirilmiş easing seçimi tercih edilir.
+
+## State Normalizasyonu
+
+Geniş feed’lerde nested state güncellemeleri render maliyetini artırır; düz kayıt haritası ve seçici güncelleme listeyi hafifletir.
+
+## Ağ Katmanı ve Önbellek Politikası
+
+Sunucudan gelen payload şişkinse istemci optimizasyonu yetmez; alan seçimi ve sıkıştırma backend ile birlikte ele alınır.
+
+## Kullanıcı Geri Bildirimi ve Telemetri
+
+Frame drop veya takılma olaylarının anonim telemetri ile toplanması hangi ekranın öncelikli iyileştirme adayı olduğunu gösterir; yalnızca geliştirici hissiyle önceliklendirme yapılmamalıdır.
+
+## Native Modül Sınırı
+
+Köprü üzerinden geçen ağır çağrılar JS thread’i bloke edebilir; mümkün olduğunda işi native tarafta tamamlamak veya async sonuç dinlemek gerekir.
+
+## Bellek Profili ve Görsel Önbellek Temizliği
+
+Çok sekmeli navigasyonda ekranlar unmount olmazsa görsel önbellek birikir; focus/blur veya navigation event’lerinde bilinçli temizlik planı yapılmalıdır.
+
+## Zayıf Ağ Senaryosu
+
+Yavaş ağda skeleton ve retry UX’i öne çıkar; aşırı agresif yeniden deneme sunucuyu da zorlar. Backoff ve kullanıcıya görünür durum metni birlikte düşünülür.
+
+## Test Cihazı Çeşitliliği
+
+Flagship telefonda pürüzsüz akış, giriş segmentinde takılma anlamına gelebilir; minimum desteklenen cihaz listesi ürün kararıyla netleşir.
+
+## Profiling Sonrası Aksiyon Disiplini
+
+Profiler ekranı açılıp kapandıktan sonra bulguya göre küçük deneyler sırayla uygulanmaz ise ölçüm boşa gider ve ekip hayal kırıklığı yaşar.
+
+## Liste Dışı Bildirim ve Arka Plan Güncellemeleri
+
+FlatList içinde canlı veri akışı olacaksa gereksiz sık state güncellemesi kare düşüşü yaratır; batching ve küçük throttle ile denge aranır.
+
+## Ekran Parlaklığı ve Pil
+
+Sürekli animasyon ve yoğun liste birleştiğinde düşük güç modunda cihaz kısma yapabilir; kullanıcı algısı için sade mod veya azaltılmış medya politikası düşünülür.
+
+## Klavye ve Erişilebilirlik ile Liste Birlikte
+
+Liste odak yönetimi karmaşıksa VoiceOver veya TalkBack ile kaydırma deneyimi kırılganlaşır; karmaşık hücre içleri yerine tek odaklı satır yapısı ve anlamlı erişilebilirlik etiketleri daha az JS maliyetiyle daha iyi sonuç verir.
+
+## Release Öncesi Kontrol Listesi
+
+Store build’inde Hermes + Proguard/R8 etkileşimi veya yanlış Metro ayarı prod’da liste performansını beklenmedik şekilde değiştirir; release adayında profil build üzerinde kısa liste smoke testi beklenmedik regresyonları erken yakalamaya yardım eder.
+
+Sonuç olarak mobil listede kazanılan kare hızı, tek optimizasyon yerine ölçüm ritüeli ve cihaz çeşitliliği ile kalıcı hale gelir.
+
+Performans iyileştirmelerinin etkisini sürdürmek için her major sürümde kısa regresyon turu yapmak maliyeti düşük tutar ve “bir kez iyileştirdik bitti” yanılgısını kırar.
+
+Liste ekranı her ürünün vitrinidir; kullanıcı akışına en yakın yerde titreşimi azaltmak tüm uygulama algısını yükseltir ve geri bildirimi olumlu yönde etkiler.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

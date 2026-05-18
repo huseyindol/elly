@@ -1,0 +1,187 @@
+---
+title: 'Kendi MCP Sunucunuzu Java/Node İle Yazmak'
+description: 'McpProjectScaffold içinde, Custom tool tanımlamaları ve prompt veritabanı enjekte etme işlemlerinin ...'
+publishedAt: '2026-04-22'
+category: 'AI'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=2000&auto=format&fit=crop'
+readingTime: '14'
+order: 4
+---
+
+Bu makale **AI** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> McpProjectScaffold içinde, Custom tool tanımlamaları ve prompt veritabanı enjekte etme işlemlerinin entegrasyon süreçleri. Büyük dil modelleri sizin API'lerinize nasıl erişebilir?
+
+Şirketinizdeki çok değerli backend metrikleri ya da CI/CD süreçlerinizi yöneten araçlarınız yapay zekanın doğrudan müdahalesine tamamen uzağa konuşlandırılmış durumda. Bunu kırmanın anahtarı kendi özel MCP sunucunuzu (Server) inşa etmektir.
+
+## MCP Server Anatomisi
+
+Bir MCP sunucusu temelinde JSON-RPC 2.0 protokolü üzerinden iletişim kuran bir servistir. İki transport yöntemi desteklenir: **stdio** (yerel geliştirme için) ve **SSE/Streamable HTTP** (uzak sunucular için). Sunucu, model'e hangi araçların mevcut olduğunu bildirir ve model bu araçları çağırdığında sonuçları döner.
+
+```
+MCP Server Yaşam Döngüsü:
+1. initialize    → Sunucu yeteneklerini bildir
+2. tools/list    → Mevcut araçları listele
+3. tools/call    → Model bir aracı çağırır
+4. resources/read → Model bir kaynağı okur
+5. shutdown      → Bağlantıyı kapat
+```
+
+## TypeScript ile MCP Server Geliştirme
+
+Node.js tarafında `@modelcontextprotocol/sdk` paketi ile hızlıca bir MCP sunucusu ayağa kaldırabilirsiniz. Aşağıda gerçek projemizden basitleştirilmiş bir örnek:
+
+```ts
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { z } from 'zod'
+
+const server = new McpServer({
+  name: 'elly-backend-tools',
+  version: '1.0.0',
+})
+
+// Tool tanımlama: Fatura detayı sorgulama
+server.tool(
+  'get_invoice',
+  'Belirtilen fatura ID ile fatura detaylarını getirir',
+  { invoiceId: z.string().describe('Fatura ID') },
+  async ({ invoiceId }) => {
+    const response = await fetch(
+      process.env.API_BASE_URL + '/api/v1/invoices/' + invoiceId,
+      { headers: { Authorization: 'Bearer ' + process.env.API_TOKEN } },
+    )
+    const invoice = await response.json()
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(invoice, null, 2),
+        },
+      ],
+    }
+  },
+)
+
+// Tool: Son hataları listele
+server.tool(
+  'list_recent_errors',
+  'Son N dakikadaki uygulama hatalarını listeler',
+  {
+    minutes: z.number().default(60).describe('Kaç dakikalık hata logu'),
+    severity: z.enum(['ERROR', 'WARN', 'CRITICAL']).default('ERROR'),
+  },
+  async ({ minutes, severity }) => {
+    const errors = await queryErrorLogs(minutes, severity)
+    return {
+      content: [
+        {
+          type: 'text',
+          text: formatErrorReport(errors),
+        },
+      ],
+    }
+  },
+)
+
+// Resource: Sistem metrikleri
+server.resource(
+  'system://metrics',
+  'Anlık sistem performans metrikleri',
+  async () => ({
+    contents: [
+      {
+        uri: 'system://metrics',
+        mimeType: 'application/json',
+        text: JSON.stringify(await getSystemMetrics()),
+      },
+    ],
+  }),
+)
+
+const transport = new StdioServerTransport()
+await server.connect(transport)
+```
+
+## Java Spring Boot ile MCP Server
+
+Backend ekibimizin Java tarafında Spring Boot ile MCP sunucusu geliştirmesi de mümkün. Spring AI projesinin MCP desteği sayesinde mevcut REST controller'larınızı MCP tool'larına dönüştürmek son derece kolay.
+
+```java
+@McpTool(description = "Müşteri siparişlerini sorgular")
+public class OrderSearchTool {
+
+    @Tool("search_orders")
+    public List<OrderDTO> searchOrders(
+        @Param("customerId") String customerId,
+        @Param("status") OrderStatus status
+    ) {
+        return orderService.findByCustomerAndStatus(customerId, status);
+    }
+}
+```
+
+## Gerçek Dünya Kullanım Senaryoları
+
+Projelerde yarattığımız bu interaktif AI proxy'si sayesinde:
+
+- **Müşteri Hizmetleri:** Agent, müşteri ID'siyle sipariş geçmişini sorgulayıp doğal dilde özetleyebiliyor
+- **DevOps Analizi:** CI/CD pipeline hatalarını otomatik analiz edip çözüm önerileri sunuyor
+- **Log İnceleme:** Binlerce satırlık log dosyasından anlamlı pattern'leri çıkarıyor
+- **Veritabanı Sorguları:** Doğal dildeki soruları SQL'e çevirip güvenli bir şekilde çalıştırıyor
+
+## Hata Yönetimi, Zaman Aşımı ve Idempotent Tasarım
+
+Tool gövdesinde her dış çağrı için makul **`AbortSignal`** / timeout süresi tanımlanmalı; aksi halde model uzun süre askıda kalır ve bağlam penceresi şişer. HTTP 429 veya geçici 5xx durumlarında backoff + kullanıcıya anlamlı metin dönmek (`retry_after` başlığı varsa kullanmak) modelin tekrar vahşi denemeler yapmasını engeller.
+
+Yazıcı araçlarında (**mutation**) aynı isteğin iki kez gitmesi senaryosu için istemci tarafından gelen bir **idempotency key** veya sunucunun doğal olarak tekil olan iş kimliği zorunludur; "siparişi iki kez iptal et" gibi yarış koşulları böyle minimize edilir.
+
+## Büyük Yanıtlar ve Sayfalama
+
+Binlerce satırlık JSON tek seferde modele gönderilirse bağlam maliyeti patlar ve gecikme artar. `list_*` araçlarında `cursor`, `pageSize`, `filters` parametreleri ve sunucunun **toplam özet** döndürüp detayı ikinci çağrıya bırakması daha sürdürülebilirdir.
+
+## Versiyonlama ve Geriye Uyumluluk
+
+Sunucu `capabilities` veya araç şema sürümü ile kendini duyurabilir; istemci yeni parametreleri kullanmadan önce uyumluluğu doğrular. Kırıcı değişiklik yapılacaksa `search_orders_v2` gibi ayrı araç adı açmak, eskisini deprecation süresi ile kapatmak daha güvenli bir yol haritası sunar.
+
+## Transport Seçimi: stdio Yerine HTTP Ne Zaman?
+
+Yerelde IDE ve Claude Desktop ile **stdio** en düşük sürtünmedir. Kurumsal paylaşım, merkezi loglama ve yatay ölçek için SSE/HTTP transport devreye alınır; bu durumda kimlik doğrulama katmanı, istek gövdesi boyutu limitleri ve streaming chunk hata kodları tasarımın parçası olmalıdır.
+
+## Observability
+
+Her `tools/call` için yapısal log (latency, outbound status code, araç adı — hassas parametreleri maskeleyerek) merkezi toplanırsa, hangi iş akışında model sık sık zaman aşımına düştüğünü grafiklemek kolaylaşır.
+
+## Yapılandırma ve Yerel — Uzak Tutarlılığı
+
+Stdio MCP süreçleri genelde IDE ortam değişkenlerinden beslenir; HTTP transport’ta ise aynı değişkenleri container secret’larıyla eşlemek gerekebilir. `API_BASE_URL` gibi parametreleri hem development hem staging için doğrulamak için basit bir “bağlantı self-check” endpoint’i (health) tool başlamadan tetiklenebilir; böylece model boş liste döndüğünde kökünün yanlış URL olduğu hemen anlaşılır.
+
+## Model Bağlamı ve Araç Sayısı
+
+Çok fazla tanımlı araç bağlam şişmesine ve yanlış çağrı olasılığına yol açar; bu yüzden ekiplere göre **araç kümesi** ayrımı yapılır — örneğin sadece SRE MCP’sinde `restart_service`. İsim verme kabı: araç tanımında `description` alanı doğal dil için tektir ve modele yanlış yönlendirmeyecek kadar öz olmalıdır.
+
+## Operasyonel Güvenilirlik Kontrol Listesi
+
+- Zod doğrulaması olmadan dış dünyaya istek çıkmaması
+- Timeout + circuit breaker politikası
+- Yazma araçlarında idempotent veya onay gerektiren akış
+- Log’da parametre masking
+- Güncellenen araçların sürüm notuyla birlikte dağıtılması
+
+Bu kontrol listesi MCP’yi yalnızca demo seviyesinde bırakmayıp gün içi güvenilir bir entegrasyon hattına dönüştürür.
+
+Son olarak, MCP sunucunuzu kod incelemesinden geçiren küçük bir **ADR (Architecture Decision Record)** yazmak ekip içi hizalamayı güçlendirir: hangi veri kaynakları seçildi, neden doğrudan veritabanı yerine bounded API seçildi ve hangi hata kodları kullanıcıya nasıl sızdırılmadan loglanır? Bu üç sorunun cevabı netleştikçe yeni araç katmanız bile kontrollü kalır ve “shadow IT” MCP’si çıkmaz.
+
+Geliştirici deneyimi tarafında, yerel MCP’yi sıfır konfig ile ayağa kaldırıp tek komutla doğrulama script’i (`mcp-health`) eklemek, PR şablonuna “breaking tool parametresi mi?” kutucuğu koymak gibi küçük ritüeller uzun ömürlü sürdürülebilirlik sağlar.
+
+Üretimde aynı MCP binary’sinin farklı ortamlarda aynı özellik bayraklarıyla çalışması (feature flag kaosu yok) beklenir; aksi halde model bir ortamda gördüğü aracı diğerinde bulamayınca gereksiz yeniden deneme döngüleri üretir — bu da hem gecikme hem de yanlış alarm yaratır.
+
+**Detaylı inceleme ve açık kaynak (Open Source) kodları için GitHub repomuza göz atmayı unutmayın:**
+[McpProjectScaffold - Github Reposunu İnceleyin](https://github.com/huseyindol/McpProjectScaffold)
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

@@ -5,6 +5,33 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-05-18] K8s CrashLoopBackOff Çözümü + Chat Paket Refactoring
+**Tip:** 🔧 Bugfix | **Boyut:** Orta
+
+### Sorun
+Production'da `elly-app` CrashLoopBackOff — startup probe sürekli başarısız.
+
+### Kök Neden
+1. `startupProbe.timeoutSeconds` belirtilmemişti → varsayılan **1s** health check için yetmiyordu (`context deadline exceeded`)
+2. `failureThreshold: 12` = sadece 150s pencere, uygulama başlaması ~88s + güvenlik konfigürasyonu
+3. 2 replika + RabbitMQ kaynak yarışı: RabbitMQ crash loop → elly-app health check 503
+4. Chat sistemi `com.cms.chat.*` feature-package yapısındaydı (proje kuralı ihlali)
+
+### Düzeltmeler
+- `startupProbe.timeoutSeconds: 5` eklendi
+- `startupProbe.failureThreshold: 12 → 24` (270s pencere)
+- `replicas: 2 → 1` (4GB VM kaynak sorunu çözüldü, RabbitMQ kararlılaştı)
+- Chat sistemi layer-based paketlere taşındı: `com.cms.entity/`, `com.cms.repository/`, `com.cms.service/`, `com.cms.controller/`, `com.cms.dto/`, `com.cms.mapper/`, `com.cms.config/`
+- `JpaConfig.initializeTenantSchemas`: `ddl-auto=validate/none` modunda non-default tenant atlanıyor (chat tabloları yalnızca basedb'de)
+- `CLAUDE.md`'ye kesin paket yapısı kuralı eklendi
+
+### Dosyalar
+- `k8s/2a-app-deployment.yaml` — probe ve replika ayarları
+- `src/main/java/com/cms/config/JpaConfig.java` — validate modu fix
+- `CLAUDE.md` — paket yapısı kuralları
+
+---
+
 ## [2026-05-17] Chat Sistemi — Role-Based Visibility + Real-time Broadcast
 **Tip:** 🆕 Özellik + 🔧 Bugfix | **Boyut:** Büyük
 

@@ -1,5 +1,7 @@
 package com.cms.dto;
 
+import java.util.Date;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,5 +18,11 @@ public class DtoPostIU {
   private String template;
   private Boolean status;
   private Integer orderIndex;
+  private String description;
+  private String category;
+  private String coverImage;
+  private Date publishedAt;
+  private String author;
+  private String readingTime;
   private DtoSeoInfoIU seoInfo;
 }

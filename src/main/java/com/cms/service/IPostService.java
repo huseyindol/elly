@@ -11,6 +11,8 @@ import com.cms.entity.Post;
 public interface IPostService {
   Post savePost(Post post);
 
+  List<Post> bulkSavePosts(List<Post> posts);
+
   Post getPostById(Long id);
 
   Boolean deletePost(Long id);

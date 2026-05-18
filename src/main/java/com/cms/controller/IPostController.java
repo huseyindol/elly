@@ -11,6 +11,8 @@ import com.cms.entity.RootEntityResponse;
 public interface IPostController {
   RootEntityResponse<DtoPost> createPost(DtoPostIU dtoPostIU);
 
+  RootEntityResponse<List<DtoPost>> bulkCreatePosts(List<DtoPostIU> posts);
+
   RootEntityResponse<DtoPost> updatePost(Long id, DtoPostIU dtoPostIU);
 
   RootEntityResponse<Boolean> deletePost(Long id);

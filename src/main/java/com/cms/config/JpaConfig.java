@@ -123,6 +123,11 @@ public class JpaConfig {
    */
   @EventListener(ApplicationReadyEvent.class)
   public void initializeTenantSchemas() {
+    if ("validate".equalsIgnoreCase(ddlAuto) || "none".equalsIgnoreCase(ddlAuto)) {
+      log.info("Skipping tenant schema init — ddl-auto={}", ddlAuto);
+      return;
+    }
+
     String defaultTenant = tenantProperties.getDefaultTenant();
 
     tenantProperties.getDatasources().forEach((tenantId, config) -> {

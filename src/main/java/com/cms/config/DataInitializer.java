@@ -109,21 +109,29 @@ public class DataInitializer implements CommandLineRunner {
     }
     syncRole("ADMIN", "Panel yönetimi - içerik ve ayarlar", adminPerms);
 
-    // EDITOR — içerik modülleri (CRUD), mail-cache-tenant hariç
+    // EDITOR — içerik modülleri + mail/emails/email_templates/rabbit (tam)
+    //           + cache/tenants (sadece read) + users (read+update)
     Set<Permission> editorPerms = new HashSet<>();
-    Set<String> editorModules = Set.of("POSTS", "PAGES", "COMPONENTS", "WIDGETS",
-        "BANNERS", "ASSETS", "COMMENTS", "FORMS", "RATINGS", "CONTENTS", "BASIC_INFOS", "CHAT");
+    Set<String> editorFullModules = Set.of(
+        "POSTS", "PAGES", "COMPONENTS", "WIDGETS",
+        "BANNERS", "ASSETS", "COMMENTS", "FORMS", "RATINGS", "CONTENTS", "BASIC_INFOS", "CHAT",
+        "MAIL", "EMAILS", "EMAIL_TEMPLATES", "RABBIT");
     for (Permission p : allPermissions) {
-      if (editorModules.contains(p.getModule())) {
+      if (editorFullModules.contains(p.getModule())) {
+        editorPerms.add(p);
+      } else if ((p.getModule().equals("CACHE") || p.getModule().equals("TENANTS"))
+          && p.getName().contains(":read")) {
+        editorPerms.add(p);
+      } else if (p.getName().equals("users:read") || p.getName().equals("users:update")) {
         editorPerms.add(p);
       }
     }
     syncRole("EDITOR", "İçerik oluşturma ve düzenleme", editorPerms);
 
-    // VIEWER — sadece read izinleri
+    // VIEWER — tüm read izinleri + users:update
     Set<Permission> viewerPerms = new HashSet<>();
     for (Permission p : allPermissions) {
-      if (p.getName().contains(":read")) {
+      if (p.getName().contains(":read") || p.getName().equals("users:update")) {
         viewerPerms.add(p);
       }
     }

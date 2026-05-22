@@ -18,6 +18,7 @@ import com.cms.entity.form.FormSchema;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.exception.ValidationException;
 import com.cms.repository.FormDefinitionRepository;
+import com.cms.repository.FormSubmissionRepository;
 import com.cms.service.IFormDefinitionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +34,7 @@ public class FormDefinitionService implements IFormDefinitionService {
       "^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$");
 
   private final FormDefinitionRepository formDefinitionRepository;
+  private final FormSubmissionRepository formSubmissionRepository;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -153,6 +155,21 @@ public class FormDefinitionService implements IFormDefinitionService {
       return true;
     }
     return false;
+  }
+
+  @Override
+  @Transactional
+  @Caching(evict = {
+      @CacheEvict(value = "formDefinitions", allEntries = true),
+      @CacheEvict(value = "formSubmissions", allEntries = true)
+  })
+  public Boolean forceDelete(Long id) {
+    if (!formDefinitionRepository.existsById(id)) {
+      return false;
+    }
+    formSubmissionRepository.deleteByFormDefinitionId(id);
+    formDefinitionRepository.deleteById(id);
+    return true;
   }
 
   @Override

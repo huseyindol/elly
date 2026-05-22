@@ -26,6 +26,8 @@ public interface IFormController {
 
   RootEntityResponse<Boolean> deleteFormDefinition(Long id);
 
+  RootEntityResponse<Boolean> forceDeleteFormDefinition(Long id);
+
   // FormSubmission endpoints
   RootEntityResponse<DtoFormSubmission> submitForm(Long formId, DtoFormSubmit dto);
 

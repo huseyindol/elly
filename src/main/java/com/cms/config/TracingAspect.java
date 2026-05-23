@@ -44,7 +44,16 @@ public class TracingAspect {
   }
 
   /**
-   * Trace all service and repository methods
+   * Trace all service and repository methods.
+   *
+   * <p><b>Exception handling:</b> {@link Observation#observe(java.util.function.Supplier)}
+   * checked exception kabul etmedigi icin lambda icinde Throwable'i sarmak gerekiyor;
+   * ama bunu yaparken kendi {@code RuntimeException}'larimizi ({@link com.cms.exception.BaseException}
+   * dahil) sarmamaliyiz — aksi halde {@code GlobalExceptionHandler.handleBaseException}
+   * eslesemez ve tum hatalar 500 {@code RUNTIME_ERROR} olarak doner.
+   *
+   * <p>Bu nedenle yalnizca <b>checked Throwable</b>'lar sarilir; RuntimeException ve
+   * Error oldugu gibi yeniden firlatılir.
    */
   @Around("serviceLayer() || repositoryLayer()")
   public Object traceMethod(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -58,8 +67,15 @@ public class TracingAspect {
         .observe(() -> {
           try {
             return joinPoint.proceed();
-          } catch (Throwable e) {
-            throw new RuntimeException(e);
+          } catch (RuntimeException re) {
+            // BaseException ve diger RuntimeException'lar olduklari gibi gecsin —
+            // GlobalExceptionHandler dogru HTTP status'unu turetebilir.
+            throw re;
+          } catch (Error err) {
+            throw err;
+          } catch (Throwable t) {
+            // Sadece checked Throwable'lar (genelde olmaz ama olabilir) sarilir.
+            throw new RuntimeException(t);
           }
         });
   }

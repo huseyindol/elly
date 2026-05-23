@@ -13,9 +13,13 @@ import com.cms.config.DataSourceConfig;
 import com.cms.config.UserAuthCacheService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.cms.dto.DtoAuthResponse;
@@ -23,19 +27,25 @@ import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
 import com.cms.dto.DtoTenantTokenResponse;
+import com.cms.dto.EmailRequest;
 import com.cms.entity.RefreshToken;
+import com.cms.entity.Role;
 import com.cms.entity.User;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
 import com.cms.exception.ForbiddenException;
 import com.cms.exception.UnauthorizedException;
+import com.cms.repository.MailAccountRepository;
 import com.cms.repository.RefreshTokenRepository;
+import com.cms.repository.RoleRepository;
 import com.cms.repository.UserRepository;
 import com.cms.service.IAuthService;
+import com.cms.service.IEmailService;
 import com.cms.util.JwtUtil;
 import com.cms.util.UserUtil;
 import com.cms.config.TenantContext;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService implements IAuthService {
@@ -48,11 +58,16 @@ public class AuthService implements IAuthService {
   private final RefreshTokenRepository refreshTokenRepository;
   private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
   private final UserAuthCacheService userAuthCacheService;
+  private final RoleRepository roleRepository;
+  private final MailAccountRepository mailAccountRepository;
+  private final IEmailService emailService;
 
   @Value("${jwt.refresh.expiration:3600000}")
   private Long refreshTokenExpiration;
   @Value("${jwt.expiration:1800000}")
   private Long accessTokenExpiration;
+  @Value("${app.frontend.url:http://localhost:3000}")
+  private String frontendUrl;
 
   @Override
   @Transactional
@@ -69,15 +84,19 @@ public class AuthService implements IAuthService {
     }
 
     try {
-      // Email kontrolü
+      // Email ve username kontrolü
       if (userRepository.existsByEmail(dtoRegister.getEmail())) {
         throw new ConflictException("Email already exists: " + dtoRegister.getEmail());
       }
-
-      // Username kontrolü
       if (userRepository.existsByUsername(dtoRegister.getUsername())) {
         throw new ConflictException("Username already exists: " + dtoRegister.getUsername());
       }
+
+      // VIEWER rolünü bul (tenant DB'de olmayabilir, graceful fallback)
+      Role viewerRole = roleRepository.findByName("VIEWER").orElse(null);
+
+      // Verification token oluştur
+      String verificationToken = UUID.randomUUID().toString();
 
       // Yeni kullanıcı oluştur
       User user = new User();
@@ -88,6 +107,13 @@ public class AuthService implements IAuthService {
       user.setLastName(dtoRegister.getLastName());
       user.setProvider("local");
       user.setIsActive(true);
+      user.setEmailVerified(false);
+      user.setEmailVerificationToken(verificationToken);
+      user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24));
+
+      if (viewerRole != null) {
+        user.getRoles().add(viewerRole);
+      }
 
       if (dtoRegister.getManagedTenants() != null && !dtoRegister.getManagedTenants().isEmpty()) {
         user.setManagedTenants(dtoRegister.getManagedTenants());
@@ -95,32 +121,80 @@ public class AuthService implements IAuthService {
 
       User savedUser = userRepository.save(user);
 
-      Long currentVersion = savedUser.getTokenVersion() != null ? savedUser.getTokenVersion() : 0L;
-      savedUser.setTokenVersion(currentVersion + 1);
-      savedUser = userRepository.save(savedUser);
-
-      String loginSource = (tenantId != null && !tenantId.isBlank()) ? "tenant" : "tenant";
-      String token = jwtUtil.generateToken(savedUser.getId(), savedUser.getUsername(),
-          savedUser.getTokenVersion(), tenantId, loginSource);
-
-      String refreshTokenString = jwtUtil.generateRefreshToken(savedUser.getId(), savedUser.getUsername(),
-          tenantId, loginSource);
-      RefreshToken refreshToken = createRefreshTokenEntity(savedUser, refreshTokenString);
-      refreshTokenRepository.save(refreshToken);
+      // Doğrulama e-postası gönder (hata olursa kayıt yine tamamlanır)
+      sendVerificationEmail(savedUser, tenantId, verificationToken);
 
       DtoAuthResponse response = new DtoAuthResponse();
-      response.setToken(token);
-      response.setRefreshToken(refreshTokenString);
       response.setUserId(savedUser.getId());
       response.setUsername(savedUser.getUsername());
       response.setEmail(savedUser.getEmail());
-      response.setUserCode(userUtil.generateUserCode(savedUser));
-      response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
-      populateRolesAndPermissions(response, savedUser);
+      response.setMessage("Kayıt başarılı. Lütfen e-posta adresinize gönderilen doğrulama bağlantısına tıklayın.");
 
       return response;
     } finally {
       TenantContext.setTenantId(originalTenant);
+    }
+  }
+
+  @Override
+  @Transactional
+  public void verifyEmail(String token, String tenantId) {
+    String originalTenant = TenantContext.getTenantId();
+
+    if (tenantId != null && !tenantId.isBlank()) {
+      if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+        throw new BadRequestException("Tenant not found: " + tenantId);
+      }
+      TenantContext.setTenantId(tenantId);
+    }
+
+    try {
+      User user = userRepository.findByEmailVerificationToken(token)
+          .orElseThrow(() -> new BadRequestException("Geçersiz veya süresi dolmuş doğrulama bağlantısı"));
+
+      if (Boolean.TRUE.equals(user.getEmailVerified())) {
+        throw new BadRequestException("E-posta adresi zaten doğrulanmış");
+      }
+
+      if (user.getVerificationTokenExpiresAt() != null
+          && LocalDateTime.now().isAfter(user.getVerificationTokenExpiresAt())) {
+        throw new BadRequestException("Doğrulama bağlantısının süresi dolmuş. Lütfen yeniden kayıt olun.");
+      }
+
+      user.setEmailVerified(true);
+      user.setEmailVerificationToken(null);
+      user.setVerificationTokenExpiresAt(null);
+      userRepository.save(user);
+
+      log.info("E-posta doğrulandı: {} (tenant: {})", user.getEmail(), tenantId);
+    } finally {
+      TenantContext.setTenantId(originalTenant);
+    }
+  }
+
+  private void sendVerificationEmail(User user, String tenantId, String verificationToken) {
+    try {
+      var activeAccounts = mailAccountRepository.findAllByActiveTrue();
+      if (activeAccounts.isEmpty()) {
+        log.warn("Doğrulama e-postası gönderilemedi — aktif mail hesabı yok (tenant: {})", tenantId);
+        return;
+      }
+
+      String verifyUrl = frontendUrl + "/verify-email?token=" + verificationToken
+          + "&tenantId=" + (tenantId != null ? tenantId : "");
+
+      EmailRequest emailRequest = new EmailRequest();
+      emailRequest.setTo(user.getEmail());
+      emailRequest.setSubject("E-posta Adresinizi Doğrulayın");
+      emailRequest.setTemplateName("email-verification");
+      emailRequest.setMailAccountId(activeAccounts.get(0).getId());
+      emailRequest.setDynamicData(Map.of(
+          "name", (user.getFirstName() != null ? user.getFirstName() : user.getUsername()),
+          "verifyUrl", verifyUrl));
+
+      emailService.sendEmail(emailRequest);
+    } catch (Exception e) {
+      log.error("Doğrulama e-postası gönderilemedi: {} — {}", user.getEmail(), e.getMessage());
     }
   }
 
@@ -161,6 +235,11 @@ public class AuthService implements IAuthService {
     // Kullanıcı aktif mi kontrol et
     if (!user.getIsActive()) {
       throw new BadRequestException("User account is deactivated");
+    }
+
+    // E-posta doğrulama kontrolü (tenant login için)
+    if (!isAdminLogin && !Boolean.TRUE.equals(user.getEmailVerified())) {
+      throw new BadRequestException("E-posta adresiniz henüz doğrulanmamış. Lütfen e-postanızı kontrol edin.");
     }
 
     // Admin login: tenant yetki kontrolü (managedTenants)

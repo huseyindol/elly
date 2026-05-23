@@ -15,6 +15,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -59,6 +60,15 @@ public class User extends BaseEntity {
 
   @Column(name = "token_version", nullable = false)
   private Long tokenVersion = 0L; // Token versioning için - yeni token alındığında artırılır
+
+  @Column(name = "email_verified", nullable = false)
+  private Boolean emailVerified = false;
+
+  @Column(name = "email_verification_token")
+  private String emailVerificationToken;
+
+  @Column(name = "verification_token_expires_at")
+  private LocalDateTime verificationTokenExpiresAt;
 
   @ManyToMany(fetch = FetchType.EAGER)
   @JoinTable(

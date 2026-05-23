@@ -36,6 +36,7 @@ public class DataInitializer implements CommandLineRunner {
   private final RoleRepository roleRepository;
   private final PermissionRepository permissionRepository;
   private final UserRepository userRepository;
+  private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
 
   @Value("${app.tenants.default-tenant:basedb}")
   private String defaultTenant;
@@ -45,10 +46,24 @@ public class DataInitializer implements CommandLineRunner {
   public void run(String... args) {
     String originalTenant = TenantContext.getTenantId();
     try {
+      // Basedb: permission + rol seed + SUPER_ADMIN ataması
       TenantContext.setTenantId(defaultTenant);
       initializePermissions();
       initializeRoles();
       assignSuperAdminToExistingUsers();
+
+      // Diğer tenant'lar: sadece permission + rol seed (SUPER_ADMIN ataması yapılmaz)
+      for (String tenantId : tenantProperties.getDatasources().keySet()) {
+        if (tenantId.equals(defaultTenant)) continue;
+        try {
+          TenantContext.setTenantId(tenantId);
+          initializePermissions();
+          initializeRoles();
+          log.info("✅ Tenant '{}' permission+rol seed tamamlandı.", tenantId);
+        } catch (Exception e) {
+          log.warn("⚠️ Tenant '{}' seed başarısız (devam ediliyor): {}", tenantId, e.getMessage());
+        }
+      }
     } finally {
       TenantContext.setTenantId(originalTenant);
     }

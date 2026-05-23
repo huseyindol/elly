@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.config.TenantContext;
@@ -103,6 +104,13 @@ public class AuthController extends BaseController implements IAuthController {
         false, true, "/");
 
     return ok(response);
+  }
+
+  @Override
+  @GetMapping("/verify")
+  public RootEntityResponse<Boolean> verifyEmail(@RequestParam String token, @RequestParam String tenantId) {
+    authService.verifyEmail(token, tenantId);
+    return ok(true);
   }
 
   @Override

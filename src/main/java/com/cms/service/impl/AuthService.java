@@ -173,10 +173,14 @@ public class AuthService implements IAuthService {
   }
 
   private void sendVerificationEmail(User user, String tenantId, String verificationToken) {
+    // Mail hesapları admin panelde (basedb) yönetilir.
+    // Tenant context geçici olarak basedb'ye alınır, email gönderildikten sonra geri döner.
+    String currentTenant = TenantContext.getTenantId();
     try {
+      TenantContext.setTenantId("basedb");
       var activeAccounts = mailAccountRepository.findAllByActiveTrue();
       if (activeAccounts.isEmpty()) {
-        log.warn("Doğrulama e-postası gönderilemedi — aktif mail hesabı yok (tenant: {})", tenantId);
+        log.warn("Doğrulama e-postası gönderilemedi — basedb'de aktif mail hesabı yok (tenant: {})", tenantId);
         return;
       }
 
@@ -195,6 +199,8 @@ public class AuthService implements IAuthService {
       emailService.sendEmail(emailRequest);
     } catch (Exception e) {
       log.error("Doğrulama e-postası gönderilemedi: {} — {}", user.getEmail(), e.getMessage());
+    } finally {
+      TenantContext.setTenantId(currentTenant);
     }
   }
 

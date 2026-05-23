@@ -57,4 +57,11 @@ public class MailAccount extends BaseEntity {
   /** Hesap aktiflik durumu; pasif hesaplar form'da sender olarak secilemez. */
   @Column(nullable = false)
   private Boolean active = true;
+
+  /**
+   * Bu hesabın ait olduğu tenant (ör. "tenant1", "tenant2").
+   * basedb'de saklanır; null ise tenant ataması yoktur.
+   */
+  @Column(name = "tenant_id", length = 50)
+  private String tenantId;
 }

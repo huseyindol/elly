@@ -50,4 +50,8 @@ public class DtoMailAccountRequest {
   private String smtpPassword;
 
   private Boolean active = true;
+
+  /** Hesabın bağlı olduğu tenant (ör. "tenant1"). Null ise atanmamış. */
+  @Size(max = 50)
+  private String tenantId;
 }

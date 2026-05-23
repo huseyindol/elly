@@ -22,6 +22,7 @@ public class DtoMailAccountResponse {
   private Integer smtpPort;
   private String smtpUsername;
   private Boolean active;
+  private String tenantId;
   private Date createdAt;
   private Date updatedAt;
 }

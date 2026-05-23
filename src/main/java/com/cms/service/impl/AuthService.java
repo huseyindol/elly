@@ -174,13 +174,17 @@ public class AuthService implements IAuthService {
 
   private void sendVerificationEmail(User user, String tenantId, String verificationToken) {
     // Mail hesapları admin panelde (basedb) yönetilir.
-    // Tenant context geçici olarak basedb'ye alınır, email gönderildikten sonra geri döner.
+    // Tenant context geçici olarak basedb'ye alınır, sonra geri döner.
     String currentTenant = TenantContext.getTenantId();
     try {
       TenantContext.setTenantId("basedb");
-      var activeAccounts = mailAccountRepository.findAllByActiveTrue();
-      if (activeAccounts.isEmpty()) {
-        log.warn("Doğrulama e-postası gönderilemedi — basedb'de aktif mail hesabı yok (tenant: {})", tenantId);
+
+      var mailAccount = (tenantId != null && !tenantId.isBlank())
+          ? mailAccountRepository.findFirstByTenantIdAndActiveTrueOrderByIdAsc(tenantId)
+          : java.util.Optional.<com.cms.entity.MailAccount>empty();
+
+      if (mailAccount.isEmpty()) {
+        log.warn("Doğrulama e-postası gönderilemedi — basedb'de '{}' tenant'ına ait aktif mail hesabı yok", tenantId);
         return;
       }
 
@@ -191,7 +195,7 @@ public class AuthService implements IAuthService {
       emailRequest.setTo(user.getEmail());
       emailRequest.setSubject("E-posta Adresinizi Doğrulayın");
       emailRequest.setTemplateName("email-verification");
-      emailRequest.setMailAccountId(activeAccounts.get(0).getId());
+      emailRequest.setMailAccountId(mailAccount.get().getId());
       emailRequest.setDynamicData(Map.of(
           "name", (user.getFirstName() != null ? user.getFirstName() : user.getUsername()),
           "verifyUrl", verifyUrl));

@@ -106,8 +106,18 @@ public class MailAccountService implements IMailAccountService {
   }
 
   @Override
+  public List<DtoMailAccountResponse> getAllByTenantId(String tenantId) {
+    return mapper.toResponseList(repository.findAllByTenantId(tenantId));
+  }
+
+  @Override
   public List<DtoMailAccountResponse> getAllActive() {
     return mapper.toResponseList(repository.findAllByActiveTrue());
+  }
+
+  @Override
+  public List<DtoMailAccountResponse> getAllActiveByTenantId(String tenantId) {
+    return mapper.toResponseList(repository.findAllByTenantIdAndActiveTrue(tenantId));
   }
 
   @Override

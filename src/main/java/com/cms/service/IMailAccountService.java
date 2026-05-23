@@ -19,8 +19,14 @@ public interface IMailAccountService {
 
   List<DtoMailAccountResponse> getAll();
 
+  /** Belirli bir tenant'a ait tüm hesaplar. */
+  List<DtoMailAccountResponse> getAllByTenantId(String tenantId);
+
   /** Form yaratirken secime sunulacak aktif hesaplar. */
   List<DtoMailAccountResponse> getAllActive();
+
+  /** Belirli bir tenant'a ait aktif hesaplar — doğrulama e-postası vb. için. */
+  List<DtoMailAccountResponse> getAllActiveByTenantId(String tenantId);
 
   Boolean delete(Long id);
 

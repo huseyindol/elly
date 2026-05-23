@@ -17,6 +17,9 @@ public interface MailAccountRepository extends JpaRepository<MailAccount, Long> 
   /** Belirli bir tenant'a ait aktif hesaplar. */
   List<MailAccount> findAllByTenantIdAndActiveTrue(String tenantId);
 
-  /** Doğrulama e-postası için: tenant'ın ilk aktif hesabı. */
-  java.util.Optional<MailAccount> findFirstByTenantIdAndActiveTrueOrderByIdAsc(String tenantId);
+  /** Sistem e-postaları için: tenant'ın aktif primary hesabı. */
+  java.util.Optional<MailAccount> findByTenantIdAndIsPrimaryTrueAndActiveTrue(String tenantId);
+
+  /** Tenant'ın mevcut primary hesabı — demote için kullanılır. */
+  java.util.Optional<MailAccount> findByTenantIdAndIsPrimaryTrue(String tenantId);
 }

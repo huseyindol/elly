@@ -54,4 +54,7 @@ public class DtoMailAccountRequest {
   /** Hesabın bağlı olduğu tenant (ör. "tenant1"). Null ise atanmamış. */
   @Size(max = 50)
   private String tenantId;
+
+  /** Ana gönderim hesabı olarak işaretler. Tenant başına yalnızca bir tane olabilir. */
+  private Boolean isPrimary = false;
 }

@@ -58,6 +58,9 @@ public class MailAccountService implements IMailAccountService {
     if (entity.getActive() == null) {
       entity.setActive(true);
     }
+    if (Boolean.TRUE.equals(entity.getIsPrimary())) {
+      demoteExistingPrimary(entity.getTenantId(), null);
+    }
 
     MailAccount saved = repository.save(entity);
     log.info("Mail hesabi olusturuldu: id={}, name={}, host={}:{}",
@@ -80,6 +83,9 @@ public class MailAccountService implements IMailAccountService {
       entity.setSmtpPassword(aesEncryptor.encrypt(request.getSmtpPassword()));
     } else {
       entity.setSmtpPassword(oldPassword);
+    }
+    if (Boolean.TRUE.equals(entity.getIsPrimary())) {
+      demoteExistingPrimary(entity.getTenantId(), id);
     }
 
     MailAccount saved = repository.save(entity);
@@ -151,6 +157,17 @@ public class MailAccountService implements IMailAccountService {
       throw new BadRequestException(
           "SMTP baglantisi basarisiz: " + e.getMessage());
     }
+  }
+
+  /** Tenant'ın mevcut primary hesabını demote eder (excludeId kendisi hariç). */
+  private void demoteExistingPrimary(String tenantId, Long excludeId) {
+    if (tenantId == null) return;
+    repository.findByTenantIdAndIsPrimaryTrue(tenantId).ifPresent(existing -> {
+      if (excludeId == null || !existing.getId().equals(excludeId)) {
+        existing.setIsPrimary(false);
+        repository.save(existing);
+      }
+    });
   }
 
   private MailAccount findOrThrow(Long id) {

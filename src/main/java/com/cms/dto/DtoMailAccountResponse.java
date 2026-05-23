@@ -23,6 +23,7 @@ public class DtoMailAccountResponse {
   private String smtpUsername;
   private Boolean active;
   private String tenantId;
+  private Boolean isPrimary;
   private Date createdAt;
   private Date updatedAt;
 }

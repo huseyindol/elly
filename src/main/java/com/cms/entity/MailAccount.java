@@ -64,4 +64,12 @@ public class MailAccount extends BaseEntity {
    */
   @Column(name = "tenant_id", length = 50)
   private String tenantId;
+
+  /**
+   * Tenant'ın ana (varsayılan) gönderim hesabı.
+   * Her tenant için en fazla bir hesap primary olabilir.
+   * Sistem e-postaları (doğrulama vb.) bu hesaptan gönderilir.
+   */
+  @Column(name = "is_primary", nullable = false)
+  private Boolean isPrimary = false;
 }

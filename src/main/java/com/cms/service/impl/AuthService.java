@@ -180,11 +180,11 @@ public class AuthService implements IAuthService {
       TenantContext.setTenantId("basedb");
 
       var mailAccount = (tenantId != null && !tenantId.isBlank())
-          ? mailAccountRepository.findFirstByTenantIdAndActiveTrueOrderByIdAsc(tenantId)
+          ? mailAccountRepository.findByTenantIdAndIsPrimaryTrueAndActiveTrue(tenantId)
           : java.util.Optional.<com.cms.entity.MailAccount>empty();
 
       if (mailAccount.isEmpty()) {
-        log.warn("Doğrulama e-postası gönderilemedi — basedb'de '{}' tenant'ına ait aktif mail hesabı yok", tenantId);
+        log.warn("Doğrulama e-postası gönderilemedi — basedb'de '{}' tenant'ına ait aktif primary mail hesabı yok", tenantId);
         return;
       }
 

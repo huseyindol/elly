@@ -58,6 +58,7 @@ public class JwtTenantFilter extends OncePerRequestFilter {
   /**
    * Authorization Bearer token'ından tenantId claim'ini çıkarır.
    * loginSource="admin" ve auth/user path'lerinde null döner → basedb kullanılır.
+   * /api/v1/chat/ her zaman basedb'ye yönlendirilir (chat tabloları yalnızca basedb'de).
    * loginSource="tenant" veya diğer path'lerde tenantId döner → tenantX kullanılır.
    */
   private String resolveTenantId(HttpServletRequest request) {
@@ -72,6 +73,15 @@ public class JwtTenantFilter extends OncePerRequestFilter {
       String tenantId = jwtUtil.extractTenantId(jwt);
       String loginSource = jwtUtil.extractLoginSource(jwt);
       String path = request.getRequestURI();
+
+      // Chat verisi (chat_groups, chat_group_members, chat_messages, ...) yalnızca
+      // basedb'de tutuluyor. JWT'in tenantId claim'i ne olursa olsun chat çağrıları
+      // basedb'ye gitmeli — aksi halde userRepository.findById tenant DB'sinde
+      // arayıp role bilgisini kaçırır ve SUPER_ADMIN bile "VIEWER" gibi davranır.
+      if (path.startsWith("/api/v1/chat/") || path.equals("/api/v1/chat")) {
+        log.debug("Chat path detected, forcing basedb (ignoring JWT tenantId={})", tenantId);
+        return null;
+      }
 
       boolean isBaseDbPath = path.startsWith("/api/v1/auth/")
           || path.startsWith("/api/v1/users")

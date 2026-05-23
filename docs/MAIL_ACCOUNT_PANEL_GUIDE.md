@@ -269,4 +269,4 @@ Tek bileşen: `MailAccountFormDialog.tsx` (yeni ve düzenleme için ortak dialog
 - `src/main/java/com/cms/entity/MailAccount.java`
 - `src/main/java/com/cms/controller/impl/MailAccountController.java`
 - `src/main/java/com/cms/service/impl/MailAccountService.java`
-- Migration: `src/main/resources/migration/db-migration-mail-accounts-tenantid.sql` (basedb'de çalıştır)
+- Migration: `src/main/resources/migration/db-migration-mail-accounts-tenantid.sql` (**tüm DB'lerde** çalıştır: basedb, tenant1, tenant2)

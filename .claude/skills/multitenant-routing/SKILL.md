@@ -92,3 +92,38 @@ PATCH               /api/v1/admin/tenants/{tenantId}/users/{id}/status
 - `TenantContext` null ise → `basedb`'ye fallback (DataSourceConfig'de tanımlı)
 - Bilinmeyen tenant adı → `IllegalArgumentException` fırlatılır
 - Transaction içinde tenant değiştirme → **Tehlikeli**, kaçın
+
+## Cross-Tenant Query — Geçici Context Switch Pattern
+
+Bir tenant context'inde çalışırken farklı bir tenant'ın DB'sine sorgu yapmak için (örn. tenant1 kaydında basedb'deki mail hesabını bulmak):
+
+```java
+String currentTenant = TenantContext.getTenantId();
+try {
+  TenantContext.setTenantId("basedb");
+  var account = mailAccountRepository.findByTenantIdAndIsPrimaryTrueAndActiveTrue(tenantId);
+  // ... iş mantığı
+} finally {
+  TenantContext.setTenantId(currentTenant);   // ZORUNLU restore — clear() değil
+}
+```
+
+**Kullanım yerleri:**
+- `AuthService.sendVerificationEmail()` — tenant kaydı sırasında basedb'deki primary mail hesabı
+- `TenantUserService.inTenantContext(tenantId, ...)` — admin panelden tenant user yönetimi
+
+**Kural:** `finally` bloğu mutlaka restore etmeli. `TenantContext.clear()` kullanma — JwtTenantFilter outer finally'de zaten clear ediyor, içeride clear edersen önceki context'i kaybedersin.
+
+## Migration Kapsamı — Entity vs DB Eşleşmesi (kritik)
+
+Bir entity'ye yeni alan eklendiğinde, **entity sınıfının erişilebildiği tüm tenant DB'lerinde** kolon olmalıdır. Veri sadece basedb'de saklansa bile.
+
+**Neden:** `hbm2ddl.auto=validate` sadece basedb'i doğrular (startup başarılı) ama runtime'da Hibernate her tenant context'inde aynı SQL'i üretir:
+```sql
+SELECT id, name, ..., yeni_kolon FROM tablo WHERE ...
+```
+Tenant1'de `yeni_kolon` yoksa runtime'da `column "yeni_kolon" does not exist` → 500.
+
+**Tipik tuzak:** "Bu kolon sadece basedb'de kullanılacak" → sadece basedb'de migration → tenant1 üzerinden gelen ilk istek patlar.
+
+**Çözüm:** `com.cms.entity.*` altındaki entity değişiklikleri için migration **basedb + tenant1 + tenant2** üzerinde çalıştırılır. Veri içeriği basedb'ye özelse, tenant1/tenant2'deki kolonlar boş kalır — sorun değil.

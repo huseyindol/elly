@@ -139,6 +139,17 @@ public class FormController extends BaseController implements IFormController {
     return error("FormDefinition not deleted");
   }
 
+  @Override
+  @DeleteMapping("/{id}/force")
+  @PreAuthorize("hasAuthority('forms:delete')")
+  public RootEntityResponse<Boolean> forceDeleteFormDefinition(@PathVariable Long id) {
+    Boolean deleted = formDefinitionService.forceDelete(id);
+    if (deleted) {
+      return ok(deleted);
+    }
+    return error("FormDefinition not found");
+  }
+
   // ==================== FormSubmission Endpoints ====================
 
   @Override

@@ -1,0 +1,205 @@
+---
+title: 'Docker İçerisinde PostgreSQL Ayağa Kaldırmak'
+description: 'Elly projesinde Docker Compose ile multi-tenant PostgreSQL, pgAdmin, Redis ve RabbitMQ kurulumu. Multi-stage Dockerfile, non-root user, healthcheck ve Spring Boot Docker Compose integration.'
+publishedAt: '2026-04-12'
+category: 'DevOps'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1605745341112-85968b19335b?q=80&w=2000&auto=format&fit=crop'
+readingTime: '12'
+---
+
+Bu makale, önceki **Modern PostgreSQL Kullanımı ve İpuçları** yazımızın bir devamı niteliğindedir. Uygulamalarımızı geliştirirken her ortamda (Local, Staging, Production) birebir aynı bağımlılık altyapısını kurabilmenin en iyi yolu Container (Docker vb.) mimarisinden geçer. Bu yazıda [`elly`](https://github.com/huseyindol/elly) projesinden örneklerle hem PostgreSQL'i hem de uygulama imajını multi-stage build ile nasıl ürettiğimi paylaşıyorum.
+
+## 1. Docker Compose ile PostgreSQL Kurulumu
+
+PostgreSQL'i saf şekilde işletim sistemine kurmak (bare-metal) yerine containerize etmek izolasyon anlamında büyük fayda sağlar. Aşağıdaki `docker-compose.yml` dosyası, verilerin konteyner silindiğinde kaybolmaması için **named volume** kullanılarak yapılandırılmış modern bir PostgreSQL konfigürasyonudur.
+
+```yaml
+services:
+  postgres-tenant1:
+    image: postgres:16-alpine
+    container_name: elly_tenant1_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-supersecret}
+      POSTGRES_DB: ${DB_NAME:-elly_tenant1}
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata_t1:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-tenant2:
+    image: postgres:16-alpine
+    container_name: elly_tenant2_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-supersecret}
+      POSTGRES_DB: ${DB_NAME:-elly_tenant2}
+    ports:
+      - '5434:5432'
+    volumes:
+      - pgdata_t2:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata_t1:
+  pgdata_t2:
+```
+
+### Konfigürasyon Detayları
+
+1. **Alpine İmajı (`postgres:16-alpine`):**
+   Debian/Ubuntu tabanlı devasa imajlar yerine, güvenlik ve performans açısından son derece hafif olan Alpine Linux tercih edildi. İmaj boyutundan tasarruf ederken build hızlarını çok artırır. `elly` production cluster'ı da aynı imajı kullanıyor (bkz. `k8s/2c-postgres.yaml`).
+2. **Kalıcı Veri Depolama (`volumes: pgdata_t1, pgdata_t2`):**
+   Konteyner yeniden başlatıldığında ya da silinip tekrar up edildiğinde, Docker volume içerisindeki veriler güvenle veritabanına geri bağlanır. Her tenant kendi volume'üne sahip — veriler asla karışmaz.
+3. **Başlangıç Scriptleri (`init-db.sql`):**
+   `elly/docker/init-db.sql` dosyası `/docker-entrypoint-initdb.d` dizinine mount edilir. PostgreSQL imajı ilk boot'ta buradaki SQL'i çalıştırıp default tabloları, extension'ları (`CREATE EXTENSION pgcrypto;`), role'leri kurar. Sonraki başlatmalarda script çalıştırılmaz.
+4. **Healthcheck Mekanizması:**
+   `pg_isready` ile sadece network port'unun değil, Postgres'in `accept_connection` state'inin de kontrol edildiğinden emin oluyoruz. Buna bağımlı servisler (Spring Boot uygulaması, RabbitMQ consumer'ları) `depends_on: condition: service_healthy` ile DB tam manasıyla ayaktayken başlatılır.
+5. **Port Çakışması Önleme:**
+   Tenant1 için `5433`, Tenant2 için `5434` kullanarak aynı makinede iki Postgres'i aynı anda çalıştırıyoruz. Host'taki varsayılan `5432` portunu bloke etmiyoruz.
+
+## 2. Bağımlı Servisler: Redis + RabbitMQ
+
+`elly` sadece Postgres değil; Redis ve RabbitMQ'yu da aynı compose ile kaldırıyor. Böylece `bun run dev` (frontend) + `./mvnw spring-boot:run` (backend) için tek komutta (`docker compose up -d`) altyapı hazır olur:
+
+```yaml
+redis:
+  image: redis:7-alpine
+  command: >
+    redis-server
+    --appendonly yes
+    --maxmemory 256mb
+    --maxmemory-policy allkeys-lru
+    --requirepass ${REDIS_PASSWORD:-devpass}
+  ports:
+    - '6379:6379'
+  volumes:
+    - redis_data:/data
+
+rabbitmq:
+  image: rabbitmq:3.13-management-alpine
+  ports:
+    - '5672:5672' # AMQP
+    - '15672:15672' # Management UI
+  environment:
+    RABBITMQ_DEFAULT_USER: ${RMQ_USER:-admin}
+    RABBITMQ_DEFAULT_PASS: ${RMQ_PASS:-admin123}
+  volumes:
+    - rabbit_data:/var/lib/rabbitmq
+```
+
+## 3. Spring Boot Docker Compose Integration
+
+`elly` `pom.xml` içinde `spring-boot-docker-compose` dependency'si mevcut. Bu bağımlılık sayesinde `./mvnw spring-boot:run` komutu:
+
+1. Proje root'unda `docker-compose.yml` dosyasını bulur,
+2. Otomatik `docker compose up -d` çalıştırır,
+3. Uygulama `SIGTERM` aldığında compose stack'i ayağa kalkmış hâlde bırakır (hızlı restart için) veya `spring.docker.compose.lifecycle-management=stop-on-exit` ayarıyla durdurur.
+
+Geliştirici, başka bir terminal açmaya bile gerek duymadan veritabanı + cache + broker'a sahip bir backend'i iki tık ile kaldırabiliyor.
+
+## 4. Uygulama İmajı: Multi-Stage Dockerfile
+
+Sadece veritabanını değil, uygulamayı da containerize etmek gerekiyor. `elly/Dockerfile` multi-stage build kullanıyor:
+
+```dockerfile
+# ---- Stage 1: Builder ----
+FROM maven:3.9.9-eclipse-temurin-21 AS builder
+WORKDIR /build
+
+# Dependency cache
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+COPY src ./src
+RUN mvn clean package -DskipTests -B
+
+# ---- Stage 2: Runtime ----
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Non-root user — güvenlik
+RUN addgroup -S spring && adduser -S spring -G spring
+USER spring
+
+# Asset klasörleri (JAR dışında kalan dosyalar için)
+RUN mkdir -p /app/assets/images /app/assets/file
+
+COPY --from=builder --chown=spring:spring /build/target/*.jar app.jar
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+### Neden Multi-Stage?
+
+- **Boyut tasarrufu:** Final image yaklaşık **%50 daha küçük** — çünkü Maven + kaynak kodu sadece `builder` katmanında kalıyor, runtime'a taşınmıyor.
+- **Güvenlik:** Maven + build tool'ları production image'a sızmıyor (supply-chain attack yüzeyi düşüyor).
+- **Cache optimizasyonu:** `pom.xml` değişmediği sürece `dependency:go-offline` katmanı cache'ten gelir — sadece kod değişti ise `mvn package` çalışır, build 10x hızlanır.
+- **Non-root `spring` user:** Container escape senaryolarında saldırgan root değil, spring user olarak kalır. K8s `securityContext.runAsNonRoot: true` ile uyumlu.
+- **`HEALTHCHECK`:** `/actuator/health` endpoint'i hem Docker hem de K8s liveness probe için ortak kaynak.
+- **JRE-only final image:** `jdk` değil `jre` — compile etmemize gerek yok, sadece çalıştırıyoruz.
+
+## 5. .dockerignore Disiplini
+
+Tekrarlı build'lerde saniyeleri çalmak için `.dockerignore` kritik:
+
+```
+target/
+.git/
+.idea/
+.vscode/
+*.md
+.env*
+load-tests/
+docs/
+```
+
+Bu sayede `COPY .` komutu tarafından gereksiz dosyaların context'e gitmesini engelleyip build context'i yüzde yetmişe kadar küçültebiliyoruz.
+
+## 6. Geliştirme Sürecindeki Etkisi
+
+`elly` projesini ayağa kaldırırken de bu yapıyı tercih ettim. Back-end takımı sadece şu komutları çalıştırarak saatlerce süren veritabanı indirme ve ayarlama işlemlerinden kurtuluyor:
+
+```bash
+# Altyapı
+docker compose up -d
+
+# Sağlık kontrolü
+docker compose ps
+
+# Uygulama (compose'u otomatik bağlar)
+./mvnw spring-boot:run
+```
+
+Yeni bir developer takıma katıldığında "onboarding süresi" artık 3-4 saatten 15 dakikaya düştü. Ayrıca CI pipeline'ında GitHub Actions, aynı multi-stage Dockerfile'ı kullanarak her PR için test imajı oluşturabiliyor — yerel ile CI arasında **deterministic parity** sağlanıyor.
+
+## 7. Compose Profilleri ve Gizli Anahtarlar
+
+Geliştirme makinesinde `pgadmin`, `mailhog` veya ağır profiling araçlarını herkesin açmasına gerek yok. `profiles: ["tools"]` ile bu servisleri isteğe bağlı başlatmak (`docker compose --profile tools up -d`) hem RAM tüketimini hem de port karmaşasını azaltır. Parolaları `.env` dosyasında düz metin tutmak yerine geliştirici ortamında bile **Docker secrets** veya en azından `.env` dosyasının `.gitignore`'da kalması ve örnek için `env.example` kullanılması şart; production'da ise mutlaka secret manager (Vault, Kubernetes Secret, CI encrypted variables) kullanılmalıdır. Compose ağında servisler birbirini servis adıyla görür; host'tan erişim için publish edilen portlar dışında trafik izole kalır — bu da yanlışlıkla yan servise bağlanma riskini düşürür.
+
+## 8. Kaynak Limitleri ve Üretim Farkı
+
+Yerelde sınırsız CPU bellek vermek kolaydır; fakat staging'de **production'a yakın limitler** koymadığınızda OOM ve yavaş disk I/O gibi problemler üretime taşınır. `deploy.resources.limits` (Swarm) veya K8s `resources.requests/limits` ile uyumlu düşünmek için compose'ta en azından `mem_limit` ve `cpus` tanımlamak faydalıdır. PostgreSQL volume'ü için bind mount yerine named volume kullanmamızın bir sebebi de I/O tutarlılığı ve yedekleme senaryolarında taşınabilirlik; bulut ortamında ise block storage snapshot stratejisi ile eşleştirilmesi gerekir.
+
+## 9. Sorun Giderme Kısa Rehberi
+
+`docker compose logs -f postgres-tenant1` ile başlayın; ardından konteyner içinde `psql -U ... -c "SELECT version();"`. `pg_isready` başarılı olsa bile disk doluysa (`No space left on device`) WAL yazılamaz — host disk ve volume quota'larını izleyin. İmaj sürümünü (`postgres:16-alpine`) pin'leyip major upgrade'i kontrollü migration ile yapın; patch seviyesinde `docker compose pull && up -d` yeterli olabilir.
+
+Bir sonraki durağımız, tüm bu yapıların yatayda sonsuz ölçüde nasıl scale edildiği yer olan **Kubernetes** olacak!

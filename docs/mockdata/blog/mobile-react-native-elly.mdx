@@ -1,0 +1,168 @@
+---
+title: 'Elly Mobile App: Modern React Native Mimarisi'
+description: 'Elly mobil projesinde, tam tema destekli (karanlık mod odaklı) mimari deneyimlerimiz, form bileşenle...'
+publishedAt: '2026-04-21'
+category: 'Mobile'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?q=80&w=2000&auto=format&fit=crop'
+readingTime: '14'
+order: 4
+---
+
+Bu makale **Mobile** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Elly mobil projesinde, tam tema destekli (karanlık mod odaklı) mimari deneyimlerimiz, form bileşenleri ve navigation yapılandırmalarından elde ettiğim teknik tecrübeler.
+
+Elly mobil uygulamasının ekosistemini inşa ederken sadece performans hedeflemekle kalmadım, native hissini tam manasıyla yansıtabilecek bir navigasyon ve state iskeletine ihtiyaç dahi duyduk.
+
+## Mimari Katman: Feature-Based Modüler Yapı
+
+Projeyi klasik "screens → components → utils" yapısı yerine **Feature-Based Architecture** ile organize ettik. Her özellik (auth, profile, orders, notifications) kendi dizininde screen, hook, service ve type dosyalarını barındırıyor. Bu sayede bir modül üzerinde çalışan geliştirici diğer modüllere dokunmadan bağımsız ilerleyebiliyor.
+
+```
+src/
+├── features/
+│   ├── auth/
+│   │   ├── screens/LoginScreen.tsx
+│   │   ├── hooks/useAuth.ts
+│   │   ├── services/authService.ts
+│   │   └── types/auth.types.ts
+│   ├── orders/
+│   │   ├── screens/OrderListScreen.tsx
+│   │   ├── hooks/useOrders.ts
+│   │   └── components/OrderCard.tsx
+│   └── profile/
+│       ├── screens/ProfileScreen.tsx
+│       └── hooks/useProfile.ts
+├── shared/
+│   ├── components/   # Button, Input, Card...
+│   ├── theme/         # Dark/Light token'ları
+│   └── navigation/    # Root navigator
+```
+
+## Navigation Mimarisi: Type-Safe Rotalar
+
+React Navigation v6 ile **strongly-typed** navigation kurgusu oluşturduk. Her ekranın parametre tipi compile-time'da doğrulanıyor; yanlış parametre geçmek artık imkansız.
+
+```tsx
+type RootStackParamList = {
+  Home: undefined
+  OrderDetail: { orderId: string; source: 'list' | 'notification' }
+  Profile: { userId: string }
+}
+
+// Navigate çağrısında TypeScript otomatik tamamlama ve hata yakalama
+navigation.navigate('OrderDetail', { orderId: '123', source: 'list' })
+```
+
+Nested Navigator yapısında Tab Navigator içinde Stack Navigator'lar kullanarak bottom tab'lar arasında bağımsız navigation stack'leri oluşturduk. Deep linking konfigürasyonu ile push notification'lardan doğrudan ilgili ekrana yönlendirme sağlanıyor.
+
+## Tema Sistemi: Design Token Yaklaşımı
+
+Elly'nin karanlık mod desteği sadece renk değişimi değil, tam bir **Design Token** sistemi üzerine kurulu. Spacing, typography, shadow ve border-radius değerleri tema bazlı değişiyor.
+
+```tsx
+const theme = {
+  dark: {
+    colors: {
+      background: '#0A0A0F',
+      surface: '#1A1A2E',
+      primary: '#6C63FF',
+      text: '#E4E4E7',
+      textSecondary: '#9CA3AF',
+      border: '#2D2D44',
+    },
+    shadows: {
+      card: { shadowColor: '#000', shadowOpacity: 0.4, elevation: 8 },
+    },
+  },
+  light: {
+    colors: {
+      background: '#FAFAFA',
+      surface: '#FFFFFF',
+      primary: '#4F46E5',
+      text: '#18181B',
+      textSecondary: '#6B7280',
+      border: '#E5E7EB',
+    },
+    shadows: {
+      card: { shadowColor: '#000', shadowOpacity: 0.08, elevation: 2 },
+    },
+  },
+}
+```
+
+`useColorScheme()` hook'u ile cihazın sistem temasını dinliyor ve `ThemeContext` üzerinden tüm uygulamaya yayıyoruz. Kullanıcı tercihini AsyncStorage'da saklayarak "sistem teması / manuel seçim" opsiyonu sunuyoruz.
+
+## Form Yönetimi: React Hook Form + Zod
+
+Mobilde form deneyimi web'den çok farklıdır; klavye yönetimi, scroll davranışı ve validation feedback'i kritiktir. React Hook Form ile `Controller` pattern'ini kullanarak her input'u kontrol altına aldık.
+
+```tsx
+const schema = z.object({
+  email: z.string().email('Geçerli bir e-posta giriniz'),
+  phone: z.string().regex(/^05\d{9}$/, 'Geçerli bir telefon numarası giriniz'),
+})
+
+function RegisterForm() {
+  const { control, handleSubmit } = useForm({ resolver: zodResolver(schema) })
+
+  return (
+    <KeyboardAwareScrollView>
+      <Controller
+        control={control}
+        name="email"
+        render={({ field, fieldState }) => (
+          <TextInput
+            value={field.value}
+            onChangeText={field.onChange}
+            error={fieldState.error?.message}
+          />
+        )}
+      />
+    </KeyboardAwareScrollView>
+  )
+}
+```
+
+## Veri Katmanı: Sunucu Durumu ve Önbellek
+
+Liste ve detay ekranlarında tekrar tekrar aynı fetch'i tetiklememek için **TanStack Query** (React Query) benzeri bir sunucu durum katmanı kullanıyoruz. Stale-while-revalidate stratejisi mobilde hem hızlı ilk boyama hem de arka planda tazeleme sağlar; `focus` ve `reconnect` refetch politikaları metroda veya zayıf ağda kullanıcıyı bilgilendirmeden veriyi sessizce yeniler. Mutation sonrası `queryClient.invalidateQueries` ile ilgili listelerin tutarlı kalması, optimistik güncellemelerin ise yalnızca düşük riskli alanlarda (örneğin favori işareti) kullanılması tercih edilir.
+
+## Hata Sınırları, Boş Durumlar ve Offline
+
+Kurumsal uygulamalarda `ErrorBoundary` + ekran bazlı fallback, kullanıcıyı beyaz ekranda bırakmaz. Ağ hatalarında mesajı **eylem odaklı** tutuyoruz ("Tekrar dene", "Destek ile iletişime geç") ve mümkünse son başarılı cache ile read-only mod sunuyoruz. Tam offline senaryosu her ürün için şart olmasa da, kritik formların `NetInfo` ile gönderim öncesi kontrol edilmesi veri kaybını azaltır.
+
+## Güvenlik ve Dağıtım Notları
+
+Token saklama için platform **Keychain / EncryptedSharedPreferences** kullanımı, loglarda PII dökülmemesi ve release build'lerde `__DEV__` köprülerinin kapatılması temel checklist'tir. CodePush veya benzeri OTA güncellemeleri kullanılacaksa, imzalama zinciri ve kanarya rollout politikası dokümante olmalıdır.
+
+## Kalite: Test Piramidi
+
+Birim testleri iş mantığı ve reducer'lara; **`@testing-library/react-native`** ile smoke testler kritik akışlara (giriş, sipariş detayı); E2E'de ise maestro veya Detox ile en azından "golden path" senaryoları seçilir. Görsel regresyon ihtiyacı varsa Storybook ile bileşen kataloğu önce web paylaşımına yakın tutulur.
+
+## Liste Performansı ve Donanım Farkları
+
+Uzun sipariş listelerinde `FlashList` veya doğru şekilde `memo` edilmiş `FlatList` ile windowing seçimi doğrudan frame süresini etkiler. Elly tarafında görsel karmaşıklığı yüksek satırlarda `getItemLayout` mümkünse verilir; aksi halde dinamik yükseklikler için minimum ve maksimum satır tahminleriyle scroll offset sıçraması azaltılır. Apple ve Qualcomm GPU farkları shadow ve blur kullanımında hissiyat yarattığı için, tasarımda tek bir “premium” kart varyantına kilitleme yerine iki yoğunluk seviyesi tanımlanması uzun vadede destek maliyetini düşürür.
+
+## Yerelleştirme ve Biçimlendirme
+
+Tarih-saat, para birimi ve adres formatları kullanıcı bölgesine göre **`Intl`** ve seçilen locale paketiyle render edilir. Bu, yalın bir `toLocaleString()` çağrısından öte form alanlarındaki masking (IBAN, telefon) doğruluğunu etkiler. Çoklu dil gereksinimi henüz tüm projede yoğun olmasa da, string’lerin doğrudan TSX içine gömülmemesi gelecek çeviri sürüşünü kolaylaştırır.
+
+## Kod Paylaşımı: Mobil ve Panel
+
+Elly’nin bir kısmı Next.js ile yönetim panelinden beslendiği için, validasyon şemaları (`zod`), tip tanımları ve seçili yardımcı fonksiyonlar mümkün olduğunca paket olarak paylaşılır; böylece web ve mobil aynı iş kuralına iki kez sahip çıkmaz. Karmaşık render farklarında ise ortak olan “saf” mantığı npm workspace veya dahili paket ile taşımak, dalgalanmayı keser.
+
+Son olarak kullanıcıdan gelen görsel geri bildirim (beta kanalı, mağaza yorumları) sprint planına “UX borç kalemi” olarak işlendiğinde, navigasyon karmaşıklığı veya tema uyumsuzlukları küçük yamalar yerine yapısal çözümle kalıcı olarak kapanır. Bu yaklaşım Elly’nin teknik borcunu kullanıcı memnuniyeti metrikleriyle aynı tabloda tutmayı kolaylaştırır.
+
+Mağaza inceleme süreleri ve kritik KPI’ların (crash-free users, ortalama oturum süresi) ekip toplantılarında düzenli olarak okunması, mimari seçimleri yalın tutup kullanıcı değeri üzerinden tartışmayı sağlar — bu bağlam mobil üründe gereksiz soyutlamaları doğal olarak eleyen bir filtredir.
+
+## Sonuç: Cross-Platform Tutarlılık
+
+Android ve iOS platformları için devasa iki farklı kod tabanı yönetmek yerine, tek bir mantıksal merkezden çıkan ve her iki ekosistemde de performanslı derlenen, kurumsal, taze bir form ve bileşen mimarisi kurulmuş oldu. Platform-specific davranışlar `Platform.select()` ile cerrahi müdahale seviyesinde ayrıştırılıyor, geri kalan %95 kod tamamen paylaşımlı.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

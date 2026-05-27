@@ -36,6 +36,7 @@ public class DataInitializer implements CommandLineRunner {
   private final RoleRepository roleRepository;
   private final PermissionRepository permissionRepository;
   private final UserRepository userRepository;
+  private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
 
   @Value("${app.tenants.default-tenant:basedb}")
   private String defaultTenant;
@@ -45,10 +46,24 @@ public class DataInitializer implements CommandLineRunner {
   public void run(String... args) {
     String originalTenant = TenantContext.getTenantId();
     try {
+      // Basedb: permission + rol seed + SUPER_ADMIN ataması
       TenantContext.setTenantId(defaultTenant);
       initializePermissions();
       initializeRoles();
       assignSuperAdminToExistingUsers();
+
+      // Diğer tenant'lar: sadece permission + rol seed (SUPER_ADMIN ataması yapılmaz)
+      for (String tenantId : tenantProperties.getDatasources().keySet()) {
+        if (tenantId.equals(defaultTenant)) continue;
+        try {
+          TenantContext.setTenantId(tenantId);
+          initializePermissions();
+          initializeRoles();
+          log.info("✅ Tenant '{}' permission+rol seed tamamlandı.", tenantId);
+        } catch (Exception e) {
+          log.warn("⚠️ Tenant '{}' seed başarısız (devam ediliyor): {}", tenantId, e.getMessage());
+        }
+      }
     } finally {
       TenantContext.setTenantId(originalTenant);
     }
@@ -109,21 +124,29 @@ public class DataInitializer implements CommandLineRunner {
     }
     syncRole("ADMIN", "Panel yönetimi - içerik ve ayarlar", adminPerms);
 
-    // EDITOR — içerik modülleri (CRUD), mail-cache-tenant hariç
+    // EDITOR — içerik modülleri + mail/emails/email_templates/rabbit (tam)
+    //           + cache/tenants (sadece read) + users (read+update)
     Set<Permission> editorPerms = new HashSet<>();
-    Set<String> editorModules = Set.of("POSTS", "PAGES", "COMPONENTS", "WIDGETS",
-        "BANNERS", "ASSETS", "COMMENTS", "FORMS", "RATINGS", "CONTENTS", "BASIC_INFOS", "CHAT");
+    Set<String> editorFullModules = Set.of(
+        "POSTS", "PAGES", "COMPONENTS", "WIDGETS",
+        "BANNERS", "ASSETS", "COMMENTS", "FORMS", "RATINGS", "CONTENTS", "BASIC_INFOS", "CHAT",
+        "MAIL", "EMAILS", "EMAIL_TEMPLATES", "RABBIT");
     for (Permission p : allPermissions) {
-      if (editorModules.contains(p.getModule())) {
+      if (editorFullModules.contains(p.getModule())) {
+        editorPerms.add(p);
+      } else if ((p.getModule().equals("CACHE") || p.getModule().equals("TENANTS"))
+          && p.getName().contains(":read")) {
+        editorPerms.add(p);
+      } else if (p.getName().equals("users:read") || p.getName().equals("users:update")) {
         editorPerms.add(p);
       }
     }
     syncRole("EDITOR", "İçerik oluşturma ve düzenleme", editorPerms);
 
-    // VIEWER — sadece read izinleri
+    // VIEWER — tüm read izinleri + users:update
     Set<Permission> viewerPerms = new HashSet<>();
     for (Permission p : allPermissions) {
-      if (p.getName().contains(":read")) {
+      if (p.getName().contains(":read") || p.getName().equals("users:update")) {
         viewerPerms.add(p);
       }
     }

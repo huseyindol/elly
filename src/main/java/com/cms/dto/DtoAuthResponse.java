@@ -19,6 +19,7 @@ public class DtoAuthResponse {
   private String email;
   private String userCode;
   private Long expiredDate;
+  private String message;
 
   /** Kullanıcının rolleri: ["SUPER_ADMIN", "ADMIN", ...] */
   private List<String> roles;

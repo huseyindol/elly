@@ -1,0 +1,158 @@
+---
+title: 'Modern PostgreSQL Kullanımı ve İpuçları'
+description: 'DevOps süreçlerinde modern PostgreSQL 16 kullanımı, tenant-bazlı ayırma, performans tuning, JSONB indeksleme, EXPLAIN ANALYZE, pg_dump retention ve replication stratejileri.'
+publishedAt: '2026-04-10'
+category: 'DevOps'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1544383835-bda2bc66a55d?q=80&w=2000&auto=format&fit=crop'
+readingTime: '12'
+---
+
+Bu yazımda, DevOps süreçleri ve arka uç (backend) mimarisi tasarımı kapsamında **PostgreSQL (PgSQL)** kullanımında elde ettiğim spesifik deneyimleri paylaşıyorum. Açık kaynak kodlu ve geniş veri tipleri kapasitesi sunan Postgres, günümüzün veri odaklı (data-intensive) uygulamalarında bir standart hâline gelmiştir. Örnekler büyük ölçüde [`elly`](https://github.com/huseyindol/elly) projesinden alınmıştır.
+
+## 1. PostgreSQL Neden Tercih Sebebimiz?
+
+Büyük ve ilişkisel veritabanı şemalarında Postgres'in sunduğu olanaklar hayat kurtarır.
+
+- **JSONB Desteği:** İlişkisel yapıyı korurken aynı tablolarda no-SQL (doküman bazlı) JSON sorguları yapmaya olanak sağlar. `elly`'de `post.metadata`, `widget.config` gibi dinamik alanlar bu tipte tutuluyor.
+- **Concurrent Indexing (Eşzamanlı İndeksleme):** `CREATE INDEX CONCURRENTLY` ile tabloları kilitlemeden indeks oluşturma kabiliyeti, sıfır kesinti (zero-downtime) gerektiren deployment süreçlerinde kritik bir özelliktir.
+- **Güçlü Transaction Yönetimi:** ACID uyumluluğunu en üst seviyede tutarken izole transaction tipleri (`READ COMMITTED`, `REPEATABLE READ`, `SERIALIZABLE`) sayesinde conflict'leri çözer.
+- **Partial / Expression Index:** `WHERE published = true` veya `LOWER(email)` üzerine direkt indeks atarak devasa tablolarda dar veri setleri üzerinde milisaniye ile yanıt alırsınız.
+- **Row-Level Security (RLS):** Multi-tenant projelerde kritik — tenant filtresini uygulamaya değil, veritabanına gömebilirsiniz.
+
+## 2. Multi-Tenant Veritabanı Stratejisi
+
+`elly` projesinde 3 farklı yaklaşım arasından **"Database-per-Tenant"** seçildi:
+
+| Strateji                   | Avantaj                        | Dezavantaj                    |
+| -------------------------- | ------------------------------ | ----------------------------- |
+| **Schema-per-tenant**      | Tek DB, kolay backup           | Connection pool karmaşıklaşır |
+| **Row-level (tenant_id)**  | En ucuz                        | RLS olmazsa data leak riski   |
+| **Database-per-tenant** ✅ | Tam izolasyon, bağımsız backup | DevOps maliyeti artar         |
+
+Bu yüzden `k8s/2c-postgres.yaml` içinde üç ayrı StatefulSet görüyoruz: `postgres-tenant1`, `postgres-tenant2`, `postgres-basedb`. Her tenant'ın kendi PVC'si, kendi backup CronJob dump'ı ve kendi connection pool'u var.
+
+## 3. Temel Konfigürasyon İpuçları (postgresql.conf)
+
+Performans kazanımlarının ilk adımı her zaman default `postgresql.conf` parametrelerinin donanıma göre ölçeklenmesinden geçer.
+
+```conf
+# Örnek performans odaklı yapılandırma (16GB RAM, SSD)
+max_connections = 200
+shared_buffers = 4GB             # RAM'in ~%25'i
+effective_cache_size = 12GB      # RAM'in ~%75'i
+maintenance_work_mem = 1GB
+work_mem = 32MB                  # per-connection sort/hash
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1           # SSD için düşürülmelidir
+effective_io_concurrency = 200   # SSD için yüksek
+jit = off                        # Küçük sorgularda overhead'e sebep olabiliyor
+```
+
+> **Önemli Not:** `shared_buffers` genellikle sistem belleğinin (RAM) %25'i kadar ayarlanmalıdır. Çok yüksek ayarlandığında OS caching ile çakışabileceği unutulmamalıdır.
+
+K8s ortamında bu değerleri `ConfigMap` içinde tutup `/etc/postgresql/postgresql.conf` yoluna mount ediyoruz — pod restart'ı yeterli.
+
+## 4. Bağlantı Havuzu (PgBouncer)
+
+200 `max_connections` kulağa yeterli gelse de, Java tarafındaki her HikariCP instance'ı 10-20 connection tutar; 3 tenant × 5 pod × 20 = 300 bağlantı kolayca aşılır. Çözüm **PgBouncer** (transaction-level pooling). Postgres'in önüne konulan bu hafif proxy, 10x daha az fiziksel bağlantı ile aynı throughput'u sağlar. `elly`'de aşama olarak bir sonraki sürümde devreye alınacak.
+
+## 5. İleri İndeksleme Performansı Analizi (EXPLAIN ANALYZE)
+
+Postgres'te performans yavaşlığının teşhisi komut satırında `EXPLAIN (ANALYZE, BUFFERS)` ile başlar.
+
+Özellikle Elly projemizde karmaşık RBAC (Rol tabanlı yetkilendirme) join sorgularını optimize ederken b-tree yerine spesifik indeksleme teknikleri kullandık.
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT u.*, STRING_AGG(r.role_name, ',') AS roles
+FROM users u
+JOIN user_roles ur ON u.id = ur.user_id
+JOIN roles r ON ur.role_id = r.id
+WHERE u.tenant_id = 'a3c1...'
+  AND u.active = true
+GROUP BY u.id;
+```
+
+Eğer sorgu planlarında "Sequential Scan" görüyorsanız ve tablonuz milyarlarca satır içeriyorsa, ilgili kolonlara kesinlikle indeks atmalısınız:
+
+```sql
+-- Partial index: sadece aktif kullanıcılar
+CREATE INDEX CONCURRENTLY idx_users_active
+  ON users (tenant_id) WHERE active = true;
+
+-- Composite index (user_roles join için)
+CREATE INDEX CONCURRENTLY idx_user_roles_uid_rid
+  ON user_roles (user_id, role_id);
+```
+
+Ancak yazım frekansı okuma frekansından yüksek tablolar için indekslerin yazma maliyetini de artıracağını unutmamak gerekir. `pg_stat_user_indexes` tablosundan `idx_scan` değeri 0 olan indeksleri periyodik olarak düşürmek gerekir.
+
+## 6. JSONB İndeksleme
+
+`elly`'de `posts.metadata` alanı JSONB. `metadata->>'seo_slug'` üzerinden arama yapıldığında:
+
+```sql
+-- Expression index (belirli key için)
+CREATE INDEX idx_post_seo_slug ON posts ((metadata->>'seo_slug'));
+
+-- GIN index (her key için — daha yavaş ama esnek)
+CREATE INDEX idx_post_metadata ON posts USING GIN (metadata jsonb_path_ops);
+```
+
+`jsonb_path_ops` operator class, standart GIN'e göre ~%30 daha küçük indeks üretir ve `@>` (containment) operatörü için mükemmel çalışır.
+
+## 7. Veri Yedekleme ve Kurtarma (pg_dump, pg_restore, WAL-G)
+
+PgSQL dünyasında logical ve physical backup olmak üzere iki yöntem yer alır.
+
+### Logical Backup — pg_dump
+
+```bash
+# Sıkıştırılmış Custom format ile yedek alma
+pg_dump -U postgres -Fc -d elly_tenant1 > elly_t1.dump
+
+# Paralel directory format (büyük DB'ler için)
+pg_dump -U postgres -Fd -j 4 -d elly_tenant1 -f elly_t1_dir/
+
+# Veritabanını geri yükleme
+pg_restore -U postgres -d elly_tenant1_new -1 elly_t1.dump
+```
+
+`elly/k8s/7-backup-cronjob.yaml` her gece 03:00'te (Europe/Istanbul) bu yaklaşımı otomatik çalıştırıyor, `gzip` ile sıkıştırıp 3 günlük retention uyguluyor.
+
+### Physical Backup — WAL-G / pgBackRest
+
+Daha büyük ölçekte (point-in-time recovery gerekiyorsa) **WAL-G** veya **pgBackRest** gibi araçlar base backup + continuous WAL archive kombinasyonu sunar. Production'a geçişte `elly` de bu yola evrilecek — sadece `pg_dump` ile 300GB'lık bir DB'yi yedeklemek saatler alır.
+
+## 8. Replication ve High Availability
+
+Tek pod Postgres single point of failure'dır. `elly` henüz 1 replica ile yaşıyor ama yol haritası:
+
+1. **Streaming Replication:** 1 primary + 2 hot standby.
+2. **Patroni + etcd:** Otomatik failover (primary düşerse standby'lardan biri promote edilir).
+3. **Read replica routing:** Spring tarafında `@Transactional(readOnly = true)` olan sorgular read replica'ya gider — yazma hattı boşalır.
+
+## 9. Sık Görülen Hatalar
+
+- `shared_buffers` çok yüksek → Linux OOM killer devreye girer.
+- `max_connections` abartılı → Her connection ~10MB RAM yer; sınırsız artırmak DB'yi boğar.
+- `CREATE INDEX` (CONCURRENTLY olmadan) → production'da tablo kilitlenir, deployment çöker.
+- `VACUUM FULL` → tablo yeniden yazılır, AccessExclusiveLock alır. Yerine `pg_repack` kullanın.
+- Transaction içinde uzun süreli `SELECT FOR UPDATE` → lock chain oluşturur, başka transaction'ları bekletir.
+
+## 10. İzleme (Postgres Exporter + Grafana)
+
+`elly` cluster'ındaki `6-monitoring.yaml` Prometheus + Grafana stack'ini kaldırıyor. Postgres için ek olarak `prometheus-community/postgres-exporter` pod'unu devreye almak gerekir — ardından Grafana'ya **"PostgreSQL Database" (ID: 9628)** dashboard'unu import edin. Connection count, cache hit ratio, slow query, replication lag gibi metrikler tek ekranda toplanır.
+
+## 11. Autovacuum, Bloat ve İstatistik Disiplini
+
+Yüksek yazma hızına sahip tablolarda **transaction ID wraparound** ve **dead tuple** birikimi sessiz performans katilidir. `autovacuum_vacuum_scale_factor` ve `autovacuum_analyze_scale_factor` değerlerini globalde bırakmak yerine, dev tablolar için `ALTER TABLE ... SET (autovacuum_vacuum_scale_factor = 0.05)` gibi tablo bazlı sıkılaştırma yapıyoruz. `pg_stat_all_tables` üzerinden `n_dead_tup` / `n_live_tup` oranı düzenli izlenmeli; `last_autovacuum` tarihi çok geride kaldıysa manuel `VACUUM (ANALYZE)` penceresi planlanır. `pg_stat_statements` ile en pahalı sorguları sabitleyip indeks veya şema düzeltmesine bağlamak, `EXPLAIN`'in tek başına sunduğu anlık görüntüden daha sürdürülebilir bir optimizasyon döngüsü sağlar.
+
+## 12. Rol Bazlı Bağlantı ve En Az Yetki
+
+`max_connections` tavanına çarpmadan önce, uygulama kullanıcılarına `CONNECT` ve ihtiyaç duyulan şema yetkileri dışında hak vermemek; ayrı `readonly_analytics` rolü ile raporlama veya BI trafiğini yazma yolundan ayırmak operasyonel güvenliği güçlendirir. Süper kullanıcı (`postgres`) ile uygulama çalıştırmak production'da kabul edilemez bir anti-pattern'dir.
+
+Sonraki makalelerimde, Docker ve Kubernetes içerisinde PostgreSQL veritabanını Containerize olarak nasıl deploy ve manage ettiğimizi detaylıca inceleyeceğiz. Bizimle kalın!

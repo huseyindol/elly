@@ -1,0 +1,153 @@
+---
+title: 'Next.js Backend as a Frontend: API Routes'
+description: 'Route Handlers ile Next.js içerisinde proxy oluşturarak mikroservislere köprü yapmak ve webhook dinl...'
+publishedAt: '2026-04-17'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Route Handlers ile Next.js içerisinde proxy oluşturarak mikroservislere köprü yapmak ve webhook dinleyicilerini konumlandırmak. Cache konfigürasyonları ve Revalidate süreçleri.
+
+Modern mikro-servis mimarilerinde frontend uygulamasının doğrudan backend API'lerine istek yapması, CORS sorunları, güvenlik açıkları ve API anahtarlarının tarayıcıya sızma riski gibi ciddi problemlere yol açıyor. Elly CMS altyapısında Java Spring Boot backend'imiz Kubernetes cluster içinde private ağda çalışıyor — tarayıcıdan direkt erişilebilir olmaması gerekiyor. Next.js Route Handlers ile bu problemi "Backend for Frontend" (BFF) pattern'iyle çözdük.
+
+Route Handlers, Next.js sunucusu üzerinde çalışan server-side endpoint'lerdir. İstemciden gelen istekler önce Next.js sunucusuna gelir, burada JWT token validasyonu, rate limiting ve tenant bazlı yetkilendirme yapılır, ardından istek internal API'ye iletilir. Bu katman aynı zamanda response'ları frontend'in ihtiyacına göre şekillendirme (data transformation) imkanı da verir.
+
+```ts
+// app/api/contents/route.ts
+import { NextRequest, NextResponse } from 'next/server'
+import { verifyToken } from '@/lib/auth'
+import { rateLimit } from '@/lib/rate-limiter'
+
+export async function GET(request: NextRequest) {
+  // 1. Rate limiting kontrolü
+  const rateLimitResult = await rateLimit(request)
+  if (!rateLimitResult.success) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+  }
+
+  // 2. JWT token doğrulama
+  const token = request.cookies.get('auth-token')?.value
+  if (!token || !verifyToken(token)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // 3. Internal API'ye proxy
+  const backendUrl = process.env.BACKEND_API_URL // Private network
+  const res = await fetch(`${backendUrl}/api/v1/contents/list`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Tenant-ID': request.headers.get('x-tenant-id') || '',
+    },
+    next: { revalidate: 60 }, // 60 saniye cache
+  })
+
+  return NextResponse.json(await res.json())
+}
+```
+
+Bu yapının en güçlü yanlarından biri cache (önbellek) stratejisidir. `next: { revalidate: N }` ile ISR (Incremental Static Regeneration) benzeri bir davranış elde ediyoruz. Sık değişmeyen veriler (kategori listesi, site ayarları) uzun süreli cache'lenir; içerik güncellemelerinde ise `revalidateTag` ile anında invalidate edilir.
+
+Webhook dinleyicileri de Route Handlers ile konumlandırılıyor. Örneğin Resend email servisi bir email bounce olduğunda webhook ile bize bildirim gönderiyor, bu bildirimi `app/api/webhooks/resend/route.ts` endpoint'inde yakalayıp veritabanını güncelliyoruz. Backend sunucularımızı tamamen izole bir private ağa çekebiliyor ve yalnızca Next.js sunucusunun onlara ulaşabilmesine izin vererek çok katmanlı bir güvenlik mimarisi elde ediyoruz.
+
+## Route Handler Sınırları
+
+App Router’da `route.ts` dosyaları sunucuda çalışır; uzun süren işleri worker veya kuyruğa delege etmek zaman aşımı riskini azaltır. Edge runtime seçildiğinde Node-API uyumluluğu sınırlıdır — doğrulama kütüphaneleri seçimini etkiler.
+
+## Dinamik Segment ve Webhook İmzası
+
+Webhook uçlarında imza başlığı (ör. HMAC) doğrulaması, sahte istekleri erken keser. Dinamik `app/api/.../[id]/route.ts` yapısı REST benzeri ince yüzeyler için uygundur.
+
+## Günlükleme ve Gözleminlik
+
+BFF katmanında yapısal log (latency, status, route adı — hassas gövde hariç) merkezi toplanırsa anomali tespiti kolaylaşır.
+
+## Hata Gövdelerinin Maskelemesi
+
+Downstream backend hataları bazen fazla bilgi sızdırır; kullanıcıya dönüş mesajı sırları ve dahili adresleri içermeden kırpılmalıdır. Geliştirici dostu mesaj ise yalnızca yetkili ortamlarda açılır veya güvenlik seviyesine göre sınırlanır.
+
+## Oran Sınırları ve Kota
+
+Rate limit yalnızca public yüz için değil, oturum çalınırsa zarar yüzünü küçültmek için de anlamlıdır. Kota değerleri ürün ekiplerine göre katmanlı olabilir; admin ve public aynı sınırı paylaşmak her zaman doğru sonuç vermez.
+
+## Idempotensi ve Güvenli Yeniden Deneme
+
+Webhook veya yazma uçlarında idempotency key kullanımı, ağ kesintisi sonrası çift yan etkiyi önler. Frontend’den yapılan mutasyonların da zaman aşımı ve güvenli tekrar stratejisi olmalıdır.
+
+## Yerelleştirme ve Saat Dilimi
+
+Admin listelerinde tarih gösterimi tenant saat dilimine bağlı seçildiğinde operasyon ekibi daha az yanlış yorum yapar; sunucu UTC tutup istemicide formatlamak standart yaklaşımdır.
+
+## Payload Birleştirme ve Mobil İstemci Uyumu
+
+Birden fazla mikroservisten parça parça veri toplayan BFF, istemci versiyonlarının beklediği stabil birleşik model üretmezse mobil ve web uyumsuz hale gelebilir. Bu yüzden contract testleri ve semver’lı API model sürümü düşünülebilir; en azından alanların optional/required görünümü kırılım kontrolünden geçer.
+
+## Zaman Damgalı İmza ve Tekrar Gönderimi
+
+Webhook uçlarında timestamp toleransı ve nonce cache ile replay saldırıları sınırlandırılır; imza doğrulaması doğru sırayla ve sabit kodlanmış sıralama ile yapılmalıdır.
+
+## Bağımlılık Enjeksiyonu Yerine Fonksiyon Katmanları
+
+Route handler içinde doğrudan ağ kesimi çağırmak testleri zorlaştırır; ince service fonksiyonları veya boundary modülleri unit testleri mümkün kılar.
+
+## Güvenilir Başlıklar ve CORS Köprüsü
+
+Tarayıcı CORS’un çözemeyeceği senaryoda BFF zorunludur; fakat gereksiz double fetch ve cache kaçırımı oluşmasın diye tek uçtan birleştirilmiş cevap tasarlanır. Response header politikası güvenlik taramasında tutarlı olmalıdır.
+
+## Zamanlanmış Görev Tetikleri
+
+Cron veya kuyruk tüketicileri doğrudan public handler’a bağlanmamalı; secret paylaşımı ve doğrulama katmanı ayrılmış olur.
+
+## Versiyonlanmış Dahili API İstemcisi
+
+Backend servis adresleri ve zaman aşımları tek dosyada serbest metre olmaktan çıkarılırsa operasyon daha öngörülebilir hale gelir; retry/backoff parametreleri merkezi yönetilir.
+
+## Yerel Geliştirme ve Mukabillik BFF
+
+Developer makinesinden private API’ye tünel yoksa BFF mocking stratejisi gerekir; sahte upstream davranışı üretimin gerçek hatalarından farklıysa tuzak çıkar.
+
+## Büyük Gövde ve Akış Endpoint’leri
+
+Çok boyutlu yüklemede multipart ve streaming doğru araç seçimiyle yapılmalı; bellek spike’leri gözlenir ve limitler konur.
+
+## HTTP Semantikleri ve Cache Başlıkları
+
+`GET` uçları güvenli varsayılan cache ile işaretlenirken `POST` mutasyonlarında cache yanlışlıkla devreye girmemelidir. CDN önünde doğru `Cache-Control` ve `Vary` seçimi yanlış paylaşımlı içerikleri engeller.
+
+## İzleme ve Örneklem
+
+Yüksek trafikte her isteği tam loglamak maliyetlidir; örnekleme oranı ve tracing ID politikasıyla dengelenir.
+
+## Güvenlik Testleri ve Fuzz
+
+Query parametresi doğrulaması gevşek bırakılırsa beklenmedik yüz yüzey açılabilir; sınırlar Zod ile ve route testleriyle korunur.
+
+## Request Boyutu ve Dosya Yükleme Sınırı
+
+Ters proxy ve edge katmanında gövde limiti uyumlu seçilmezse kötü niyetli büyük gövde ile hizmet aksatılabilir; hata mesajı ve log aynı bağlamda düşünülür.
+
+## Tek Tip Hata Yanıtı
+
+Tüketici istemcilerin parse edebileceği küçük bir hata şeması sabitlenir; böylece UI tutarlı geri bildirim verir.
+
+## İstek Bağlamı ve Kiracı Doğrulaması
+
+Aynı route farklı ürünlerden çağrılıyorsa `X-Tenant-ID` benzeri başlıkların sunucuda tekrar doğrulanması ve token ile tutarlılığının kontrol edilmesi yanlış veri karışımını keser.
+
+## Bekleme Süreleri ve Kullanıcıya Yansıma
+
+Upstream yavaşsa BFF zaman aşımı ve kullanıcıya anlamlı durum kodu seçimi birlikte tasarlanmalıdır; süresiz bekleyen istemci kaynakları boşa yakılabilir ve deneyimi bozar.
+
+Özet olarak Route Handler katmanı, güvenlik, önbellek ve gözlem üçlüsüyle görünmez bir köprüdür ve bu üçü birlikte planlanmadıkça BFF zarar görür.
+
+Tek sayfalık runbook ve basit mimari diyagram, yeni gelen geliştiricinin köprü davranışını saatler içinde anlamasını sağlar ve operasyonel teslim hızını artırır.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

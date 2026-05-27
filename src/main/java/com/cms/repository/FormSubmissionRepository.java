@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -22,6 +23,10 @@ public interface FormSubmissionRepository extends JpaRepository<FormSubmission, 
 
   @Query("SELECT COUNT(fs) FROM FormSubmission fs WHERE fs.formDefinition.id = :formId")
   Long countByFormId(@Param("formId") Long formId);
+
+  @Modifying
+  @Query("DELETE FROM FormSubmission fs WHERE fs.formDefinition.id = :formId")
+  void deleteByFormDefinitionId(@Param("formId") Long formId);
 
   @Query("SELECT fs FROM FormSubmission fs WHERE fs.submittedAt BETWEEN :startDate AND :endDate")
   List<FormSubmission> findBySubmittedAtBetween(

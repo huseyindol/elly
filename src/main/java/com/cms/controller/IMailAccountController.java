@@ -17,10 +17,10 @@ public interface IMailAccountController {
 
   RootEntityResponse<DtoMailAccountResponse> getById(Long id);
 
-  RootEntityResponse<List<DtoMailAccountResponse>> getAll();
+  RootEntityResponse<List<DtoMailAccountResponse>> getAll(String tenantId);
 
   /** Form yaratirken secime sunulacak aktif hesaplar. */
-  RootEntityResponse<List<DtoMailAccountResponse>> getAllActive();
+  RootEntityResponse<List<DtoMailAccountResponse>> getAllActive(String tenantId);
 
   RootEntityResponse<Boolean> delete(Long id);
 

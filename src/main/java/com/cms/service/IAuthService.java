@@ -14,4 +14,6 @@ public interface IAuthService {
   DtoAuthResponse refreshToken(DtoRefreshToken dtoRefreshToken);
 
   DtoTenantTokenResponse getPublicToken(String tenantId);
+
+  void verifyEmail(String token, String tenantId);
 }

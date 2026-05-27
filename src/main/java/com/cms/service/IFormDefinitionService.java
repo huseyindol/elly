@@ -23,5 +23,7 @@ public interface IFormDefinitionService {
 
   Boolean delete(Long id);
 
+  Boolean forceDelete(Long id);
+
   List<FormDefinition> searchByTitle(String title);
 }

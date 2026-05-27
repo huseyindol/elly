@@ -1,0 +1,164 @@
+---
+title: 'GitHub Actions ile NPM Paket Dağıtımı (CI/CD Otomasyonu)'
+description: "Kod main branch'e birleştiği anda testlerden geçen component paketinin otomatik olarak NPM Registry'..."
+publishedAt: '2026-04-18'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 7
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Kod main branch'e birleştiği anda testlerden geçen component paketinin otomatik olarak NPM Registry'ye yeni versiyonla nasıl pushlandığı üzerindeki otomasyon tecrübemiz.
+
+Lokal ortamda geliştirdiğimiz NPM paketini elle versiyonlamak ve teker teker registry'e atmak, insan hatasına açık ve ölçeklenemeyen bir yöntemdir. Bir keresinde developer yanlış versiyon numarasıyla publish yaptı ve downstream projelerin tamamı kırıldı. Bu olaydan sonra CI/CD pipeline'ını sıfırdan kurguladık.
+
+Workflow'umuz iki aşamalıdır: PR aşamasında kalite kontrolü (lint, test, type-check), merge sonrasında ise otomatik publish. Her PR açıldığında GitHub Actions tetiklenir ve kodun tüm kalite kapılarından geçmesi zorunludur — tek bir test bile başarısız olursa merge butonu kilitlenir.
+
+```yaml
+# .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install --frozen-lockfile
+      - run: bun run lint # ESLint kontrolü
+      - run: bun run type-check # TypeScript doğrulama
+      - run: bun run format:check # Prettier tutarlılığı
+      - run: bun run test:ci # Vitest + coverage
+
+  publish:
+    needs: quality-gate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+```
+
+Build aşamasında `tsup` ile hem ESM hem CJS formatında çıktı üretiliyor, TypeScript declaration dosyaları otomatik oluşturuluyor. Publish öncesi `npm pack --dry-run` ile paketin içeriği kontrol ediliyor, yanlışlıkla `node_modules` veya test dosyalarının pakete dahil edilmesi engelleniyor.
+
+Versiyon yönetimi için `changesets` entegrasyonu kullanıyoruz. Developer PR'a bir changeset ekler, merge sonrasında bot otomatik olarak versiyon numarasını günceller, CHANGELOG.md'yi oluşturur ve NPM'e publish eder. Tüm süreç insan müdahalesi olmadan, deterministik ve tekrarlanabilir şekilde işliyor.
+
+Bu pipeline sayesinde son 6 ayda 40+ release yaptık ve hiçbirinde manual hata yaşanmadı. Developer'ın yapması gereken tek şey: kodu yazmak, PR açmak ve review'dan geçirmek.
+
+## NPM Güvenlik ve Kaynak Zinciri
+
+`npm publish` öncesi `npm pack --dry-run` yanında, mümkünse **provenance** (OIDC ile GitHub’dan doğrulanmış yayın) ve organizasyon politikasında 2FA zorunluluğu supply-chain yüzünü küçültür. `NPM_TOKEN` yalnızca CI secret’ında tutulmalı ve minimum scope ile oluşturulmalıdır.
+
+## Dal Koruması ve Manuel Yayın Yok
+
+Main’e doğrudan push yerine PR zorunluluğu + required checks, yanlışlıkla kırık paket çıkışını önler. Changeset ile sürüm PR’ları ayrı akışta açılırsa tarihçe okunabilir kalır.
+
+## Geri Alma Senaryosu
+
+Kötü sürüm yayımlandıysa deprecate ve yeni PATCH ile düzeltme birlikte planlanır; iletişim kanallarında net rollback notu yayınlamak downstream güvenini korur.
+
+## Önbellek ve Kurulum Hızı
+
+CI’da `bun install --frozen-lockfile` ile tekrarlanabilirlik sağlanır; cache anahtarları package.json ve lockfile hash’ine göre ayrılır. Yanlış cache invalidation “yeşil local, kırmızı CI” hayaletlerini üretir.
+
+## Çok Paketli Monorepo
+
+Birden fazla paket aynı pipeline’da yayınlanıyorsa sürüm sırası ve birbirine bağımlılık grafiği tanımlanır. Aksi halde ara paketler henüz registry’ye düşmeden diğeri publish etmeye çalışır ve başarısız adım zinciri oluşur.
+
+## Gizli Yönetimi ve OIDC
+
+Klasik long-lived token yerine OIDC tabanlı kısa ömürlü kimlik bilgisi tercih edildiğinde sızıntı yüzeyi küçülür. Secret rotation politikası dokümante edilmezse eski anahtarlar repoda unutulur.
+
+## Yayın Öncesi Doğrulama
+
+Dry-run paket içeriği, `files` alanı yanlışlıklarını ve gereksiz asset’leri gösterir. README ve lisans dosyasının pakete girdiği doğrulanır; NPM sayfasında boş görünen paket güvenilirlik kaybına yol açar.
+
+## Gözlem ve Alarm
+
+Başarısız publish job’ları Slack veya e-posta ile görünür kılınır; sessizce kırmızı kalan gece yayınları hafta sonu incident’ine dönüşür.
+
+## Sonuç
+
+Otomasyon insan hatasını azaltır fakat branch koruması, secret hijyeni ve monorepo koordinasyonu olmadan pipeline yine kırılgan kalır.
+
+## Maliyet ve Kota
+
+Ücretsiz CI dakikaları ve registry kota sınırları göz önünde bulundurulur; gereksiz matrix job’ları kapatmak ve nötr testleri paralelleştirmek beklemeyi kısaltır.
+
+## Güvenlik Taraması
+
+`npm audit` çıktıları PR’da bilinçle yorumlanır; false positive’ler için exception kaydı tutulur, gerçek bulgular için patch sürümü planlanır.
+
+## Süreklilik Planı
+
+Bakım tatili öncesi “release freeze” takvimi ile kritik güvenlik düzeltmelerinin yolu açık bırakılır.
+
+## Artefakt İmzalama ve Doğrulama
+
+Paket çıktılarının checksum’ları ve immutable artifact yaklaşımı, yanlışlıkla üzerine yazılan çıktıların önünü keser; release notuyla birlikte indirilebilir SBOM özeti düşünülebilir.
+
+## Yerel ↔ CI Sapması
+
+Developer makinesinde global registry mirror veya farklı Node sürümü CI ile çakışırsa drift oluşur. `.nvmrc` veya volta pin’i ile çalışma zamanı sürümü hizalanır ve dokümante edilir.
+
+## Süre Ölçümü ve SLA
+
+Pipeline süresi KPI olarak izlenir; yavaşlayan job’lar erken uyarıyla ele alınırsa merge gecikmeleri ve manuel müdahale azalır.
+
+## Roll-forward vs Roll-back
+
+Yayın sonrası hata yakalanırsa strateji netleştirilir: hızlı yeni PATCH mı yoksa registry deprecate ile geri çekme mi? Her iki durum için runbook tek sayfada bulunmalıdır.
+
+## Ekip Öğrenmesi
+
+Başarısız pipeline olayları kısa retro ile kayda geçirilir; aksi halde aynı tuzak üç ay sonra tekrar görülür.
+
+Publish job’unun idempotent tasarımı, tekrar çalıştırmada aynı sürümü çifte yükseltmemeyi garanti etmeye yaklaşır; NPM’de sürüm çakışması yaşandığında el kurtarma süresi azalır.
+
+Günlük olarak yeşil kalan ana dal, yayın güveninin temelidir; kırmızı dal kültürü normalize olursa “acil doğrulanmamış release” riski yükselir ve otomasyon faydası bertaraf edilir.
+
+Dağıtım pipeline’ına benzer yaklaşımı dokümantasyon dalına da uygulamak — örnekleri ve migration rehberini release ile aynı PR’da birleştirmek — tüketici kafasını netleştirir.
+
+Yayın sonrası smoke test senaryosu otomasyonla çalıştırılamıyorsa bile manuel kontrol listesi dakikalar içinde tamamlanacak kadar kısa tutulmalıdır; aksi halde “ertelenen doğrulama” birikir.
+
+Pipeline kültürü, hızı kaliteye feda etmeden ölçeklemek isteyen ekiplerin ortak dilidir.
+
+Her otomatik adım insan kararının yerini tamamen almaz; onu güvenilir ve tekrarlanabilir hale getirir.
+
+Tekrar edilemez süreçler ölçeklenmez; güvenilir süreçler ise ekip büyüdükçe bile taşmayı daha yavaş hiss ettirir.
+
+Bu yüzden CI çıktılarını okuyabilir ve aksiyona çevrilebilir hale getiren küçük iyileştirmeler bile bileşiktir.
+
+Hedef: gece yarısı panik yerine sabah rutininde yeşil rapor ve ölçülebilir ritim.
+
+Bu kültür yerleştiğinde release günü kutlama değil, beklenen sıradan bir iş akışı haline gelir.
+
+İnsanların pipeline’a güvenmesi, onu şeffaf ve anlaşılır tutmaktan geçer; siyah kutulu süreçler güvensizlik üretir.
+
+Güven kazanıldığında merge hızı doğal olarak yükselir ve manuel kontrol ihtiyacı azalır.
+
+Publish akışına yeni katılan ekip üyesi bile tek sayfalık görsel diyagram ile nerede ne olduğunu anlayabildiğinde kurum bilgisi nakledilmiş demektir.
+
+Özetle iyi CI/CD yazılı hafızayı genişletir, bireye sıkışmış bilgiyi serbest bırakır.
+
+Bu yüzden süreç kartlarını ve runbook’ları erişilebilir tutmak sprint dışı bir lüks değil, operasyonel gerekliliktir.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -62,14 +63,22 @@ public class MailAccountController extends BaseController implements IMailAccoun
   @GetMapping
   @Override
   @PreAuthorize("hasAuthority('mail:read')")
-  public RootEntityResponse<List<DtoMailAccountResponse>> getAll() {
+  public RootEntityResponse<List<DtoMailAccountResponse>> getAll(
+      @RequestParam(required = false) String tenantId) {
+    if (tenantId != null && !tenantId.isBlank()) {
+      return ok(mailAccountService.getAllByTenantId(tenantId));
+    }
     return ok(mailAccountService.getAll());
   }
 
   @GetMapping("/active")
   @Override
   @PreAuthorize("hasAuthority('mail:read')")
-  public RootEntityResponse<List<DtoMailAccountResponse>> getAllActive() {
+  public RootEntityResponse<List<DtoMailAccountResponse>> getAllActive(
+      @RequestParam(required = false) String tenantId) {
+    if (tenantId != null && !tenantId.isBlank()) {
+      return ok(mailAccountService.getAllActiveByTenantId(tenantId));
+    }
     return ok(mailAccountService.getAllActive());
   }
 

@@ -1,0 +1,190 @@
+---
+title: 'Reanimated ve Akışkan 60FPS Animasyonlar'
+description: 'UI/UX standartlarını çok yukarılara çekmek için JS thread dışına çıkarılan ve mikro-animasyonları ku...'
+publishedAt: '2026-04-21'
+category: 'Mobile'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1491895200222-0fc4a4c35e18?q=80&w=2000&auto=format&fit=crop'
+readingTime: '13'
+order: 99
+---
+
+Bu makale **Mobile** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> UI/UX standartlarını çok yukarılara çekmek için JS thread dışına çıkarılan ve mikro-animasyonları kusursuz yöneten Reanimated 3 implementasyonlarımız.
+
+Profesyonel mobil ürünleri rakiplerinden ayırt eden şey işlevi kadar sunduğu mikro-etkileşimler (Micro-animations) ve pürüzsüz geri bildirim dokularıdır. Ancak React Native JS ipliği animasyonlar için çok yavaştır.
+
+## JS Thread vs UI Thread: Neden Animated API Yetmez?
+
+React Native'in yerleşik `Animated` API'si her frame'de JS thread ile UI thread arasında bridge üzerinden iletişim kurar. Bu köprü geçişi ~5ms gecikme yaratır ve karmaşık animasyonlarda frame drop kaçınılmazdır. Reanimated 3 ise animasyon mantığını tamamen **UI thread'ine** (native taraf) taşıyarak bu darboğazı ortadan kaldırır.
+
+```
+[Animated API]
+JS Thread → Bridge → UI Thread (her frame'de köprü geçişi = jank)
+
+[Reanimated 3]
+Worklet → UI Thread (doğrudan native çalışma = 60FPS)
+```
+
+## Shared Values ve Worklet'ler
+
+Reanimated'in temel yapı taşı `useSharedValue` ve `useAnimatedStyle` hook'larıdır. Shared value'lar UI thread'de yaşar ve JS thread'i bloklamadan animasyonları yönetir.
+
+```tsx
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated'
+
+function AnimatedCard({ onPress }: Props) {
+  const scale = useSharedValue(1)
+  const opacity = useSharedValue(1)
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }))
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.95, { damping: 15, stiffness: 150 })
+    opacity.value = withTiming(0.8, { duration: 100 })
+  }
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 150 })
+    opacity.value = withTiming(1, { duration: 100 })
+  }
+
+  return (
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress}
+    >
+      <Animated.View style={[styles.card, animatedStyle]}>
+        {/* Card content */}
+      </Animated.View>
+    </Pressable>
+  )
+}
+```
+
+## Gesture Handler Entegrasyonu
+
+`react-native-gesture-handler` v2 ile Reanimated'i birleştirerek dokunma, sürükleme ve fırlatma hareketlerini 60FPS'de işliyoruz. Swipe-to-delete gibi etkileşimler artık native hissiyatla çalışıyor.
+
+```tsx
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated'
+
+function SwipeableRow({ onDelete, children }: Props) {
+  const translateX = useSharedValue(0)
+
+  const panGesture = Gesture.Pan()
+    .onUpdate(event => {
+      translateX.value = Math.min(0, event.translationX)
+    })
+    .onEnd(() => {
+      if (translateX.value < -120) {
+        translateX.value = withSpring(-200)
+        runOnJS(onDelete)()
+      } else {
+        translateX.value = withSpring(0)
+      }
+    })
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }))
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={rowStyle}>{children}</Animated.View>
+    </GestureDetector>
+  )
+}
+```
+
+## Layout Animations: Entering ve Exiting
+
+Reanimated 3'ün layout animation API'si ile liste elemanlarının eklenmesi ve silinmesi sırasında otomatik geçiş animasyonları uyguluyoruz. Tek satır kod ile profesyonel sonuçlar elde ediliyor.
+
+```tsx
+import Animated, {
+  FadeInDown,
+  FadeOutLeft,
+  LinearTransition,
+} from 'react-native-reanimated'
+
+function NotificationList({ items }: Props) {
+  return (
+    <Animated.FlatList
+      data={items}
+      itemLayoutAnimation={LinearTransition}
+      renderItem={({ item, index }) => (
+        <Animated.View
+          entering={FadeInDown.delay(index * 50).springify()}
+          exiting={FadeOutLeft.duration(300)}
+        >
+          <NotificationCard item={item} />
+        </Animated.View>
+      )}
+    />
+  )
+}
+```
+
+## Spring vs Timing: Doğru Easing Seçimi
+
+Her animasyon türü için doğru easing fonksiyonu seçmek UX kalitesini belirler. Temel kuralımız: **kullanıcı etkileşimi sonucu tetiklenen animasyonlarda spring**, **otomatik/sistem animasyonlarında timing** kullanmak.
+
+| Senaryo         | Animasyon Tipi               | Neden?                     |
+| --------------- | ---------------------------- | -------------------------- |
+| Buton basma     | `withSpring`                 | Doğal geri sekme hissi     |
+| Sayfa geçişi    | `withTiming + Easing.bezier` | Kontrollü ve öngörülebilir |
+| Pull-to-refresh | `withSpring`                 | Elastik geri dönüş         |
+| Toast bildirimi | `withTiming`                 | Sabit sürede giriş/çıkış   |
+
+Kullanıcının tıkladığı nesnenin yumuşakça esnemesi, sayfalar arasındaki sürükleme ivmesinin parmak hızını algılayıp tepki vermesi, UI/UX deneyimi açısından ürünümüzün kalitesini premium segmente yükseltti.
+
+## Erişilebilirlik: Reduce Motion ve Boyut Tercihleri
+
+iOS ve Android, sistem düzeyinde **animasyonları azalt** (Reduce motion) seçeneği sunar. `AccessibilityInfo.isReduceMotionEnabled()` veya Reanimated ile `ReducedMotionConfig` kullanarak ağır spring ve büyük ölçek animasyonlarını `withTiming(..., { duration: 0 })` veya basit opacity geçişine indirgemek inclusivity açısından zorunludur. Ayrıca animasyonların yalnızca süslenme değil, odak sırasını ve aksiyonu anlatması gerekir; hareket eden bileşen `accessibilityLiveRegion` veya uygun aria benzeri etiketlerle ekran okuyucuya anlamlı geri bildirim vermelidir.
+
+## `interpolate` ve Türev Değerler
+
+Parmağın konumunu 0–1 aralığına map edip opacity veya blur ile bağlamak için `interpolate` vazgeçilmezdir. `Extrapolation.CLAMP` ile sınır taşmasındaki sıçramaları keserek rubber-band hissi oluştururken taşmayı kontrol altında tutarız; `extend` seçeneği bilinçli overscroll senaryoları içindir. Birden fazla shared value zincirinde `useDerivedValue` kullanmak, gereksiz `useAnimatedStyle` içi hesapları azaltır ve okunabilirliği artırır.
+
+## Performans Ölçümü ve Yaygın Tuzaklar
+
+Reanimated görünmez olsa bile, **liste içinde yüzlerce satırın aynı anda layout animasyonu** veya görüntü üzerinde ağır blur animasyonları frame bütçesini doldurur. Flashlight / Xcode Instruments veya RN'nin perf monitor'ü ile `_getAnimationTimestamp` yaklaşımı kullanılabilir; pratikte en çok rastladığım hatalar: `runOnJS` ile her frame JS'e dönmek, shadow + scale kombinasyonunu eski mimaride düşük uçlu cihazda zorlamak ve `animatedProps` kullanırken native prop uyumsuzluğu. Karmaşık ekranlarda animasyonu alt bileşenlere bölmek ve `React.memo` ile props stabilitesini korumak, reconciliation maliyetini düşürür.
+
+## Fabric, Hermes ve Gelecek
+
+Yeni Mimari (Fabric + Hermes) ile UI thread zamanlaması daha tutarlı; Reanimated zaten native tarafa yakın çalıştığı için özellikle **takılmasız** hissiyat daha az cihaza göre sapıyor. Yine de kütüphane sürümlerini React Native ile senkron tutmak ve breaking change öncesi [Reanimated sürüm notlarını](https://docs.swmansion.com/react-native-reanimated/) takip etmek gerekiyor. Uzun vadede, animasyon mantığını tasarımla birlikte “token” halinde dokümante etmek (spring stiffness haritası vb.) tasarımcı–mühendis uyumunu hızlandırır.
+
+## Reanimated ile Test ve CI
+
+Pure JS tarafında worklet kodunu doğrudan koşturmak zordur; bu yüzden animasyon kritik bileşenlerinde en azından **snapshot** ve görsel doğrulama veya küçük integration testleriyle “scale 0.95'ten 1'e dönüş” gibi kritik süreleri assert ediyoruz. Jest kullanıcıları `setUpTests` ile Reanimated mock'unu yüklemezse testler flaky olur — bu konfigürasyonun repoda sabit kalması onboarding'i kolaylaştırır.
+
+## Özet: Kullanıcıya Değen Net Kazanımlar
+
+Kısa özetle: kullanıcı hareketine anında tepki, liste geçişlerinde akıcı layout animasyonları, erişilebilirlik seçeneklerine saygı ve düşük uçlu cihazda ölçülen frame bütçesi — bu dörtlü profesyonel mobil ürün algısı yaratır. Reanimated yalnızca “güzel görünsün” değil, **etkileşimin gecikmesiz hissedilmesi** için kullanılıyor; bu yüzden JS thread'e geri düşecek tasarımlardan kaçınmak ilk günden tasarım kısıtı olmalıdır.
+
+Ek olarak tasarımda sürekli hareket (sonsuz döngü animasyonlar) kullanıcıyı yorabileceği için yalnızca dikkat çekmesi gereken anlarda veya bildirimlerde tercih edilmelidir. Motion referans kartları çıkarılıp backlog’a küçük “polish” maddesi olarak yazıldığında, sprint sonlarında bile kalite çıtası yükselmeye devam eder; çünkü animasyon kodu doğru mimaride refactor maliyeti düşüktür.
+
+Uygulama içi kritik bildirimlerde kısa haptic ile görsel geri bildirimi eşlemek kullanıcıya ek güven verir — bu uyarı bile animasyon tasarımının yalnızca piksel hareketinden ibaret olmadığını gösterir.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

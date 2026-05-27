@@ -1,0 +1,169 @@
+---
+title: 'Next.js ile Kusursuz SEO ve Metadata Yönetimi'
+description: 'Dynamic Content içeren uygulamalardaki metadata dinamik atamaları (generateMetadata) ve robots.txt e...'
+publishedAt: '2026-04-17'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 4
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Dynamic Content içeren uygulamalardaki metadata dinamik atamaları (generateMetadata) ve robots.txt entegrasyonu. Sitemap.xml jenerasyonları ile Google indeks sürelerini minimize ediyoruz.
+
+Ziyaretçiye statik göründüğü halde içeriklerini dinamik veri tabanlarından alan sitelerde Arama Motoru Optimizasyonu (SEO) en büyük mücadele alanıdır. Klasik React SPA'larda arama motorları boş bir `<div id="root">` görür — içerik JavaScript yüklendikten sonra render edildiği için botlar sayfayı boş algılar. Next.js bu problemi SSR ve SSG ile kökünden çözüyor.
+
+Öncelikle Next.js 14+ ile gelen `generateMetadata` fonksiyonu, her sayfa için dinamik meta tag üretimini mümkün kılıyor. Blog makalelerimizde slug parametresine göre veritabanından içerik çekip, başlık, açıklama, OpenGraph görseli ve canonical URL'yi sunucu tarafında Head'e basıyoruz. Bu sayede Twitter/LinkedIn'de paylaşıldığında zengin önizleme kartları eksiksiz görünüyor.
+
+```tsx
+// app/blog/[slug]/page.tsx
+export async function generateMetadata({ params }): Promise<Metadata> {
+  const post = await getPostBySlug(params.slug)
+  const url = `https://www.huseyindol.com/blog/${post.slug}`
+
+  return {
+    title: `${post.title} | Hüseyin DOL`,
+    description: post.description,
+    alternates: { canonical: url },
+    openGraph: {
+      title: post.title,
+      type: 'article',
+      publishedTime: post.publishedAt,
+      authors: [post.author],
+      images: [{ url: post.coverImage, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      images: [post.coverImage],
+    },
+  }
+}
+```
+
+SEO'nun ikinci kritik ayağı **sitemap.xml** ve **robots.txt** entegrasyonudur. Next.js'in `sitemap.ts` ve `robots.ts` convention dosyalarıyla bunları kodla yönetiyoruz. Sitemap'i dinamik tutarak her yeni makale eklendiğinde otomatik olarak Google'a bildirim yapılmasını sağlıyoruz.
+
+```tsx
+// app/sitemap.ts
+export default async function sitemap() {
+  const posts = await getAllPosts()
+  const blogRoutes = posts.map(post => ({
+    url: `https://www.huseyindol.com/blog/${post.slug}`,
+    lastModified: new Date(post.publishedAt),
+    changeFrequency: 'monthly',
+    priority: 0.8,
+  }))
+  return [...staticRoutes, ...blogRoutes]
+}
+```
+
+Üçüncü katman olarak **JSON-LD Structured Data** (Schema.org) ile arama sonuçlarında zengin snippet görüntüsü elde ediyoruz. `ArticleJsonLd` bileşenimiz her blog sayfasına otomatik olarak yazar bilgisi, yayın tarihi ve publisher logosu ekliyor. Google'ın Rich Results Test aracında tüm makalelerimiz başarıyla doğrulanıyor.
+
+Son olarak AI crawler'ları (GPTBot, ClaudeBot, PerplexityBot) için `robots.txt`'te açık izin verip, `llms.txt` ve `llms-full.txt` dosyalarıyla sitemizin yapısını ve içerik haritasını doğrudan LLM'lere sunuyoruz. Bu sayede yapay zeka destekli arama motorlarında da doğru ve zengin şekilde temsil ediliyoruz.
+
+## Core Web Vitals ve İçerik Kalitesi
+
+SEO yalnızca meta tag değildir: LCP, CLS ve INP metrikleri sıralama sinyalleriyle bağlantılıdır. Sunucu render + görsel boyutlandırma + font stratejisi, `generateMetadata` kadar kritik bir “organik görünürlük” katmanıdır.
+
+## hreflang ve Çoklu Dil
+
+Birden fazla locale varsa `alternates.languages` veya sayfa bazlı hreflang, yanlış bölgeye indekslenmeyi azaltır; canonical ile birlikte tutarlı kullanılmalıdır.
+
+## Arama Konsolu ve İndeks
+
+Yayın sonrası sitemap ping’i ve Search Console kapsama raporu, “keşfedilmedi” veya “yumuşak 404” uyarılarını erken gösterir.
+
+## Yapılandırılmış Veri İncelemesi
+
+JSON-LD şemalarını Rich Results Test ile doğrulamak alışkanlık haline getirilmeli; template değişince kırılan alanlar sessizce zengin sonuç kaybına yol açar.
+
+## Performans ile SEO’nun Ortak Sokakları
+
+Görsel `next/image` boyut parametreleri, font display stratejisi ve üçüncü parti script yükleme politikası sıralamanın ötesinde kullanıcı memnuniyeti metriklerini taşır. Organik görünürlük yalnızca meta yazımıyla değil, deneyimin hızıyla da yaşanır veya ölür.
+
+## İç Bağlantı ve Bilgi Mimarisinin Okunması
+
+Blog ve ürün sayfalarında tutarlı anchor metinleri ve makul crawl derinliği, botların içeriği bağlam olarak anlamasına yardım eder. Rastgele “buraya tıkla” metinleri ve kırık iç link birikimi sıralamanın yanında kullanıcıyı da yorar.
+
+## Sosyal Önizleme ve Fallback
+
+Kapak görseli boyutları ve güvenilir CDN seçimi OG önizlemesinde kopukluk yaratmadan kritiktir; paylaşım trafiği olan siteler için bu kontrol yayın checklist’inin parçası olmalıdır.
+
+## Sürekli Kontrol Listesi
+
+Yeni şablon eklendiğinde otomatik veya haftalık SEO smoke (canonical, başlık uzunluğu, noindex gereken sayfalar) küçük ekiplerde bile özdenetim olarak işe yarar.
+
+## E-E-A-T ve İçerik Güvenilirliği
+
+Uzman görüşü gerektiren sayfalarda yazar kutusu ve kaynak bağlantıları hem kullanıcıya hem botlara sinyal verir. Teknik doğruluk ve güncellenmiş yayın tarihi birlikte değerlendirildiğinde sayfa daha “yaşayan” görünür.
+
+## Kopyalama İçeriği ve Parametrik URL’ler
+
+Filtre kombinasyonlarının dizine açılıp açılmayacağı stratejiyle belirlenir; gereksiz ince yüzeyler crawl bütçesini eritir ve zayıf sinyalli sayfa üretir.
+
+## Yerel Arama ve Harita Yoğun Sitenin İpuçları
+
+Adres yapısı, tutarlı NAP bilgisi ve şema işaretleri yerel sıralamalarda daha görünür hale gelebilir; global blog ile yerel işletme yüzleri ayrılmışsa çapraz kanonik tuzaklarına dikkat edilir.
+
+## İzlenebilir SEO KPI’leri
+
+CTR, dizin boyutu ve zengin sonuç oranı gibi metrikler haftalık panoda izlenirse “sessiz bozulma” erken fark edilir.
+
+## Video ve Zengin Medya SEO
+
+Thumbnail, süre işaretleri ve transcript varlığı kullanıcı niyeti açısından değerlidir; `VideoObject` şeması kullanılacaksa alanların boş kalması zarardan iyidir.
+
+## Programatik SEO Risk Eşiği
+
+Şablonla üretilmiş çok benzer yüzler arama kalitesinde ters tepki oluşturabilir; içerik farklılaştırma ve kullanıcı değeri filtresi uygulanmalıdır.
+
+## Site İçi Arama ile Organik Örtüşme
+
+İç site araması sık çıkan konularında blog veya dokümana iç bağlantılar üretildiğinde hem kullanıcı hem bot için yol işaretleri güçlenir.
+
+## Erişilebilirlik ile Arama Yakınlığı
+
+Anlamlı başlık hiyerarşisi hem ekran okuyucu hem bot için sinyaldir; görsel bileşeni metin ile desteklememek ikisini birden kaybettirir.
+
+## Mobil Öncelikli Deney
+
+Mobil sıralamalarda karmaşık layout CLS üretmemeli; uyarılar Lighthouse’ta yakalanamazsa bile gerçek cihazlarda incelenmelidir.
+
+## Marka SERP Tutarlılığı
+
+Şirket adı yazımları, snippet açıklamaları ve sosyal kartlar uyumluysa CTR organik olarak iyileşir; dağınık marka kullanımları ise tıklanma iştahını düşürür.
+
+## Teknik Borç olarak Kırık Bağlantı
+
+404 sayılarının yükselmesi hem kullanıcıyı reddeder hem sinyali zayıflatır; düzenli crawler ve dahili lint ile link sağlığı izlenmelidir.
+
+## Uzun Kuyruklu Niyet
+
+Çok uzun başlıklar sığdırma hissini bozar; doğal dil ile anahtar kelime doldurma arasında denge korunmalıdır.
+
+## Görsellerin İndeks Mantığı
+
+Çok hafif içerik görseli bile `alt` eksikse anlam kaybı oluşur; özellik blog galerilerinde açıklayıcı metin arama niyetini destekler.
+
+## Yeniden Yazım ve Yönlendirme Zinciri
+
+Eski URL’lerin 301 ile doğru hedefe tek adımda gitmesi sıralama gücünü daha iyi taşır; zincir uzadıkça güven sinyali dağılır.
+
+## İçerik Takvimi ve Tazelik
+
+Düzensiz yayın sıklığı tek başına ceza oluşturmaz; ancak tamamen güncellenmez “zombie” sayfalar tıklama beklentisini düşürür ve iç bağlantı ağı zayıflatır. Makul bir güncelleme veya konsolidasyon planı kullanıcı ve bot için sinyaldir.
+
+## Schema Drift Kontrolü
+
+Şablon değişikliklerinden sonra yapısal verinin alan eksikleri Rich Results görünürlüğünü düşürür; minimal otomatik JSON-LD alan doğrulaması veya yayın öncesi snapshot diff’i bu riski küçültür.
+
+SEO sürdürülebilir olduğunda arama konsolu uyarıları gürültü değil, öncelikli yapılacaklar listesi haline gelir.
+
+İyi içerik ile teknik sinyaller bir arada yaşadığında görünürlük daha öngörülebilir ve dalgalanması daha yönetilebilir hale gelir.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

@@ -1,6 +1,7 @@
 package com.cms.controller;
 
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
@@ -19,4 +20,6 @@ public interface IAuthController {
 
   RootEntityResponse<DtoAuthResponse> refreshToken(@Valid @RequestBody DtoRefreshToken dtoRefreshToken,
       HttpServletResponse httpResponse);
+
+  RootEntityResponse<Boolean> verifyEmail(@RequestParam String token, @RequestParam String tenantId);
 }

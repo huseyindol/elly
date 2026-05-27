@@ -47,6 +47,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final UserAuthCacheService userAuthCacheService;
 
 
+  @Value("${app.tenants.default-tenant:basedb}")
+  private String defaultTenant;
+
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     return Boolean.TRUE.equals(request.getAttribute(PublicApiFilter.PUBLIC_API_ATTRIBUTE));
@@ -68,9 +71,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     // Authorization header gönderilmişse token MUTLAKA geçerli olmalı
     String jwt = authorizationHeader.substring(7);
     final String username;
+    final String loginSource;
 
     try {
       username = jwtUtil.extractUsername(jwt);
+      loginSource = jwtUtil.extractLoginSource(jwt);
     } catch (Exception e) {
       // Token geçersiz veya decrypt edilemiyor
       // Authorization header gönderilmişse token geçerli olmalı, hata döndür
@@ -86,7 +91,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (cachedUser == null) {
           // Cache'te yok — DB'den al ve cache'e yaz
-          cachedUser = loadUserFromDbAndCache(username);
+          cachedUser = loadUserFromDbAndCache(username, loginSource);
         }
 
         // Token'ı validate et (tokenVersion kontrolü ile)
@@ -149,41 +154,50 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
    * - admin JWT → null → defaultDataSource (basedb)
    * - tenant JWT → tenantId → ilgili tenant DB'si
    */
-  private CachedUserDetails loadUserFromDbAndCache(String username) {
-    User user = userRepository.findByUsername(username)
-        .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
-            "User not found: " + username));
+  private CachedUserDetails loadUserFromDbAndCache(String username, String loginSource) {
+    String originalTenant = TenantContext.getTenantId();
+    try {
+      if ("admin".equals(loginSource)) {
+        TenantContext.setTenantId(defaultTenant);
+      }
+      
+      User user = userRepository.findByUsername(username)
+          .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
+              "User not found: " + username));
 
-    Set<String> authorities = new HashSet<>();
-    if (user.getRoles() != null) {
-      for (Role role : user.getRoles()) {
-        authorities.add("ROLE_" + role.getName());
-        if (role.getPermissions() != null) {
-          for (Permission permission : role.getPermissions()) {
-            authorities.add(permission.getName());
+      Set<String> authorities = new HashSet<>();
+      if (user.getRoles() != null) {
+        for (Role role : user.getRoles()) {
+          authorities.add("ROLE_" + role.getName());
+          if (role.getPermissions() != null) {
+            for (Permission permission : role.getPermissions()) {
+              authorities.add(permission.getName());
+            }
           }
         }
       }
+
+      CachedUserDetails cached = CachedUserDetails.builder()
+          .id(user.getId())
+          .username(user.getUsername())
+          .password(user.getPassword())
+          .email(user.getEmail())
+          .isActive(user.getIsActive())
+          .tokenVersion(user.getTokenVersion())
+          .authorities(authorities)
+          .build();
+
+      try {
+        String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
+        redisTemplate.opsForValue().set(cacheKey, cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+      } catch (Exception e) {
+        log.debug("Redis cache yazılamadı (user: {}): {}", username, e.getMessage());
+      }
+
+      return cached;
+    } finally {
+      TenantContext.setTenantId(originalTenant);
     }
-
-    CachedUserDetails cached = CachedUserDetails.builder()
-        .id(user.getId())
-        .username(user.getUsername())
-        .password(user.getPassword())
-        .email(user.getEmail())
-        .isActive(user.getIsActive())
-        .tokenVersion(user.getTokenVersion())
-        .authorities(authorities)
-        .build();
-
-    try {
-      String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
-      redisTemplate.opsForValue().set(cacheKey, cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
-    } catch (Exception e) {
-      log.debug("Redis cache yazılamadı (user: {}): {}", username, e.getMessage());
-    }
-
-    return cached;
   }
 
   /**

@@ -1,0 +1,129 @@
+---
+title: 'React ve Shadcn UI: Tasarım Sistemleri'
+description: 'Klasik komponent kütüphanelerinin aksine, kodu tamamen bizim sahiplendiğimiz Shadcn UI mimarisi ile ...'
+publishedAt: '2026-04-16'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1561070791-2526d30994b5?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Klasik komponent kütüphanelerinin aksine, kodu tamamen bizim sahiplendiğimiz Shadcn UI mimarisi ile projelerde inanılmaz bir standartlaşma sağladık. Tailwind CSS'in utility first yaklaşımıyla birleştiğinde ortaya premium sonuçlar çıkıyor.
+
+Klasik component kütüphanelerinin (Ant Design, MUI, Chakra UI) en büyük sorunu, kurumsal projelerde ihtiyaç duyulan ince tasarım ayarlarını yapmak için CSS override savaşlarına girmek zorunda kalmanızdır. Elly projesinde bu sorunu derinden yaşadık: MUI'nin DatePicker bileşenini firmamızın tasarım rehberine uydurmak için 200 satır override CSS yazmıştık. Shadcn UI bu zorluğu Headless (Radix) felsefesiyle kökünden çözdü.
+
+Shadcn UI'ın devrimsel farkı, bileşen kodlarının `node_modules` içinde saklı kalması yerine bizzat projenizin `src/components/ui` dizinine kopyalanmasıdır. Bu "copy-paste" yaklaşımı ilk bakışta garip gelse de, pratikte devasa bir esneklik sunuyor: bileşenin her satırı sizin kontrolünüzde, istediğiniz gibi özelleştirebilirsiniz. Tailwind CSS'in utility-first felsefesiyle birleştiğinde, tasarım varyasyonları class-variance-authority (CVA) üzerinden dakikalar içinde tanımlanıyor.
+
+```tsx
+// components/ui/button.tsx — tamamen bizim kontrolümüzde
+import { cva, type VariantProps } from 'class-variance-authority'
+
+const buttonVariants = cva(
+  'inline-flex items-center rounded-lg font-medium transition-colors',
+  {
+    variants: {
+      variant: {
+        default: 'bg-emerald-600 text-white hover:bg-emerald-700',
+        destructive: 'bg-red-600 text-white hover:bg-red-700',
+        outline: 'border border-slate-300 hover:bg-slate-100',
+        ghost: 'hover:bg-slate-100 dark:hover:bg-slate-800',
+      },
+      size: {
+        sm: 'h-8 px-3 text-xs',
+        md: 'h-10 px-4 text-sm',
+        lg: 'h-12 px-6 text-base',
+      },
+    },
+    defaultVariants: { variant: 'default', size: 'md' },
+  },
+)
+```
+
+Radix UI'ın sağladığı accessibility (erişilebilirlik) altyapısı da cabası: Dialog, DropdownMenu, Tabs gibi karmaşık bileşenler keyboard navigation, focus trap ve ARIA etiketleriyle doğuştan uyumlu geliyor. Bizim yapmamız gereken tek şey görsel katmanı (Tailwind sınıfları) eklemek.
+
+Ekip içinde `shadcn add` CLI komutuyla yeni bileşenler saniyeler içinde projeye ekleniyor ve `components.json` konfigürasyon dosyası üzerinden tema renkleri, border-radius değerleri ve CSS değişkenleri merkezi olarak yönetiliyor. Bu yaklaşım sayesinde 4 farklı projede tutarlı bir tasarım dili korurken, her projenin kendine özel ihtiyaçlarını da karşılayabiliyoruz.
+
+## Koyu Mod ve Tema Token’ları
+
+`components.json` ve kök düzeyinde `dark` sınıfı ile CSS değişkenleri güncellenir; Radix primitifleri odak tuzakları ve klavye desteğiyle birlikte geldiğinden görsel tema kadar erişilebilirlik yüzeyi de kontrol altında kalır.
+
+## Composition ve `asChild`
+
+Birden fazla primitive birleştirilirken doğru DOM sırası kritiktir; `asChild` ile tetikleyici–içerik ilişkisini bozmadan özelleştirmek mümkündür — kapalı kutulu kütüphanelerde zor olan desen burada doğaldır.
+
+## Güncelleme Stratejisi
+
+Upstream Shadcn değişiklikleri doğrudan `src/components/ui` dosyalarına yansır; özelleştirme ile gelen iyileştirmeleri bilinçle birleştirmek migration maliyetini düşürür.
+
+## Erişilebilirlik Kontrol Listesi ve E2E
+
+Radix çıplak doğru odak sırasına sahiptir; yine de proje bağlamında E2E testlerinde klavye akışları (örnek: Dialog açıkken Escape, Tabs’ta ok tuşları) otomatikleştirilirse regressions yakalanır. Başlık hiyerarşisi ve canlı bölgeler, tasarımcının verdiği Figma bileşeniyle birebir olsa bile anlamlı olarak korunmalıdır.
+
+## Tasarım Token ile İki Yönlü Senkron
+
+Renk ve tipografi kararları yalnızca Tailwind sınıflarıyla kilitlenmez; tasarımcı araçlarındaki token isimleriyle eşlenebilir `CSS` değişkenleri seçilir ve Shadcn teması bunları tek kaynaktan okur. Bu modelde marka güncellemesi birkaç dakikada yayılır, manuel `#hex` kaçışları azalır ve dark mode yüzü tutarlı kalır.
+
+## Storybook ile Birlikte Dokümantasyon
+
+Kütüphane bileşeni gibi yazılmış Shadcn türevleri Storybook’a taşındığında varyant matrisleri ürün yöneticisine görünür kalır ve PR incelemesinde görsel yüz yüze gelinir; CLI ile eklenen ham dosyanın özelleştirilmiş hâli “canonical” olarak story’lerde doğrulanır.
+
+## Lint ve Tutarlı Sınıflar
+
+`eslint-plugin-tailwindcss` ve prettier ile class sıralaması stabilize edilir; uzun JSX satırlarında okunabilirlik ve görsel diff’leri küçültür. CVA variant isimleri ekip içi sözleşmeyle sınırlanır ki her geliştirici farklı isim uzayı üretmesin.
+
+## Performans Bilinci
+
+Çok fazla radix primitive iç içe geçmiş karmaşık modallar oluşturmak gereksiz ağır olabilir; gerçekten ihtiyaç duyulan primitifle başlamak ve gerektiğinde compose etmek bundle ve etkileşim maliyetini kontrol altında tutar.
+
+## Operasyon ve Destek Süreci
+
+Yeni gelen geliştiriciye “bir bileşen nasıl doğar?” akışının README’de kısa adımlarla yazılması, Slack’te sürekli aynı soruların döngüsünün kırılmasına yardım eder. Versiyon yükseltmesinde özelleştirilmiş dosyanın diff’i upstream ile birleştirilirken özellik işareti olarak yorum blokları kullanmak gelecek migrate’leri hızlandırır.
+
+## Yerelleştirme ve Sağdan Sola Düzen
+
+Metin uzunluğu değişken dillerde buton ve kart yükseklikleri farklı davranır; `dir` ve padding sözleşmesi erken belirlenmezse Shadcn bileşenleri “görsel kusursuz” kalsa da prod’da kırpılmalar görülür. Küçük breakpoint setinde prototip yerine gerçek içerikle test edilmesi kritiktir.
+
+## Görsel Regresyonları Azaltma
+
+Tema değişimi veya küçük Tailwind sınıfı oynamaları birçok yüzeyde aynı anda hissedilir; görsel diff (Chromatic vb.) veya story snapshot’ları küçük tasarım sürgülerinde bile istenmeyen yayılımı yakalar.
+
+## Kıyaslama: Paket Kütüphanesi vs Kod Sahipliği
+
+Kapalı kutulu kütüphanelerde “doğru kullanım dokümantasyonu” okunsa bile derin özelleştirme sınırlı kalır; Shadcn modelinde ise her varyant değişimi gerçek kod diff’inde yaşanır ve code review ile kalite duvarından geçer. Bu sahiplik, özellikle regülasyonlu sektörlerde değişiklik izinin ve denetim izinin tutulmasını kolaylaştırır.
+
+## Onboarding ve Kod Okuma
+
+Yeni üyeler `components/ui` altındaki desenleri iki üç dosyada görünce sistemin geri kalanında aynı yapıyı arar; bu tekrar eden okunabilirlik, ekip ölçeklendikçe değeri artan bir varlıktır. Naming ve dosya yerleşimi standartlaştırıldığında tasarım sistemine katkı yapmak “yeni bir klasör açmaktan” çok “mevcut şablonu kopyalamaya” yaklaşır.
+
+## Form ve Doğrulama Entegrasyonu
+
+React Hook Form ile Radix kontrollerini birleştirirken erişilebilir hata mesajları ve `aria-describedby` bağları korunmalıdır; yalnızca stil odaklı bir form çözümü üretmek kısa vadede hızlı görünse de destek ve erişilebilirlik borcu biriktirir.
+
+## Karanlık Modda Kontrast
+
+`dark` sınıfı ile tema değişince gri tonlar ve border opaklıkları birbirine yapışabilir; tasarım token’larında minimum kontrast eşiği ve odak halkası rengi ayrıca tanımlanır. Bu ince ayarlar Shadcn’in sunduğu iskelet üzerinde markaya özel ciladır.
+
+Paket bağımlılıkları azaldığı için güvenlik güncellemeleri daha küçük yüzeyde uygulanır; yine de Radix ve Tailwind sürümlerinin birlikte yükseltilmesi sırasında küçük uyumsuzluklar için sınır testleri tutulur.
+
+Sonuç olarak Shadcn yaklaşımı yalnızca estetik değildir; sahiplenilen bileşenler, tasarımla birlikte evrilir ve süreç olarak ürünle büyümeye devam eder.
+
+Bileşen kataloğunun “yaşayan” kalması için haftalık küçük temizlikler ve gereksiz varyantların konsolidasyonu, drift’in önüne geçer.
+
+Tasarım–mühendislik ritüeli olarak küçük “UI critique” oturumları, erişilebilirlik gölgelerinin ve gereksiz animasyonların erken yakalanmasını sağlar.
+
+Gerçek projede bir bileşeni iki farklı ekip farklı stillerle kullanmaya başlarsa, merkezi CVA katmanına geri çekilmesi gerektiğinin farkına varmak erken uyarı olarak kabul edilir; aksi takdirde “aynı tasarım dili” sloganı boşa çıkar.
+
+Kılavuz olarak hazırlanan kısa “do/don't” listesi PR şablonuna eklenerek yeni kombinasyonların gözden kaçması zorlaşır.
+
+Özetle Shadcn, kod sahipliğini güzelleştiren pratik bir orta yoldur ve disiplinle birlikte ölçeklenir.
+
+Tutarlılığı review, test ve living guide ile desteklemeden hiçbir bileşen yaklaşımı tek başına mucize üretmez.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

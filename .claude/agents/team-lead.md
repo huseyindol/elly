@@ -13,6 +13,7 @@ Skill'ler `.claude/skills/` altında, her biri bir SKILL.md dosyasıdır. Teamma
 
 | Skill | Konu | Birincil Kullanıcı |
 |-------|------|--------------------|
+| `karpathy-guidelines` | **Davranışsal kurallar** (think, simplicity, surgical, goal) | **tüm agent'lar** |
 | `elly-conventions` | Paket yapısı, katman kuralları | java-architect, code-reviewer |
 | `multitenant-routing` | TenantContext, DataSource | java-architect, security-guard |
 | `spring-security-patterns` | JWT, OAuth2, SecurityConfig | security-guard, java-architect |

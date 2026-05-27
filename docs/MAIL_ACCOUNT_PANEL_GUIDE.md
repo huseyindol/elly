@@ -1,346 +1,272 @@
-# Elly Admin Panel — Mail Hesabı Yönetimi Geliştirme Bağlamı
+# Elly Admin Panel — Mail Hesabı Yönetimi
 
-## Bu Dosya Ne İçin?
-
-Bu dosya `elly-admin-panel` frontend reposunda mail hesabı yönetimi modülünü
-sıfırdan geliştirmek için gereken tüm bağlamı içerir. Backend (`huseyindol/elly`)
-tarafındaki implementasyon tamamlanmıştır; bu repo yalnızca UI katmanıdır.
+**Stack:** Next.js 16 App Router, React 19, TypeScript 5.9, Tailwind CSS 4, shadcn/ui, Bun.
+API çağrıları `fetcher` utility ile yapılır (token otomatik eklenir).
 
 ---
 
-## Backend Özeti (Tamamlandı)
+## API Referansı
 
-**Branch:** `claude/fix-cors-error-cytcY`  
-**Base URL:** `https://api.domain.com/api/v1`
-
-### Neden Bu Geliştirme Yapıldı?
-
-Önceki tasarımda SMTP credentials K8s manifest'te env var olarak tutuluyordu.
-Artık her tenant kendi DB'sinde `mail_accounts` tablosunda birden fazla mail
-hesabı (örn. `info@`, `sales@`, `noreply@`) saklayabilir. Şifreler AES-256-CBC
-ile şifreli tutulur; API response'larda **asla** dönmez.
-
----
-
-## API Endpoint Referansı
-
-### 1. Tüm Hesapları Listele
 ```
-GET /api/v1/mail-accounts
-Authorization: Bearer <token>
-
-Response 200:
-{
-  "result": true,
-  "message": null,
-  "data": [
-    {
-      "id": 1,
-      "name": "Satış Hesabı",
-      "fromAddress": "sales@firma.com",
-      "smtpHost": "smtp.gmail.com",
-      "smtpPort": 587,
-      "smtpUsername": "sales@firma.com",
-      "isDefault": true,
-      "active": true,
-      "createdAt": "2026-04-04T10:00:00.000+00:00",
-      "updatedAt": "2026-04-04T10:00:00.000+00:00"
-    }
-  ]
-}
+GET    /api/v1/mail-accounts                  → Tüm hesaplar
+GET    /api/v1/mail-accounts?tenantId=tenant1 → Belirli tenant'ın hesapları
+GET    /api/v1/mail-accounts/active           → Tüm aktif hesaplar
+GET    /api/v1/mail-accounts/active?tenantId=tenant1 → Tenant'ın aktif hesapları
+GET    /api/v1/mail-accounts/{id}             → Hesap detayı
+POST   /api/v1/mail-accounts                  → Yeni hesap
+PUT    /api/v1/mail-accounts/{id}             → Güncelle
+DELETE /api/v1/mail-accounts/{id}             → Sil
+POST   /api/v1/mail-accounts/{id}/test        → Test maili gönder
+POST   /api/v1/mail-accounts/{id}/verify      → Sadece SMTP bağlantısını doğrula (mail göndermez)
 ```
 
-### 2. Hesap Detayı
-```
-GET /api/v1/mail-accounts/{id}
-Authorization: Bearer <token>
-
-Response 200: { "result": true, "data": { ...DtoMailAccountResponse } }
-```
-
-### 3. Yeni Hesap Ekle
-```
-POST /api/v1/mail-accounts
-Authorization: Bearer <token>
-Content-Type: application/json
-
-Body:
-{
-  "name": "Satış Hesabı",
-  "fromAddress": "sales@firma.com",
-  "smtpHost": "smtp.gmail.com",
-  "smtpPort": 587,
-  "smtpUsername": "sales@firma.com",
-  "smtpPassword": "gmail-app-password-16-char",
-  "isDefault": false,
-  "active": true
-}
-
-Validasyonlar:
-- name: zorunlu, boş olamaz
-- fromAddress: zorunlu, geçerli email formatı
-- smtpHost: zorunlu
-- smtpPort: zorunlu, 1-65535 aralığı
-- smtpUsername: zorunlu
-- smtpPassword: OLUŞTURURKEN zorunlu
-
-Response 201: { "result": true, "data": { ...DtoMailAccountResponse } }
-```
-
-### 4. Hesap Güncelle
-```
-PUT /api/v1/mail-accounts/{id}
-Authorization: Bearer <token>
-Content-Type: application/json
-
-Body: (POST ile aynı yapı)
-Not: smtpPassword boş bırakılırsa mevcut şifre korunur.
-
-Response 200: { "result": true, "data": { ...DtoMailAccountResponse } }
-```
-
-### 5. Hesap Sil
-```
-DELETE /api/v1/mail-accounts/{id}
-Authorization: Bearer <token>
-
-Response 200: { "result": true, "data": true }
-```
-
-### 6. Varsayılan Yap
-```
-PUT /api/v1/mail-accounts/{id}/default
-Authorization: Bearer <token>
-
-Response 200: { "result": true, "data": { ...DtoMailAccountResponse (isDefault: true) } }
-Hata: Pasif hesap varsayılan yapılamaz → 400 Bad Request
-```
-
-### 7. SMTP Bağlantı Testi (Gerçek Mail Gönderir)
-```
-POST /api/v1/mail-accounts/{id}/test
-Authorization: Bearer <token>
-Content-Type: application/json
-
-Body:
-{
-  "testTo": "admin@firma.com"
-}
-
-Response 200: { "result": true, "data": "Test maili başarıyla gönderildi → admin@firma.com" }
-Hata 400: { "result": false, "message": "SMTP bağlantısı başarısız [smtp.gmail.com:587]: ..." }
-```
-
-### 8. Form Tanımı Oluştur/Güncelle (Mevcut endpoint güncellendi)
-```
-POST /api/v1/forms
-PUT  /api/v1/forms/{id}
-Authorization: Bearer <token>
-
-Body'e eklenen yeni alan:
-{
-  ...(mevcut form alanları),
-  "mailAccountId": 2   // null olursa varsayılan hesap kullanılır
-}
-```
-
-### 9. Email Gönder (Mevcut endpoint güncellendi)
-```
-POST /api/v1/emails/send
-Authorization: Bearer <token>
-
-Body'e eklenen yeni alan:
-{
-  "to": "...",
-  "subject": "...",
-  "templateName": "...",
-  "dynamicData": {},
-  "mailAccountId": 2   // null olursa varsayılan hesap kullanılır
-}
-```
+**Yetki:** `mail:create`, `mail:read`, `mail:update`, `mail:delete`
 
 ---
 
 ## DTO Yapıları
 
-### DtoMailAccountResponse (API'den gelen)
+### DtoMailAccountResponse
 ```typescript
-interface MailAccount {
+interface MailAccountResponse {
   id: number
   name: string
   fromAddress: string
   smtpHost: string
   smtpPort: number
   smtpUsername: string
-  isDefault: boolean
   active: boolean
+  tenantId: string | null   // hangi tenant'a ait
+  isPrimary: boolean        // tenant'ın ana gönderim hesabı
   createdAt: string
   updatedAt: string
   // smtpPassword: ASLA DÖNMEZ
 }
 ```
 
-### DtoMailAccountRequest (API'ye gönderilen)
+### DtoMailAccountRequest (POST/PUT body)
 ```typescript
 interface MailAccountRequest {
   name: string              // zorunlu
-  fromAddress: string       // zorunlu, email format
-  smtpHost: string          // zorunlu
-  smtpPort: number          // zorunlu, 1-65535
+  fromAddress: string       // zorunlu, email formatında
+  smtpHost: string          // zorunlu (ör. smtp.gmail.com)
+  smtpPort: number          // zorunlu, 1-65535 (587=STARTTLS, 465=SSL)
   smtpUsername: string      // zorunlu
-  smtpPassword?: string     // oluştururken zorunlu, güncellerken opsiyonel
-  isDefault?: boolean       // default: false
-  active?: boolean          // default: true
+  smtpPassword?: string     // oluştururken zorunlu; güncellerken boş bırakılırsa mevcut şifre korunur
+  active?: boolean          // varsayılan: true
+  tenantId?: string         // ör. "tenant1", "tenant2"
+  isPrimary?: boolean       // varsayılan: false; true yapılınca aynı tenant'ın eskisi otomatik false olur
+}
+```
+
+**Response wrapper:** `{ result: boolean, message?: string, data: T }`
+
+---
+
+## isPrimary Davranışı
+
+- Her tenant için **en fazla bir** hesap `isPrimary: true` olabilir.
+- Yeni bir hesap `isPrimary: true` ile oluşturulunca ya da güncellenince,
+  aynı `tenantId`'ye sahip önceki primary hesap otomatik olarak `false` yapılır.
+- Ayrı bir "varsayılan yap" endpoint'i **yoktur** — create/update sırasında `isPrimary` set edilir.
+- Sistem e-postaları (kayıt doğrulama vb.) `isPrimary=true` olan hesaptan gönderilir.
+
+---
+
+## 1. Servis Fonksiyonları
+
+`src/app/_services/mail-account.services.ts` (mevcut servisi güncelle veya oluştur):
+
+```typescript
+import { fetcher } from '@/utils/services/fetcher'
+
+interface BaseResponse<T> {
+  result: boolean
+  message?: string
+  data: T
+}
+
+export interface MailAccountResponse {
+  id: number
+  name: string
+  fromAddress: string
+  smtpHost: string
+  smtpPort: number
+  smtpUsername: string
+  active: boolean
+  tenantId: string | null
+  isPrimary: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MailAccountRequest {
+  name: string
+  fromAddress: string
+  smtpHost: string
+  smtpPort: number
+  smtpUsername: string
+  smtpPassword?: string
+  active?: boolean
+  tenantId?: string
+  isPrimary?: boolean
+}
+
+export const getMailAccountsService = async (tenantId?: string): Promise<MailAccountResponse[]> => {
+  const params = tenantId ? `?tenantId=${tenantId}` : ''
+  const res = await fetcher<BaseResponse<MailAccountResponse[]>>(`/api/v1/mail-accounts${params}`)
+  if (!res.result) throw new Error(res.message ?? 'Yüklenemedi')
+  return res.data
+}
+
+export const getMailAccountService = async (id: number): Promise<MailAccountResponse> => {
+  const res = await fetcher<BaseResponse<MailAccountResponse>>(`/api/v1/mail-accounts/${id}`)
+  if (!res.result) throw new Error(res.message ?? 'Yüklenemedi')
+  return res.data
+}
+
+export const createMailAccountService = async (data: MailAccountRequest): Promise<MailAccountResponse> => {
+  const res = await fetcher<BaseResponse<MailAccountResponse>>('/api/v1/mail-accounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.result) throw new Error(res.message ?? 'Oluşturulamadı')
+  return res.data
+}
+
+export const updateMailAccountService = async (id: number, data: MailAccountRequest): Promise<MailAccountResponse> => {
+  const res = await fetcher<BaseResponse<MailAccountResponse>>(`/api/v1/mail-accounts/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.result) throw new Error(res.message ?? 'Güncellenemedi')
+  return res.data
+}
+
+export const deleteMailAccountService = async (id: number): Promise<void> => {
+  const res = await fetcher<BaseResponse<boolean>>(`/api/v1/mail-accounts/${id}`, {
+    method: 'DELETE',
+  })
+  if (!res.result) throw new Error(res.message ?? 'Silinemedi')
+}
+
+export const testMailAccountService = async (id: number, testTo: string): Promise<string> => {
+  const res = await fetcher<BaseResponse<string>>(`/api/v1/mail-accounts/${id}/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ testTo }),
+  })
+  if (!res.result) throw new Error(res.message ?? 'Test başarısız')
+  return res.data
+}
+
+export const verifyMailAccountService = async (id: number): Promise<string> => {
+  const res = await fetcher<BaseResponse<string>>(`/api/v1/mail-accounts/${id}/verify`, {
+    method: 'POST',
+  })
+  if (!res.result) throw new Error(res.message ?? 'Doğrulama başarısız')
+  return res.data
 }
 ```
 
 ---
 
-## Geliştirilmesi Gereken UI Modülü
+## 2. Liste Sayfası
 
-### Sayfalar
+`src/app/(baseLayout)/mail-accounts/page.tsx`:
 
-#### `/mail-accounts` — Hesap Listesi
-- Tüm hesapları kart veya tablo formatında göster
-- Her kart: ad, from adresi, SMTP host:port, varsayılan rozeti, aktif/pasif durumu
-- Eylemler: Düzenle, Sil, Varsayılan Yap, Bağlantı Testi
-- Sağ üst: "Yeni Hesap Ekle" butonu
-- Varsayılan hesap görsel olarak belirtilmeli (rozet, renk vb.)
-- Pasif hesaplar soluk görünmeli, "Varsayılan Yap" butonları devre dışı olmalı
+- Üst toolbar: tenant filtresi (dropdown: Tümü / tenant1 / tenant2), "Yeni Hesap" butonu
+- Hesaplar kart veya tablo formatında listelenir
+- Her satır/kart:
+  - Hesap adı
+  - `fromAddress` (gönderici adresi)
+  - `smtpHost:smtpPort`
+  - **Tenant rozeti** — `tenantId` değeri badge olarak gösterilir (yoksa "Atanmamış")
+  - **Ana Hesap rozeti** — `isPrimary: true` ise yeşil "Ana Hesap" badge'i
+  - Aktif/Pasif durumu
+  - Eylemler: Düzenle | Sil | Test Et | Bağlantı Doğrula
+- `isPrimary: true` olan hesap görsel olarak öne çıkarılmalı (border, rozet)
+- Pasif hesaplar soluklaştırılmalı
 
-#### `/mail-accounts/new` — Yeni Hesap
-- Form alanları: ad, from adresi, SMTP host, port, kullanıcı adı, şifre
-- Şifre alanı: input type="password", göster/gizle toggle
-- "Varsayılan olarak ayarla" checkbox
-- Gmail için yönlendirme notu: "Gmail kullanıyorsanız App Password gereklidir"
-- Kaydet butonu → POST /api/v1/mail-accounts
-
-#### `/mail-accounts/{id}/edit` — Hesap Düzenle
-- Yeni hesap formu ile aynı yapı
-- Şifre alanı boş gelir; "Şifreyi değiştirmek için doldurun" placeholder'ı
-- Mevcut değerler form'a dolu gelir (şifre hariç)
-- Kaydet butonu → PUT /api/v1/mail-accounts/{id}
-
-### Bileşenler
-
-#### `SmtpTestModal`
-- "Bağlantı Testi" butonuna tıklanınca açılır
-- Tek input: test alıcısı email adresi
-- "Test Gönder" butonu → loading state → başarı/hata mesajı
-- Hata mesajında SMTP host:port bilgisi görünür
-
-#### `MailAccountSelect` (Form Editörü'nde kullanılacak)
-- Dropdown/select bileşeni
-- Seçenekler: "Varsayılan (otomatik)" + hesap listesi
-- Her seçenekte: hesap adı + from adresi
-- Form tanımı kaydedilirken `mailAccountId` gönderilir
-
----
-
-## UX Akışları
-
-### Varsayılan Hesap Yönetimi
+**tenant filtresi akışı:**
 ```
-Kullanıcı "Varsayılan Yap" tıklar
-  → Onay dialog: "Bu hesabı varsayılan yapmak istediğinizden emin misiniz?"
-  → PUT /api/v1/mail-accounts/{id}/default
-  → Başarı: listeyi yenile, eski varsayılan rozetini kaldır, yenisine ekle
-  → Hata (pasif hesap): "Pasif hesap varsayılan yapılamaz" toast
-```
-
-### Hesap Silme
-```
-Kullanıcı "Sil" tıklar
-  → Onay dialog: "Bu hesabı silmek istediğinizden emin misiniz?
-                  Bu hesabı kullanan formlar varsayılan hesaba geçecektir."
-  → DELETE /api/v1/mail-accounts/{id}
-  → Başarı: listeden kaldır
-```
-
-### Bağlantı Testi
-```
-Kullanıcı "Test Et" tıklar
-  → SmtpTestModal açılır
-  → Email girer, "Gönder" tıklar
-  → Loading spinner
-  → Başarı: yeşil banner "Test maili gönderildi → test@firma.com"
-  → Hata: kırmızı banner "SMTP bağlantısı başarısız: ..." (backend hata mesajı)
+State: selectedTenantId = ''
+getMailAccountsService(selectedTenantId || undefined)
+tenant dropdown değişince → servis yeniden çağrılır
 ```
 
 ---
 
-## Önemli Güvenlik Notları
+## 3. Hesap Oluşturma / Düzenleme Formu
 
-1. **Şifre asla gösterilmez:** Response'da `smtpPassword` alanı yoktur.
-   Edit formunda şifre alanı her zaman boş başlar.
+Tek bileşen: `MailAccountFormDialog.tsx` (yeni ve düzenleme için ortak dialog).
 
-2. **Şifre maskeleme:** Input `type="password"`, görünürlük toggle opsiyonel.
+**Form alanları:**
 
-3. **Şifre güncelleme:** Kullanıcı şifreyi boş bırakırsa backend mevcut şifreyi korur.
-   Formu kaydederken şifre alanı boşsa request body'den çıkarın veya `null` gönderin.
+| Alan | Tip | Zorunlu | Not |
+|------|-----|---------|-----|
+| Hesap Adı | text | ✓ | |
+| Gönderici Adresi (From) | email | ✓ | From header'da görünür |
+| SMTP Host | text | ✓ | smtp.gmail.com |
+| SMTP Port | number | ✓ | 587 veya 465 |
+| SMTP Kullanıcı Adı | text | ✓ | |
+| SMTP Şifre | password | Oluştururken ✓ | Güncellerken boş = değiştirme |
+| Tenant | select | — | tenant1 / tenant2 / boş |
+| Ana Hesap | switch/checkbox | — | `isPrimary` — tenant başına tek |
+| Aktif | switch | — | |
 
-4. **Gmail App Password:** 16 karakterli, boşluklar olmadan gönderilmeli.
-   UI'da bilgi notu gösterin:
-   > "Gmail kullanıyorsanız normal şifre çalışmaz. Google Hesabı → Güvenlik → Uygulama Şifreleri'nden 16 karakterli şifre oluşturun."
+**isPrimary switch uyarısı:**
+`isPrimary` toggle açılınca küçük bir uyarı göster:
+> "Bu tenant'ın mevcut ana hesabı varsa otomatik olarak değiştirilecek."
 
----
+**Şifre alanı placeholder:**
+- Yeni: "SMTP şifrenizi girin"
+- Düzenleme: "Değiştirmek için yeni şifre girin (boş bırakırsanız mevcut şifre korunur)"
 
-## Form Editörü Entegrasyonu
-
-Form oluşturma/düzenleme ekranında mail hesabı seçimi:
-
-```
-Form Ayarları bölümüne eklenecek alan:
-┌─────────────────────────────────────────┐
-│ Mail Hesabı                             │
-│ ┌─────────────────────────────────────┐ │
-│ │ ✉ Varsayılan (otomatik)         ▼  │ │
-│ └─────────────────────────────────────┘ │
-│ Seçilmezse varsayılan hesap kullanılır  │
-└─────────────────────────────────────────┘
-```
-
-Seçenek listesi `/api/v1/mail-accounts` → yalnızca `active: true` olanlar.
+**Kaydet sonrası:** Listeyi yenile, `isPrimary` değiştiyse diğer kartların rozetini güncelle.
 
 ---
 
-## Backend Hata Kodları
+## 4. Test Modalı
 
-| HTTP | Durum | Sebep |
-|------|-------|-------|
-| 400  | Bad Request | Validasyon hatası, pasif hesabı varsayılan yapma girişimi |
-| 400  | Bad Request | SMTP bağlantı testi başarısız (hata mesajı döner) |
-| 404  | Not Found | Hesap bulunamadı |
-| 404  | Not Found | Varsayılan hesap tanımlanmamış (EmailQueueService) |
-| 409  | Conflict | Veri bütünlüğü ihlali |
+`SmtpTestModal.tsx`:
 
-Genel response yapısı:
-```json
-{
-  "result": false,
-  "message": "Hata açıklaması",
-  "data": null
-}
+```typescript
+// Açılınca:
+// - testTo: string input (email)
+// - "Test Gönder" → POST /api/v1/mail-accounts/{id}/test
+// - Başarı: "Test maili gönderildi → {testTo}" (yeşil)
+// - Hata: backend'den gelen message (kırmızı)
 ```
 
 ---
 
-## Geliştirme Öncelik Sırası
+## 5. Doğrulama Kriterleri
 
-1. **Mail Hesabı Listesi** `/mail-accounts` — temel CRUD
-2. **Yeni/Düzenle formu** — şifre yönetimi dahil
-3. **Bağlantı testi modalı** — SmtpTestModal
-4. **Form editörü entegrasyonu** — MailAccountSelect dropdown
-5. **Email gönderme ekranı** — varsa mailAccountId seçimi
+1. Liste yüklenince hesaplar görünür; tenant filtresi çalışır
+2. `isPrimary: true` olan hesap "Ana Hesap" rozetiyle belirtilir
+3. Yeni hesap `isPrimary: true` oluşturulunca aynı tenant'ın eski ana hesabının rozeti kalkar (liste yenilenir)
+4. Düzenleme formunda şifre boş bırakılınca mevcut şifre korunur
+5. Test modalından mail gönderilir, başarı/hata mesajı gösterilir
+6. `bun dev` veya `bun run build` TypeScript hatası yok
 
 ---
 
-## Backend Repo
+## Güvenlik Notları
 
-- **Repo:** `huseyindol/elly`
-- **Branch:** `claude/fix-cors-error-cytcY`
-- **İlgili dosyalar:**
-  - `src/main/java/com/cms/entity/MailAccount.java`
-  - `src/main/java/com/cms/controller/impl/MailAccountController.java`
-  - `src/main/java/com/cms/service/impl/MailAccountService.java`
-  - `src/main/resources/db-migration-mail-accounts.sql`
+- `smtpPassword` response'da **hiçbir zaman dönmez** — edit formunda boş başlar
+- Gmail için App Password gereklidir (16 karakter, boşluksuz)
+  > "Google Hesabı → Güvenlik → 2 Adımlı Doğrulama → Uygulama Şifreleri"
+- `isPrimary` flag server-side enforced — frontend'de ek doğrulama gerekmez
+
+---
+
+## Backend Referans
+
+- **Repo:** `huseyindol/elly` — `main` branch
+- `src/main/java/com/cms/entity/MailAccount.java`
+- `src/main/java/com/cms/controller/impl/MailAccountController.java`
+- `src/main/java/com/cms/service/impl/MailAccountService.java`
+- Migration: `src/main/resources/migration/db-migration-mail-accounts-tenantid.sql` (**tüm DB'lerde** çalıştır: basedb, tenant1, tenant2)

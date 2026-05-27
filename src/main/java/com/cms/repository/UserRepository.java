@@ -22,6 +22,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
   Optional<User> findByEmailAndProvider(String email, String provider);
 
+  Optional<User> findByEmailVerificationToken(String token);
+
   // Login optimizasyonu: Sadece token_version ve updated_at güncelle
   @Modifying
   @Query("UPDATE User u SET u.tokenVersion = :tokenVersion, u.updatedAt = CURRENT_TIMESTAMP WHERE u.id = :userId")

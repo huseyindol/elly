@@ -1,0 +1,441 @@
+---
+title: 'Spring Boot Projesini Multi-Tenant Sisteme Taşımak: AbstractRoutingDataSource'
+description: 'Elly CMS projesini tek veritabanından multi-tenant mimariye geçirme süreci: AbstractRoutingDataSource, TenantContext, JWT claim routing ve merkezi basedb auth tasarımı.'
+publishedAt: '2026-04-16'
+category: 'Backend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2000&auto=format&fit=crop'
+readingTime: '12'
+order: 1
+---
+
+Elly CMS projesinde en büyük mimari dönüşüm, Mart 2026'da gerçekleşti: tek PostgreSQL veritabanından **üç bağımsız veritabanına** sahip tam bir multi-tenant sisteme geçiş. Commit `6a7dd9d`'de +806, -65 satır değişiklik — tek seferde gelen bu büyük refactor, projenin en zorlu ve en öğretici adımıydı.
+
+Bu makale o geçişi adım adım anlataıyor: neyin değiştiğini, neden değiştiğini ve AbstractRoutingDataSource'un nasıl çalıştığını gerçek kod örnekleriyle aktarıyor.
+
+## Neden Multi-Tenant?
+
+Başlangıçta Elly tek bir PostgreSQL örneğine sahipti. Tüm veriler — sayfalar, bileşenler, kullanıcılar, banner'lar — aynı schema'da yaşıyordu. Bu yaklaşımın sınırı şuydu: farklı müşterilerin (tenant'ların) verilerini birbirinden izole etmek için ya row-level security ya da ayrı database stratejisi gerekiyordu.
+
+Elly'nin seçimi: **Database-per-Tenant** — her tenant kendi PostgreSQL instance'ına sahip.
+
+| Strateji                   | İzolasyon | Kaynak Kullanımı | Karmaşıklık |
+| -------------------------- | --------- | ---------------- | ----------- |
+| Tek DB, shared schema      | Düşük     | Düşük            | Düşük       |
+| Tek DB, ayrı schema        | Orta      | Orta             | Orta        |
+| Database-per-Tenant ← Elly | Yüksek    | Yüksek           | Yüksek      |
+
+Seçim yüksek izolasyon gerektiren kurumsal kullanım için yapıldı. Bununla birlikte Java katmanında `AbstractRoutingDataSource` sayesinde uygulama kodu tenant'ları fark etmez.
+
+## Mimari Genel Bakış
+
+```
+HTTP Request
+    │
+    ▼
+JwtTenantFilter
+    │ JWT → tenantId claim → ThreadLocal
+    ▼
+TenantContext (ThreadLocal<String>)
+    │
+    ▼
+TenantRoutingDataSource (AbstractRoutingDataSource)
+    │ determineCurrentLookupKey() → tenantId
+    ▼
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│  tenant1 DB │  │  tenant2 DB │  │  basedb     │
+│  (port 5433)│  │  (port 5434)│  │  (auth DB)  │
+└─────────────┘  └─────────────┘  └─────────────┘
+```
+
+Üç veritabanı rolü:
+
+- **tenant1, tenant2**: CMS içerikleri (sayfalar, bileşenler, banner'lar, widget'lar, postlar)
+- **basedb**: Kullanıcılar ve kimlik doğrulama verileri — tüm tenant'larda ortak
+
+## Adım 1: TenantContext — ThreadLocal ile Tenant Kimliği
+
+Multi-tenant routing'in omurgası `ThreadLocal`. Her HTTP thread kendi tenant kimliğini taşır, başkalarının thread'ini etkilemez.
+
+```java
+public class TenantContext {
+    private static final ThreadLocal<String> CURRENT_TENANT =
+        ThreadLocal.withInitial(() -> null);
+
+    public static void setTenantId(String tenantId) {
+        CURRENT_TENANT.set(tenantId);
+    }
+
+    public static String getTenantId() {
+        return CURRENT_TENANT.get();
+    }
+
+    public static void clear() {
+        CURRENT_TENANT.remove(); // ← Memory leak önleme
+    }
+}
+```
+
+> **ThreadLocal memory leak:** `ThreadLocal.remove()` çağrılmazsa thread pool'daki thread'ler tenant bilgisini bir sonraki request'e sızdırır. Filter'ın `finally` bloğu bu yüzden kritiktir.
+
+## Adım 2: TenantRoutingDataSource — AbstractRoutingDataSource
+
+Spring'in `AbstractRoutingDataSource`, her veritabanı çağrısından önce `determineCurrentLookupKey()` metodunu çağırır. Bu metot hangi DataSource'un kullanılacağına karar verir.
+
+```java
+public class TenantRoutingDataSource extends AbstractRoutingDataSource {
+
+    @Override
+    protected Object determineCurrentLookupKey() {
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId == null) {
+            return "basedb"; // Default: auth veritabanı
+        }
+        return tenantId;
+    }
+}
+```
+
+DataSource'ların kayıt edilmesi:
+
+```java
+@Configuration
+public class DataSourceConfig {
+
+    @Bean
+    @Primary
+    public DataSource dataSource() {
+        Map<Object, Object> targetDataSources = new HashMap<>();
+
+        targetDataSources.put("tenant1", buildDataSource(
+            "postgres-tenant1", "5432", "elly_tenant1"
+        ));
+        targetDataSources.put("tenant2", buildDataSource(
+            "postgres-tenant2", "5432", "elly_tenant2"
+        ));
+        targetDataSources.put("basedb", buildDataSource(
+            "postgres-basedb", "5432", "elly_basedb"
+        ));
+
+        TenantRoutingDataSource routingDataSource = new TenantRoutingDataSource();
+        routingDataSource.setTargetDataSources(targetDataSources);
+        routingDataSource.setDefaultTargetDataSource(targetDataSources.get("basedb"));
+        return routingDataSource;
+    }
+
+    private DataSource buildDataSource(String host, String port, String dbName) {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(String.format("jdbc:postgresql://%s:%s/%s", host, port, dbName));
+        config.setUsername(System.getenv("DB_USERNAME"));
+        config.setPassword(System.getenv("DB_PASSWORD"));
+        config.setMaximumPoolSize(10);
+        config.setMinimumIdle(2);
+        config.setConnectionTimeout(30_000);
+        return new HikariDataSource(config);
+    }
+}
+```
+
+Her tenant için ayrı `HikariCP` pool: `maximumPoolSize: 10`, `minimumIdle: 2`. Elly'de yük tahminine göre bu değerler Kubernetes ConfigMap üzerinden override edilebilir.
+
+## Adım 3: JwtTenantFilter — JWT'den Tenant Routing'e
+
+Her HTTP isteğinde JWT'nin `tenantId` claim'i okunur ve `TenantContext`'e yazılır.
+
+```java
+@Component
+@Order(1)
+public class JwtTenantFilter extends OncePerRequestFilter {
+
+    private final JwtUtil jwtUtil;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain chain) throws IOException, ServletException {
+        try {
+            String token = extractBearerToken(request);
+            if (token != null && jwtUtil.isTokenValid(token)) {
+                String tenantId = jwtUtil.extractTenantId(token);
+                TenantContext.setTenantId(tenantId); // ← ThreadLocal'a yaz
+            }
+            chain.doFilter(request, response);
+        } finally {
+            TenantContext.clear(); // ← Mutlaka temizle
+        }
+    }
+
+    private String extractBearerToken(HttpServletRequest request) {
+        String header = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (header != null && header.startsWith("Bearer ")) {
+            return header.substring(7);
+        }
+        return null;
+    }
+}
+```
+
+Filter sırası önemli: `@Order(1)` ile Spring Security'den önce çalışması sağlanır; böylece Security filter'ları doğru DataSource'u kullanır.
+
+## Adım 4: JPA Schema Konfigürasyonu
+
+Her tenant'ın veritabanı `public` schema'sı kullanır. JPA config bu bilgiyi dinamik olarak ayarlar:
+
+```java
+@Configuration
+public class JpaConfig {
+
+    @Bean
+    public LocalContainerEntityManagerFactoryBean entityManagerFactory(
+            DataSource dataSource,
+            JpaVendorAdapter jpaVendorAdapter) {
+
+        LocalContainerEntityManagerFactoryBean em =
+            new LocalContainerEntityManagerFactoryBean();
+        em.setDataSource(dataSource);
+        em.setPackagesToScan("com.cms.entity");
+        em.setJpaVendorAdapter(jpaVendorAdapter);
+
+        Properties jpaProperties = new Properties();
+        jpaProperties.put("hibernate.default_schema", "public");
+        jpaProperties.put("hibernate.hbm2ddl.auto", "none"); // Migration Flyway ile
+        jpaProperties.put("hibernate.show_sql", "false");
+        em.setJpaProperties(jpaProperties);
+
+        return em;
+    }
+}
+```
+
+`hibernate.default_schema=public` kritik: `refresh_tokens` tablosu gibi native query'lerde schema prefix yazılmıyorsa bu default devreye girer.
+
+> **Gerçek hata:** Commit `b943d21`'de `refresh_tokens` tablosunun native insert query'sinde schema prefix vardı: `"public.refresh_tokens"`. AbstractRoutingDataSource ile birlikte bu prefix gereksizdi ve basedb'de çakışıyordu. Düzeltme: schema prefix kaldırıldı.
+
+## Adım 5: BaseDB — Merkezi Kimlik Doğrulama
+
+Multi-tenant sistemin en zor sorusu şuydu: **Kullanıcılar hangi veritabanında yaşayacak?**
+
+İlk yaklaşım kullanıcıları tenant veritabanlarına koymaktı. Ama bu şu problemi yaratıyordu: kullanıcı giriş yaparken hangi tenant'ta olduğunu henüz bilmiyoruz. Token yoksa tenant yok, tenant yoksa veritabanı yok.
+
+Çözüm: **basedb** — bütün tenant'larda ortak olan merkezi kimlik doğrulama veritabanı.
+
+```
+basedb
+├── users             ← Tüm tenant kullanıcıları
+├── refresh_tokens    ← JWT refresh token'lar
+└── user_tenants      ← Kullanıcı-tenant ilişkisi (hangi user hangi tenant'a erişebilir)
+
+tenant1
+├── pages
+├── components
+├── widgets
+└── posts
+
+tenant2
+├── pages
+├── components
+└── ...
+```
+
+### Login Akışı
+
+```java
+@Service
+public class AuthService {
+
+    public AuthResponse login(LoginRequest request) {
+        // 1. Tenant bağlamını basedb'ye geçici olarak ayarla
+        TenantContext.setTenantId("basedb");
+
+        try {
+            // 2. Kullanıcıyı basedb'den bul
+            User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AuthException("Kullanıcı bulunamadı"));
+
+            // 3. Şifre doğrula
+            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                throw new AuthException("Geçersiz şifre");
+            }
+
+            // 4. Kullanıcının erişebildiği tenant'ları al
+            List<String> managedTenants = user.getManagedTenants();
+
+            // 5. Her tenant için ayrı token üret
+            Map<String, String> tenantTokens = new HashMap<>();
+            for (String tenantId : managedTenants) {
+                String tenantToken = jwtUtil.generateTenantToken(tenantId);
+                tenantTokens.put(tenantId, tenantToken);
+            }
+
+            // 6. Ana access token'ı basedb context'inde üret
+            String accessToken = jwtUtil.generateToken(
+                user.getId(), "basedb", LoginSource.WEB.name(), user.getTokenVersion()
+            );
+
+            return AuthResponse.builder()
+                .accessToken(accessToken)
+                .tenantTokens(tenantTokens) // ← Her tenant için ayrı token
+                .managedTenants(managedTenants)
+                .build();
+
+        } finally {
+            TenantContext.clear(); // ← Bağlamı temizle
+        }
+    }
+}
+```
+
+### Token-Based Tenant Switching
+
+Kullanıcı bir tenant'taki içeriklere erişmek istediğinde tenant token'ını gönderir. API bu token'ı doğrular ve `TenantContext`'i günceller:
+
+```java
+// Tenant-specific resource endpoint
+@GetMapping("/api/pages")
+public ResponseEntity<List<PageDto>> getPages(
+        @RequestHeader("X-Tenant-Token") String tenantToken) {
+
+    String tenantId = jwtUtil.extractTenantIdFromTenantToken(tenantToken);
+    TenantContext.setTenantId(tenantId); // Bu tenant'ın DB'sine yönlendir
+
+    try {
+        return ResponseEntity.ok(pageService.getAllPages());
+    } finally {
+        TenantContext.clear();
+    }
+}
+```
+
+## Adım 6: Docker Compose — Yerel Geliştirme Ortamı
+
+Üç ayrı PostgreSQL instance'ı:
+
+```yaml
+services:
+  postgres-tenant1:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: elly_tenant1
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - '5433:5432'
+    volumes:
+      - tenant1_data:/var/lib/postgresql/data
+
+  postgres-tenant2:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: elly_tenant2
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - '5434:5432'
+    volumes:
+      - tenant2_data:/var/lib/postgresql/data
+
+  postgres-basedb:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: elly_basedb
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - '5435:5432'
+    volumes:
+      - basedb_data:/var/lib/postgresql/data
+
+volumes:
+  tenant1_data:
+  tenant2_data:
+  basedb_data:
+```
+
+`spring-boot-docker-compose` dependency'si sayesinde Spring Boot, `compose.yaml` dosyasını otomatik algılar ve tüm servisleri uygulama başlangıcında başlatır.
+
+## Adım 7: Kubernetes StatefulSet
+
+Production'da her PostgreSQL instance bir `StatefulSet`'tir. Persistent volume claim ile veri kalıcılığı sağlanır:
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-basedb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-basedb
+  template:
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '250m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: elly-config
+                  key: BASEDB_NAME
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 8Gi
+```
+
+Tenant1 ve tenant2 için aynı manifest, sadece isim ve ConfigMap key'leri değişir.
+
+## Geçişin Zorluğu: N+1 DataSource Problemi
+
+AbstractRoutingDataSource ile çalışırken en sık karşılaşılan sorun: JPA'nın `EntityManagerFactory`'sini oluştururken DataSource henüz "hangi tenant" sorusuna cevap veremez — initialization sırasında tenant context yoktur.
+
+Çözüm: `LazyConnectionDataSourceProxy` ile sarmalama.
+
+```java
+@Bean
+@Primary
+public DataSource dataSource() {
+    TenantRoutingDataSource routingDataSource = new TenantRoutingDataSource();
+    routingDataSource.setTargetDataSources(buildTargetDataSources());
+    routingDataSource.setDefaultTargetDataSource(baseDataSource());
+    routingDataSource.afterPropertiesSet();
+
+    // LazyConnectionDataSourceProxy: gerçek bağlantıyı ilk SQL çalıştırılana kadar erteler
+    return new LazyConnectionDataSourceProxy(routingDataSource);
+}
+```
+
+`LazyConnectionDataSourceProxy` ile bağlantı, `determineCurrentLookupKey()` çağrıldığı anda — yani ilk veritabanı operasyonu başladığında — açılır. Bu noktada `TenantContext` zaten dolu olduğu için doğru DataSource seçilir.
+
+## Özet: Geçişten Çıkan Dersler
+
+Elly projesini multi-tenant sisteme taşırken öğrenilenler:
+
+1. **ThreadLocal temizliği zorunludur** — `finally` bloğu atlanırsa thread pool kirlenebilir
+2. **LazyConnectionDataSourceProxy** — `AbstractRoutingDataSource` ile JPA birlikte kullanılıyorsa şart
+3. **basedb** — Kullanıcı kimlik doğrulaması için ayrı bir veritabanı, tenant seçiminden önce gelir
+4. **Native query schema prefix** — `public.table_name` formatı routing ile çakışır, kaldırılmalı
+5. **Token-per-tenant** — Kullanıcıya tenant sayısı kadar ayrı token verilmesi authorization'ı netleştirir
+
+Bu mimari değişiklik tek bir commit'te geldi ama ardından küçük düzeltmeler takip etti: schema prefix sorunu, basedb servis tanımı, Kubernetes port konfigürasyonu. Büyük refactor'lar nadiren tek seferde mükemmel olur — önemli olan doğru temel prensipleri erkenden oturtmak.
+
+---
+
+## Önerilen Kaynaklar
+
+- [Spring AbstractRoutingDataSource Javadoc](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/lookup/AbstractRoutingDataSource.html)
+- [Baeldung: Spring Boot Multi-Tenancy with AbstractRoutingDataSource](https://www.baeldung.com/spring-abstract-routing-data-source)
+- [Hibernate Multi-Tenancy Guide](https://docs.jboss.org/hibernate/orm/current/userguide/html_single/Hibernate_User_Guide.html#multitenancy)
+- [HikariCP konfigürasyon dokümantasyonu](https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby)

@@ -57,11 +57,11 @@ Tanim dosyasi: `.claude/agents/<isim>.md`
 
 | Agent | Dosya | Kisa rol | Ilgili Skill'ler |
 |-------|--------|----------|------------------|
-| `team-lead` | [`team-lead.md`](./.claude/agents/team-lead.md) | Orchestrator, gorev dagitimi | elly-project-mastery, dev-session-tracker |
-| `java-architect` | [`java-architect.md`](./.claude/agents/java-architect.md) | Spring / JPA / multi-tenant mimari | elly-conventions, multitenant-routing, redis-cache-patterns, rabbitmq-patterns, error-handling-patterns, spring-security-patterns |
-| `code-reviewer` | [`code-reviewer.md`](./.claude/agents/code-reviewer.md) | Pattern, kalite, PR review | elly-conventions, redis-cache-patterns, error-handling-patterns, multitenant-routing |
-| `devops-engineer` | [`devops-engineer.md`](./.claude/agents/devops-engineer.md) | K8s, Docker, CI/CD, monitoring | elly-project-mastery, rabbitmq-patterns |
-| `security-guard` | [`security-guard.md`](./.claude/agents/security-guard.md) | JWT, OAuth2, tenant izolasyonu | spring-security-patterns, multitenant-routing, error-handling-patterns |
+| `team-lead` | [`team-lead.md`](./.claude/agents/team-lead.md) | Orchestrator, gorev dagitimi | **karpathy-guidelines**, elly-project-mastery, dev-session-tracker |
+| `java-architect` | [`java-architect.md`](./.claude/agents/java-architect.md) | Spring / JPA / multi-tenant mimari | **karpathy-guidelines**, elly-conventions, multitenant-routing, redis-cache-patterns, rabbitmq-patterns, error-handling-patterns, spring-security-patterns |
+| `code-reviewer` | [`code-reviewer.md`](./.claude/agents/code-reviewer.md) | Pattern, kalite, PR review | **karpathy-guidelines**, elly-conventions, redis-cache-patterns, error-handling-patterns, multitenant-routing |
+| `devops-engineer` | [`devops-engineer.md`](./.claude/agents/devops-engineer.md) | K8s, Docker, CI/CD, monitoring | **karpathy-guidelines**, elly-project-mastery, rabbitmq-patterns |
+| `security-guard` | [`security-guard.md`](./.claude/agents/security-guard.md) | JWT, OAuth2, tenant izolasyonu | **karpathy-guidelines**, spring-security-patterns, multitenant-routing, error-handling-patterns |
 
 Cursor'da ornek kullanim: *"`.claude/agents/java-architect.md` rolundeki gibi davran; su entity tasarimini oner."*
 
@@ -78,18 +78,23 @@ Her biri `SKILL.md` icinde: `.claude/skills/<skill-adi>/SKILL.md`
 | `redis-cache-patterns` | Cache key, TTL, invalidation, fallback | Cache ekleme/sorun giderme |
 | `rabbitmq-patterns` | Queue/exchange, consumer, retry/DLQ | Yeni queue, consumer, mesaj akisi |
 | `error-handling-patterns` | BaseException, GlobalExceptionHandler | Yeni exception, error response |
+| `chat-patterns` | WebSocket+STOMP, visibilityLevel, davet hiyerarsisi, topic semasi, chat tablo routing | Chat endpoint/topic ekleme, mesaj akisi debug |
+| `mail-smoke-test` | DB-based SMTP, RabbitMQ akisi dogrulama playbook'u | Mail gonderim sorunlari, smoke test |
 | `dev-session-tracker` | Uzun gorevlerde ilerleme notlari | "Devam et", "nerede kaldik" |
 | `karpathy-guidelines` | LLM kodlama tuzaklarini azaltan davranissal kurallar (think-before-coding, simplicity, surgical, goal-driven) | Her kod yazma/review/refactor gorevinde |
 
 ### Skill -> Agent Besleme Haritasi
 
 ```
+karpathy-guidelines ──── ★ tum agent'lar (cross-cutting davranissal)
 elly-conventions ──────── java-architect, code-reviewer
 multitenant-routing ───── java-architect, security-guard, code-reviewer
 spring-security-patterns  security-guard, java-architect
 redis-cache-patterns ──── java-architect, code-reviewer
 rabbitmq-patterns ─────── java-architect, devops-engineer
 error-handling-patterns ── java-architect, code-reviewer, security-guard
+chat-patterns ──────────── java-architect, code-reviewer, security-guard
+mail-smoke-test ────────── devops-engineer, java-architect
 elly-project-mastery ──── team-lead, devops-engineer
 dev-session-tracker ───── team-lead
 ```
@@ -104,6 +109,7 @@ Gercek dosyalar: `.claude/commands/*.md` — tam metin orada.
 | `cache-audit.md` | Redis cache denetimi | redis-cache-patterns |
 | `security-review.md` | Dosya/paket guvenlik incelemesi | spring-security-patterns |
 | `add-tenant.md` | Yeni tenant icin degisiklik listesi | multitenant-routing |
+| `add-permission.md` | Yeni permission ekleme (PermissionConstants + DataInitializer + @PreAuthorize) | elly-conventions |
 | `db-migration.md` | SQL migrasyon olusturma / gozden gecirme | — |
 | `k8s-deploy.md` | K8s durum analizi ve teshis | — |
 

@@ -5,7 +5,8 @@ description: Java / Spring mimari persona — Cursor ve genel agent’lar için 
 # Workflow: Java Architect
 
 **Kanonik tanım:** [`.claude/agents/java-architect.md`](../../.claude/agents/java-architect.md)  
-**İlgili skill:** [`.claude/skills/elly-conventions/SKILL.md`](../../.claude/skills/elly-conventions/SKILL.md)
+**İlgili skill:** [`.claude/skills/elly-conventions/SKILL.md`](../../.claude/skills/elly-conventions/SKILL.md)  
+**Davranışsal kurallar:** [`.claude/skills/karpathy-guidelines/SKILL.md`](../../.claude/skills/karpathy-guidelines/SKILL.md)
 
 ## Ne zaman kullan
 

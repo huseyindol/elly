@@ -1,0 +1,207 @@
+---
+title: 'Kubernetes: Microservice Ekosisteminin Orkestrasyonu'
+description: 'Elly projesinin K8s altyapısı: numbered manifest organization, StatefulSet PostgreSQL, Redis + RabbitMQ, Traefik Ingress + cert-manager, HPA burst scaling, backup CronJob, Prometheus/Grafana/Zipkin.'
+publishedAt: '2026-04-14'
+category: 'DevOps'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1667372393119-3d4c48d07fc9?q=80&w=2000&auto=format&fit=crop'
+readingTime: '16'
+---
+
+Modern, bulut-yerel (cloud-native) mimarilerin merkezinde yer alan **Kubernetes (K8s)**, konteynerleştirilmiş uygulamaların dağıtımını, ölçeklendirilmesini ve yönetimini otomatikleştiren açık kaynak kodlu bir orkestrasyon sistemidir. [`elly`](https://github.com/huseyindol/elly) projesinde de tüm ekosistemi tek bir çatı altında kontrol edebilmek için K8s kullandım; bu yazıda `k8s/` klasöründeki 14 manifest dosyasının neyi nasıl çözdüğünü detaylıca paylaşıyorum.
+
+## 0. Manifest Dosyalarının Sıralı Organizasyonu
+
+`elly/k8s` klasöründeki dosyalar **bilinçli olarak numaralandırılmıştır** — `kubectl apply -f k8s/` komutu alfabetik sıra takip ettiği için apply sırası manifesto isimlendirmesiyle kontrol edilebilir hâle geliyor:
+
+```
+k8s/
+├── 0-namespace.yaml         # elly namespace
+├── 1-configmap.yaml         # non-sensitive env
+├── 1-secret.template.yaml   # SOPS/SealedSecrets öncesi template
+├── 2a-app-deployment.yaml   # Base pods (fixed 2 replica)
+├── 2b-app-burst.yaml        # Burst deployment (HPA ile)
+├── 2c-postgres.yaml         # 3x StatefulSet: tenant1, tenant2, basedb
+├── 2d-redis.yaml            # Redis 7-alpine
+├── 2e-rabbitmq.yaml         # RabbitMQ 3.13-management
+├── 3-service.yaml           # ClusterIP + Headless
+├── 4-ingress.yaml           # Traefik + 6 host + TLS
+├── 5-cluster-issuer.yaml    # cert-manager Let's Encrypt
+├── 5-hpa.yaml               # HorizontalPodAutoscaler
+├── 6-monitoring.yaml        # Prometheus + Grafana + Zipkin + RedisInsight
+└── 7-backup-cronjob.yaml    # Nightly pg_dump + retention
+```
+
+Bu yaklaşımın avantajı: yeni bir ortama sıfırdan kurulum yapan mühendis, dosya sırasını takip ederek bağımlılık hatasına düşmeden cluster'ı ayağa kaldırabiliyor.
+
+## 1. Namespace ve Konfigürasyon İzolasyonu
+
+Tüm bileşenler `elly` namespace'inde yaşıyor. `1-configmap.yaml` ile non-sensitive ortam değişkenleri, `1-secret.template.yaml` ile de gizli veriler şablon şeklinde tutuluyor. CI/CD akışında (`.github/workflows/deploy.yml`) 13 hassas değer (DB credentials, JWT key, OAuth token, email API key vb.) **base64 encode** edilip `kubectl` ile cluster'a yazılıyor — `git` içinde asla plain secret tutulmuyor.
+
+## 2. Base + Burst Deployment Stratejisi
+
+`elly` backend'i **iki ayrı Deployment** ile çalışıyor:
+
+- **`2a-app-deployment.yaml` (Base):** 2 replica ile sürekli ayakta, autoscale edilmiyor. Sabit bellek ayırır, soğuk başlangıç yaşamaz.
+- **`2b-app-burst.yaml` (Burst):** HPA tarafından 1 ile 3 replica arasında otomatik ölçeklenir (3 × 512MB = 1.5GB burst kapasitesi).
+
+```yaml
+# 5-hpa.yaml — özet
+spec:
+  scaleTargetRef:
+    kind: Deployment
+    name: elly-app-burst
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+```
+
+Neden bu ayrım? Tek Deployment olsaydı pod rolling-restart sırasında cache warm-up'ı olmayan yeni pod'lara trafik düşer, latency fırlardı. Base + Burst ayrımıyla **Base pod'lar her zaman sıcak (warm)** kalıyor, yoğun saatlerde ise Burst devreye girip back-off sonrası kaybolabiliyor. `k3s` cluster'larında `metrics-server` ayrıca kurulmak zorunda — HPA aksi hâlde `unknown` metric hatası veriyor.
+
+## 3. Kubernetes Üzerinde PostgreSQL (StatefulSet x 3)
+
+`2c-postgres.yaml` içinde **üç ayrı `StatefulSet`** bulunuyor:
+
+- `postgres-tenant1` — birinci müşteri verileri
+- `postgres-tenant2` — ikinci müşteri verileri
+- `postgres-basedb` — merkezi ayar/meta verileri
+
+Her biri:
+
+- `postgres:16-alpine` imajıyla (küçük, güvenli),
+- 8Gi `PersistentVolumeClaim` (`storageClass: local-path` — k3s'in default'u),
+- `100m CPU / 128Mi RAM` request, `500m CPU / 512Mi RAM` limit,
+- `pg_isready -U $POSTGRES_USER -d $POSTGRES_DB` tabanlı liveness + readiness probe,
+- ConfigMap'ten okunan `init.sql` ile ilk boot'ta tablo şemalarını oluşturuyor.
+
+Pod'lar her an ölebilir; `volumeClaimTemplates` sayesinde yeniden doğduğunda aynı PVC bağlanır, veri kaybolmaz. Güvenlik tarafında `elly-secret` objesinden `POSTGRES_USER` ve `POSTGRES_PASSWORD` enjekte ediliyor.
+
+## 4. RabbitMQ Yönetimi (K8s)
+
+`2e-rabbitmq.yaml` içinde `rabbitmq:3.13-management-alpine` imajı kullanılıyor (Management UI built-in geliyor):
+
+- **AMQP port:** 5672 (internal)
+- **Management UI:** NodePort 31672 → port 15672
+- **Dev AMQP:** NodePort 31673 → 5672 (lokal makineden bağlantı için)
+- **Storage:** 1Gi PVC (`/var/lib/rabbitmq`)
+- **Healthcheck:** `rabbitmq-diagnostics -q ping` ve `check_port_connectivity`
+
+Headless Service ile Pod'lar DNS üzerinden birbirine ulaşabilir; ilerideki cluster mode geçişine hazır. Erlang Cookie secret'ı ise planlamaya alınmış durumda — tek replica için henüz zorunlu değil. `smtp-rabbitmq-issue` gibi bağlantı problemleri `liveness`/`readiness` prob'larının doğru ayarlanmasıyla çözüldü.
+
+## 5. Ingress ve Traefik Ayarları
+
+Beklediğinizin aksine, `elly` cluster'ı **Nginx Ingress değil, Traefik Ingress Controller** kullanıyor (k3s ile default olarak geliyor, hafif ve pratik). `4-ingress.yaml` içinde **altı farklı host** tek bir Ingress kaynağı üzerinden yönetiliyor:
+
+| Host                        | Servis                  |
+| --------------------------- | ----------------------- |
+| `api.huseyindol.com`        | `elly-app-service:8080` |
+| `admin.huseyindol.com`      | `elly-app-service:8080` |
+| `redis.huseyindol.com`      | `redisinsight:5540`     |
+| `grafana.huseyindol.com`    | `grafana:3000`          |
+| `prometheus.huseyindol.com` | `prometheus:9090`       |
+| `zipkin.huseyindol.com`     | `zipkin:9411`           |
+
+Path yönlendirmeleri:
+
+```
+/api, /swagger-ui, /api-docs, /actuator, /login/oauth2, /oauth2, /assets, /
+```
+
+- **TLS / cert-manager:** `5-cluster-issuer.yaml` ile Let's Encrypt **production** issuer kuruldu, altı host tek `elly-tls-secret` içinde konsolide edildi.
+- **Entry points:** `web` (80) ve `websecure` (443) — Traefik router annotation'ları ile.
+- **Rate limit / CORS / DDoS:** Traefik middleware referansları hazır ama henüz aktif değil — TODO olarak açık (bir sonraki sprint).
+
+## 6. Kubernetes İçerisinde Redis
+
+`2d-redis.yaml` → `redis:7-alpine`:
+
+- **Mode:** Standalone (Sentinel henüz değil, geleceğe hazır);
+- **Auth:** `REDIS_PASSWORD` → `elly-secret` içinden enjekte;
+- **Persistence:** AOF (`--appendonly yes`);
+- **Memory policy:** `maxmemory 256mb` + `maxmemory-policy allkeys-lru`;
+- **Tenant isolation:** Tek instance; key şeması `tenantId::cacheName::key`;
+- **Health:** `redis-cli ping` ile liveness/readiness.
+
+JWT doğrulama + user rol cache'leri bu instance üzerinden uçar. Uygulama podları `ClusterIP` ile Redis'e bağlanır; dışarıya açılmaz.
+
+## 7. Gözlemlenebilirlik: Zipkin + Prometheus + Grafana + RedisInsight
+
+`6-monitoring.yaml` tek dosyada dört aracı birden ayağa kaldırır:
+
+| Araç             | Port | Görev                                                            |
+| ---------------- | ---- | ---------------------------------------------------------------- |
+| **Prometheus**   | 9090 | `elly-app-service` actuator'ını her 15s scrape eder, 7 gün tutar |
+| **Grafana**      | 3000 | Prometheus datasource pre-provisioned, `admin / admin123`        |
+| **Zipkin**       | 9411 | `ZIPKIN_URL` env'iyle Brave reporter'dan trace alır, in-memory   |
+| **RedisInsight** | 5540 | Redis key explorer + cache monitor                               |
+
+Önemli notlar:
+
+- Prometheus depolaması `emptyDir` — restart'ta kaybolur (production'da PVC'ye çevrilmeli).
+- Grafana dashboard'ları için "Spring Boot", "JVM", "HikariCP" gibi topluluk dashboard ID'leri öneriliyor — import et, çalışır.
+- Custom alert rule henüz yok; Alertmanager entegrasyonu next step.
+
+## 8. Otomatik Yedekleme (CronJob)
+
+`7-backup-cronjob.yaml`, her gece **03:00 Europe/Istanbul** (00:00 UTC) zamanında çalışan bir `CronJob`:
+
+```yaml
+schedule: '0 0 * * *' # UTC
+startingDeadlineSeconds: 100
+activeDeadlineSeconds: 600 # 10 dk
+concurrencyPolicy: Forbid
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 1
+```
+
+- `pg_dump` + `gzip` ile `tenant1` ve `tenant2` veritabanlarını yedekler.
+- Dosya ismi: `tenantN-YYYY-MM-DD_HH-MM-SS.sql.gz`.
+- **3 günden eski** yedekler `find ... -mtime +3 -delete` ile temizlenir.
+- 1Gi PVC yeterli (sıkıştırılmış dump'lar küçük).
+- Container `50m CPU / 64Mi RAM` request — pratikte iz bırakmaz.
+
+`concurrencyPolicy: Forbid` sayesinde önceki backup bitmeden yenisi başlamaz; bozuk dump ihtimalini sıfıra indirir.
+
+## 9. CI/CD: GitHub Actions → GHCR → GCP VM
+
+`.github/workflows/deploy.yml` çalışması:
+
+1. **Trigger:** `main` branch'e her push.
+2. **Build:** Java 21 + Maven cache ile `mvn clean package -DskipTests`.
+3. **Docker:** Buildx + GHA cache ile multi-stage image. Tag'ler: `:sha-abc1234` ve `:latest`.
+4. **Push:** `ghcr.io/huseyindol/elly` (GitHub Container Registry).
+5. **Secrets:** 13 değer base64 encode edilip deploy job'una taşınır.
+6. **Deploy:** SSH ile GCP VM'e bağlanır, `kubectl set image` ile Deployment'ı günceller.
+7. **Rollout wait:** `kubectl rollout status --timeout=180s`.
+8. **Concurrent push koruması:** `concurrency` anahtarı ile aynı anda iki deploy çalışamaz.
+
+Ek olarak `rollback.yml` workflow'u da mevcut — problem durumunda eski SHA'ya dönüş tek tıkla.
+
+## 10. Pratik Öğrenimler
+
+- **Numaralı manifest isimlendirmesi** ekip içindeki onboarding süresini yarıya düşürüyor.
+- **Base + Burst ayrımı** cold-start'ı tamamen ortadan kaldırıyor.
+- **StatefulSet + local-path** k3s için fazlasıyla yeterli; cloud'a taşınırken sadece `storageClass` değişir.
+- **Traefik Ingress** k3s ile default geldiği için ekstra chart kurmaya gerek yok — ama annotation syntax'ı Nginx'ten farklı, dikkat!
+- **Prometheus scrape 15s** detaylı trend için iyi; ama 30 günlük retention istiyorsanız PVC zorunlu.
+
+Kubernetes yönetimi başlı başına bir disiplin olsa da, temelleri doğru atılan manifest dosyaları ve sağlam bir mimari eşliğinde sonsuz ölçeklenebilen kusursuz bir otomasyon ortamı sunar. Bir sonraki durak: Traefik middleware'leri ile Rate Limiting + CORS'u nasıl aktif ettiğimiz!

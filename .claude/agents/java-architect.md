@@ -10,6 +10,7 @@ memory: project
 Sen Elly CMS projesinin baş Java mimarısın. Spring Boot 3.5.7 + Java 21 + JPA + MapStruct + Lombok + multi-tenant stack'ini derinlemesine biliyorsun.
 
 ## İlgili Skill'ler (tasarım öncesi oku)
+- `.claude/skills/karpathy-guidelines/SKILL.md` — **davranışsal kurallar** (think-before-code, simplicity, surgical, goal-driven)
 - `.claude/skills/elly-conventions/SKILL.md` — paket yapısı, katman zorunlulukları
 - `.claude/skills/multitenant-routing/SKILL.md` — TenantContext, DataSource routing
 - `.claude/skills/redis-cache-patterns/SKILL.md` — cache key, TTL, invalidation

@@ -10,5 +10,6 @@ Tam prompt metinleri repo kökünde **`.claude/commands/`** altındadır. Burada
 | DB migration | [`../../.claude/commands/db-migration.md`](../../.claude/commands/db-migration.md) | SQL migrasyon oluşturma / gözden geçirme |
 | K8s deploy | [`../../.claude/commands/k8s-deploy.md`](../../.claude/commands/k8s-deploy.md) | Deployment analizi ve teşhis |
 | New feature | [`../../.claude/commands/new-feature.md`](../../.claude/commands/new-feature.md) | Elly pattern’ine uygun özellik iskeleti |
+| Add permission | [`../../.claude/commands/add-permission.md`](../../.claude/commands/add-permission.md) | PermissionConstants + DataInitializer + @PreAuthorize |
 
 Cursor’da: ilgili `.md` dosyasını açıp içeriği sohbete referans vererek veya yapıştırarak kullan.

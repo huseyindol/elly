@@ -1,5 +1,44 @@
 # Elly CMS — Claude Proje Bağlami
 
+## Git Kurallari
+
+- **Her zaman `main` branch'te calis.** Feature branch acma; degisiklikleri dogrudan `main`'e commit et ve push'la.
+- Bunu her oturumda hatirlatmana gerek yok — bu kural kalicidir.
+
+## Proje Yapisi Kurallari — KESIN KURAL
+
+Bu kurallar tartismasizdir. Degistirmeden once kullanici ile mutlaka konusulmalidir.
+
+### Paket yapisi (layer-based — degistirilemez)
+
+```
+com.cms.controller/       ← tum IController interface'leri
+com.cms.controller.impl/  ← tum Controller implementasyonlari (@RestController)
+com.cms.service/          ← tum IService interface'leri + yardimci @Service siniflari
+com.cms.service.impl/     ← tum Service implementasyonlari
+com.cms.repository/       ← tum Repository'ler (JpaRepository)
+com.cms.entity/           ← tum @Entity siniflari + enum'lar
+com.cms.dto/              ← tum DTO siniflari (Dto* prefix zorunlu)
+com.cms.mapper/           ← tum MapStruct @Mapper siniflari
+com.cms.config/           ← tum @Configuration, Filter, SecurityConfig siniflari
+com.cms.exception/        ← tum exception siniflari
+com.cms.util/             ← yardimci utility siniflari
+```
+
+**YASAK:** `com.cms.<modul>/` seklinde feature-package olusturma. Yeni bir ozellik (chat, blog, vb.) eklendiginde dosyalar yukardaki katmanlara dagitilir; ayri bir alt paket altinda toplanmaz.
+
+### Yapiya aykiri bir degisiklik gormeden once dur
+
+Eger mevcut kodun bu kurala uymadigi gorulurse (orn. feature-package mevcut) kullaniciya bildir ve duzeltme oneri sun — sessizce devam etme.
+
+### Kontrol listesi — her yeni sinif icin
+
+- [ ] Package adi `com.cms.<katman>` seklinde mi? (feature sub-package degil)
+- [ ] Controller interface mi yoksa impl mi? (`IXxx` → controller/, `Xxx` → controller/impl/)
+- [ ] DTO sinifi `Dto` prefix'i ile mi basliyor?
+- [ ] `@RequestMapping` impl class'ta mi? (interface'te degil — Spring 6 kuralı)
+- [ ] Mevcut benzer bir sinif var mi? Tekrar etme.
+
 ## Cursor ve diger agent araclari
 
 Coklu agent rolleri, is akislari ve dosya haritasi icin repo kokundeki **[`AGENTS.md`](./AGENTS.md)** dosyasina bak. Cursor odakli kisa workflow'lar **[`.agents/workflows/`](./.agents/workflows/)** altinda; uzun tanimlar bu repoda **`.claude/agents/`** icinde kalir (tek kaynak).
@@ -52,6 +91,17 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Serialization:** Jackson2JsonMessageConverter
 - **Consumer'da TenantContext:** Baslangicta `setTenantId()`, finally'de `clear()` — ZORUNLU
 
+## Chat Sistemi
+- **Paket:** `com.cms.chat.*` — entity, repository, service, controller, websocket, dto, mapper
+- **DB:** Sadece `basedb`'de 5 tablo (chat_groups, chat_group_members, chat_messages, chat_message_reads, chat_message_edits)
+- **Routing:** `JwtTenantFilter` `/api/v1/chat/` yolunu zorla basedb'ye yonlendirir (tenantId override)
+- **WebSocket:** `${API}/ws` (SockJS+STOMP), CONNECT'te `Authorization: Bearer` zorunlu
+- **Permission:** `chat:read` (tum kullanicilar), `chat:manage` (EDITOR+)
+- **Visibility:** VIEWER=1 (herkese acik) → EDITOR=2 → ADMIN=3 → SUPER_ADMIN=4 (gizli), DM her zaman 4
+- **Davet hiyerarsisi:** Davet eden, kendi rol seviyesinden dusuk kullanicilari davet edebilir; SUPER_ADMIN herkesi
+- **Topic'ler:** `/topic/groups/new`, `/topic/groups/deleted`, `/topic/user/{userId}/groups/joined`, `/topic/group/{groupId}` (mesaj/typing/read), `/topic/presence`
+- **Detay:** `chat-patterns` skill'i acilir; query/topic ornekleri orada
+
 ## Build & Calistirma
 ```bash
 ./mvnw clean package -DskipTests   # Build
@@ -93,6 +143,8 @@ Proje-spesifik bilgi birikimi `.claude/skills/` altinda tutulur. Agent'lar gorev
 | `redis-cache-patterns` | Cache key, TTL, invalidation, graceful fallback |
 | `rabbitmq-patterns` | Queue/exchange ekleme, consumer pattern, retry/DLQ |
 | `error-handling-patterns` | BaseException hiyerarsisi, GlobalExceptionHandler |
+| `chat-patterns` | WebSocket+STOMP, visibilityLevel, davet hiyerarsisi, topic semasi |
+| `mail-smoke-test` | Mail gonderim akisini end-to-end dogrulama playbook'u |
 | `dev-session-tracker` | Uzun gorevlerde ilerleme takibi, changelog |
 | `karpathy-guidelines` | Davranissal kurallar: overengineering'i onle, surgical degisim, goal-driven loop |
 
@@ -107,6 +159,7 @@ Agent Teams aktif (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Buyuk gorevlerde p
 | `code-reviewer` | Kod kalitesi, pattern uyumu | sonnet | Read, Glob, Grep |
 | `devops-engineer` | K8s, Docker, CI/CD | sonnet | Read, Glob, Grep, Bash, Write, Edit |
 | `security-guard` | Guvenlik analizi | sonnet | Read, Glob, Grep |
+| `product-advisor` | Ozellik tartismasi, piyasa arastirmasi, yalakalik yapmadan elesti | sonnet | Read, Glob, Grep, WebSearch, WebFetch, Bash |
 
 **Kullanim:**
 ```

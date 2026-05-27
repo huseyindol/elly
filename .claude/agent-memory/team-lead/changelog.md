@@ -5,6 +5,159 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-05-18] K8s CrashLoopBackOff Çözümü + Chat Paket Refactoring
+**Tip:** 🔧 Bugfix | **Boyut:** Orta
+
+### Sorun
+Production'da `elly-app` CrashLoopBackOff — startup probe sürekli başarısız.
+
+### Kök Neden
+1. `startupProbe.timeoutSeconds` belirtilmemişti → varsayılan **1s** health check için yetmiyordu (`context deadline exceeded`)
+2. `failureThreshold: 12` = sadece 150s pencere, uygulama başlaması ~88s + güvenlik konfigürasyonu
+3. 2 replika + RabbitMQ kaynak yarışı: RabbitMQ crash loop → elly-app health check 503
+4. Chat sistemi `com.cms.chat.*` feature-package yapısındaydı (proje kuralı ihlali)
+
+### Düzeltmeler
+- `startupProbe.timeoutSeconds: 5` eklendi
+- `startupProbe.failureThreshold: 12 → 24` (270s pencere)
+- `replicas: 2 → 1` (4GB VM kaynak sorunu çözüldü, RabbitMQ kararlılaştı)
+- Chat sistemi layer-based paketlere taşındı: `com.cms.entity/`, `com.cms.repository/`, `com.cms.service/`, `com.cms.controller/`, `com.cms.dto/`, `com.cms.mapper/`, `com.cms.config/`
+- `JpaConfig.initializeTenantSchemas`: `ddl-auto=validate/none` modunda non-default tenant atlanıyor (chat tabloları yalnızca basedb'de)
+- `CLAUDE.md`'ye kesin paket yapısı kuralı eklendi
+
+### Dosyalar
+- `k8s/2a-app-deployment.yaml` — probe ve replika ayarları
+- `src/main/java/com/cms/config/JpaConfig.java` — validate modu fix
+- `CLAUDE.md` — paket yapısı kuralları
+
+---
+
+## [2026-05-17] Chat Sistemi — Role-Based Visibility + Real-time Broadcast
+**Tip:** 🆕 Özellik + 🔧 Bugfix | **Boyut:** Büyük
+
+### Özet
+Tam fonksiyonel real-time chat sistemi: WebSocket+STOMP, rol bazlı görünürlük, davet hiyerarşisi, dosya yükleme, canlı bildirimler.
+
+### Yeni Özellikler
+
+**Chat çekirdek (`com.cms.chat.*`):**
+- Entity: `ChatGroup` (visibilityLevel 1-4), `ChatGroupMember`, `ChatMessage`, `ChatMessageRead`, `ChatMessageEdit`
+- 5 tablo: `chat_groups`, `chat_group_members`, `chat_messages`, `chat_message_reads`, `chat_message_edits` — sadece `basedb`'de
+- REST: `/api/v1/chat/groups`, `/api/v1/chat/groups/{id}/messages`, `/api/v1/chat/dm/{userId}`, `/api/v1/chat/files`
+- WebSocket: `${API}/ws` (SockJS+STOMP), STOMP CONNECT'te `Authorization: Bearer` header zorunlu
+- `chat:read` + `chat:manage` permission'ları — DataInitializer otomatik atar (VIEWER hariç hepsine manage)
+
+**Rol bazlı görünürlük:**
+- `visibilityLevel`: VIEWER=1 (herkese açık), EDITOR=2, ADMIN=3, SUPER_ADMIN=4 (gizli)
+- `createGroup()` creator'ın rolünden otomatik `visibilityLevel` set ediyor
+- `getMyGroups()` query: `visibilityLevel <= userRoleLevel OR EXISTS(member)`
+- DM grupları her zaman `visibilityLevel=4` (sadece taraflar görür)
+
+**Davet hiyerarşisi:**
+- EDITOR (2) → VIEWER davet edebilir
+- ADMIN (3) → EDITOR, VIEWER
+- SUPER_ADMIN (4) → herkes
+- `addMember()` service-level enforcement: `requesterLevel < 4 && targetLevel >= requesterLevel` → ForbiddenException
+
+**Real-time broadcast topic'leri:**
+| Topic | Tetikleyen |
+|---|---|
+| `/topic/groups/new` | Grup oluşturulunca (frontend visibilityLevel ile filtreler) |
+| `/topic/groups/deleted` | Grup silinince — tüm bağlı kullanıcılara yayılır |
+| `/topic/user/{userId}/groups/joined` | Kullanıcı davet edilince — sadece o kullanıcıya |
+| `/topic/group/{groupId}` | Yeni mesaj |
+| `/topic/group/{groupId}/typing` | Yazıyor sinyali |
+| `/topic/group/{groupId}/read` | Okundu bilgisi |
+| `/topic/presence` | Online/offline durumu |
+
+**Dosya yükleme:**
+- `POST /api/v1/chat/files` (multipart) → `IFileService.saveFile(file, "chat")` → `assets/chat/{filename}` döner
+- Frontend: `${API}/{returnedPath}` ile tam URL oluşturur
+
+### Bug Fix'ler
+
+| # | Sorun | Çözüm |
+|---|-------|-------|
+| 1 | Chat endpoint'leri 401 | `WebMvcConfig`'den `/api/v1/chat/**` AdminLoginInterceptor'dan çıkarıldı |
+| 2 | Tenant admin chat grubunu oluşturamıyor | `JwtTenantFilter` chat path'lerini zorla `basedb`'ye yönlendiriyor |
+| 3 | `/ws/info` 401 (SockJS) | `SecurityConfig`'de `AntPathRequestMatcher.antMatcher("/ws/**")` — MvcRequestMatcher SockJS handler'ı bulamıyordu |
+| 4 | `@RequestMapping` interface'de tespit edilmiyor | Tüm HTTP annotation'ları impl class'a taşındı (Spring 6 davranışı) |
+| 5 | Messages 500 — `LIMIT :limit` JPQL | `Pageable.of(0, limit)` kullanımı |
+| 6 | Messages 500 — `(:before IS NULL OR ...)` PostgreSQL tip çıkarımı | İki ayrı query: `findByGroupId` ve `findByGroupIdBefore` |
+| 7 | SUPER_ADMIN ADMIN grubunu görmüyor | JPQL LEFT JOIN ON embedded-id güvenilmez — `EXISTS` subquery |
+| 8 | Production'da `visibility_level` kolonu yok | Migration SQL'e `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` eklendi |
+
+### Konfigürasyon Değişiklikleri
+- `jwt.expiration`: 180000 (3 dk) → 14400000 (4 saat)
+- `jwt.refresh.expiration`: 3600000 (1 saat) → 15552000000 (6 ay)
+- `cookie.access-token.expiration`: 1800 → 14400
+- `cookie.refresh-token.expiration`: 3600 → 15552000
+- `chat.rate-limit.max-messages-per-second=10`, `chat.message.max-length=4000`
+
+### Yeni Dosyalar
+- `chat/entity/` — 6 entity
+- `chat/repository/` — 5 repository (ChatGroup, Member, Message, MessageRead, MessageEdit)
+- `chat/service/` — IChatGroupService, IChatMessageService, ChatPresenceService, ChatTypingService, ChatRateLimitService
+- `chat/controller/` — IChatGroupController, IChatHistoryController + impl
+- `chat/websocket/` — WebSocketConfig, ChatWebSocketController, ChatWebSocketSecurityConfig
+- `chat/dto/` — 8 DTO
+- `chat/mapper/ChatMapper.java`
+- `resources/migration/db-migration-chat.sql`
+
+### Frontend (admin panel) Notları
+- JWT **JWE encrypted** — `atob` çalışmaz. Roller JWT'de yok.
+- Kullanıcı rolü için `GET /api/v1/users/me/permissions` endpoint'i kullanılır.
+- Frontend: `@stomp/stompjs` + `sockjs-client`, Zustand store, `useChatConnection()` hook.
+
+---
+
+## [2026-04-29] Multi-Tenant User Routing + Admin Tenant User Management
+**Tip:** 🔧 Bugfix + 🆕 Özellik | **Boyut:** Orta
+
+### Özet
+3 kritik bug düzeltildi ve panel admininin tenant DB'lerindeki kullanıcıları yönetebileceği yeni endpoint seti eklendi.
+
+### Bug Fix 1 — JwtAuthenticationFilter hardcoded basedb
+**Sorun:** `loadUserFromDbAndCache()` her zaman `TenantContext.setTenantId(defaultTenant)` yapıyordu. `JwtTenantFilter` doğru context'i set etse bile override ediliyordu.
+**Fix:** `TenantContext.setTenantId(defaultTenant)` satırı kaldırıldı. JwtTenantFilter'ın set ettiği context geçerli:
+- admin JWT → null → defaultDataSource (basedb)
+- tenant JWT → "tenant1" → tenant1 DB
+
+### Bug Fix 2 — AuthService.register() her zaman basedb'ye yazıyordu
+**Fix:** `register()` artık `DtoRegister.tenantId` alanını destekliyor. `tenantId` varsa o DB'ye switch edip kaydeder, finally'de restore eder.
+
+### Bug Fix 3 — UserService.executeInDefaultTenant() basedb'yi zorluyor
+**Fix:** `getAllUsers()` ve `getUserById()` methodlarındaki `executeInDefaultTenant()` wrapper'ı kaldırıldı. Mevcut TenantContext'e bırakıldı.
+
+### Yeni Özellik — Admin Tenant User Management
+**Endpoint seti:** `AdminLoginInterceptor` (loginSource=admin) + `users:manage` yetkisi gerektirir.
+
+| Method | Path | Açıklama |
+|--------|------|---------|
+| POST | `/api/v1/admin/tenants/{tenantId}/users` | Kullanıcı oluştur |
+| GET | `/api/v1/admin/tenants/{tenantId}/users` | Tüm kullanıcıları listele |
+| GET | `/api/v1/admin/tenants/{tenantId}/users/{id}` | Tek kullanıcı |
+| PUT | `/api/v1/admin/tenants/{tenantId}/users/{id}` | Güncelle |
+| DELETE | `/api/v1/admin/tenants/{tenantId}/users/{id}` | Sil |
+| PATCH | `/api/v1/admin/tenants/{tenantId}/users/{id}/status?isActive=` | Aktif/pasif |
+
+**Yeni dosyalar:**
+- `dto/DtoAdminUserCreate.java`, `dto/DtoAdminUserUpdate.java`
+- `service/ITenantUserService.java`, `service/impl/TenantUserService.java`
+- `controller/ITenantUserController.java`, `controller/impl/TenantUserController.java`
+
+**WebMvcConfig güncellendi:** AdminLoginInterceptor artık `/api/v1/admin/**` path'ini de kapsamaktadır.
+
+### Mimari Açıklama
+```
+basedb   → Panel admin kullanıcıları (loginSource="admin")
+tenant1  → Tenant1 site kullanıcıları (loginSource="tenant", tenantId="tenant1")
+tenant2  → Tenant2 site kullanıcıları
+```
+Panel guide: `docs/USER_ADMIN_GUIDE.md`
+
+---
+
 ## [2026-04-23] v4 Email Templates — Uygulama + Bugfix Oturumu
 **Tip:** 🆕 Özellik + 🔧 Bugfix + 🔒 Güvenlik | **Boyut:** Büyük
 

@@ -1,0 +1,141 @@
+---
+title: 'Modern React Mimarisi ve Clean Code Pratikleri'
+description: "State yönetimi, Custom Hook'ların gücü ve Declarative (Bildirimsel) kod yazımının React ekosistemind..."
+publishedAt: '2026-04-16'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **Frontend** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> State yönetimi, Custom Hook'ların gücü ve Declarative (Bildirimsel) kod yazımının React ekosistemindeki önemine değindik. Projelerimizde Side effect'leri en aza indiren fonksiyonel yaklaşımlar sergiledik. React 19 ve concurrent özelliklerinin uygulamadaki performans getirileri muazzamdır.
+
+Modern Front-end dünyasında React'in giderek karmaşıklaşan yapısı, sürdürülebilir bir mimari tasarlamayı zorunlu kılıyor. 50'den fazla sayfaya sahip bir kurumsal uygulamada bileşen hiyerarşisinde kaybolmamak için "Separation of Concerns" (Sorumlulukların Ayrılığı) prensibini en temel yapıtaşı yapmalıyız. Bu prensip yalnızca klasik backend katman mimarisinin (Controller-Service-Repository) frontend'teki yansıması değil; aynı zamanda bileşen düzeyinde sorumluluk dağılımını belirleyen temel kuraldır.
+
+Projelerde karmaşık durumları yönetirken `useEffect` kullanımını minimize ediyor ve iş mantığını tamamen **Custom Hook** yapılarına devrediyorum. Bu yaklaşımın temelinde şu düşünce yatıyor: bir React bileşeni yalnızca "ne gösterilecek" sorusuyla ilgilenmeli, "veri nereden gelecek" veya "hangi koşulda ne olacak" gibi sorular hook katmanında cevaplanmalıdır. Container/Presenter mantığını modern Hook ekosistemiyle birleştirmek, testlerin kolaylaşmasını ve kodun her yerde kullanılabilmesini (reusability) sağlıyor.
+
+```tsx
+// Örnek: İş mantığının UI'dan izole edilmesi
+export function useProfileData(userId: string) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['profile', userId],
+    queryFn: () => fetcher(`/api/user/${userId}`),
+    staleTime: 5 * 60 * 1000, // 5 dakika cache
+  })
+  return { profile: data, isLoading, error }
+}
+
+// UI bileşeni sadece render ile ilgilenir
+export function ProfileCard({ userId }: { userId: string }) {
+  const { profile, isLoading } = useProfileData(userId)
+  if (isLoading) return <ProfileSkeleton />
+  return <Card>{profile.name}</Card>
+}
+```
+
+Dizin yapısında ise feature-based (özellik tabanlı) organizasyon tercih ediyorum: `src/features/auth`, `src/features/dashboard` gibi klasörler altında her özelliğin kendi hook'ları, bileşenleri ve tip tanımları bir arada yaşıyor. Bu modüler yapı sayesinde, 6 kişilik bir frontend ekibinde paralel çalışırken merge conflict oranımız %80 düştü.
+
+React 19 ve concurrent rendering özellikleri bu mimarinin üstüne konduğunda, `useTransition` ile ağır tab geçişlerini bloklamadan işleyebiliyor, `Suspense` sınırlarıyla sayfa yüklenme deneyimini granüler seviyede kontrol edebiliyoruz. Custom Hook'lar üzerinde ilerlediğimizde UI bileşenleri tamamen "aptal" (dumb) hale gelir ve sadece gelen datayı render etmekle ilgilenir. Bu izolasyon, ekibin projeye adaptasyon sürecini aylar seviyesinden haftalara indirir ve onboarding maliyetini dramatik biçimde azaltır.
+
+## Hata Sınırları ve Dayanıklılık
+
+Sunucu bileşenleri hata verdiğinde kullanıcıya anlamlı `error.tsx` ile hata sınırı yaklaşır; istemci tarafında ise feature bazlı Error Boundary ile yanlış tek modülün tüm ağacı çökertmesi engellenir.
+
+## Test Edilebilir Hook’lar
+
+Saf TypeScript yardımcıları + ince hook katmanı birim testi yazmayı kolaylaştırır; UI testlerinde yalnızca kullanıcı akışı kalır. Bu ayrım flake oranını düşürür.
+
+## Durum Yönetimi ve Veri Katmanı
+
+Server state için TanStack Query, URL state için hafif araçlar kullanmak “global store şişmesini” önler. Yerel UI state’ini gereksiz yere kalıcı store’a taşımak en sık karmaşıklık kaynaklarından biridir.
+
+## Sınır Dosyaları ve Bağımlılık Kuralları
+
+Feature klasörleri arasında tek yönlü import grafiği (örnek: üst seviye feature alt feature’a doğrudan sızamaz) araçlarla enforce edilirse döngü ve gizli bağımlılık azalır. Bu küçük kurallar büyüyen kod tabanında haftalık refactor ihtiyacını yumuşatır.
+
+## Tip Paylaşımı ve Tekrar
+
+DTO ve presentation model arasında ince katman gerektiğinde bile tekrara düşülmemeli; codegen veya paylaşımlı paket yaklaşımı kontrat drift’ini geciktirir. Any kaçışı yerine küçük net tipler tercih edilir.
+
+## Etkileşim ve Sunucu Sınırı
+
+Server Component ağır veri yüklemişken client chart veya düzenleyici gerekiyorsa sınır açık seçilir; gereksiz `use client` direktifi ağır alt ağaçları istemciyle taşır. Kritik bileşenlerde “minimal client yüzeyi” sloganıyla hareket etmek doğru ergonomiyi verir.
+
+## Ölçülebilir Kalite Ritüeli
+
+Architecture review’larını çok nadiren yapmak yerine küçük ADR kararları biriktirmek gelecek tartışmayı kısaltır ve agent destekli refaktörde bile bağlam korunmuş olur.
+
+## Kademeli Migrasyonlar
+
+Tek seferlik büyük patlama yerine özellik bayraklarıyla veya paralel klasör yapısıyla kademeli geçiş daha az teslim riski taşır. Eski ve yeni modülün kısa süre birlikte yaşaması için sınır testleri kritik düzeydedir.
+
+## İsimlendirme ve Cognitive Load
+
+Uzun bileşen isimleri veya tutarsız suffix’ler codebase aramalarında yorar; küçük sözlük (ör. `Shell`, `Panel`, `Tray`) oluşturmak bile okuma hızını artırır.
+
+## Feature Flag ile Davranış
+
+Flag kapatılmış kod yollarının test edilmesi sık ihmal edilir; minimal smoke ile “kapalı olduğunda da güvenilir” garanti aranır.
+
+## Modüller Arası Mesajlaşma
+
+Özellikler birbirinin iç modelini sızdırmamalıdır; gevşek import’lar zamanla görünmez çift yönlü bağımlılık üretir. Event bus veya hafif pub/sub yerine gerektiğinde üst seviye “application service” yüzeyi tanımlanması sınırları netleştirir.
+
+## Güvenilir Hata Gösterimi
+
+Kullanıcıya sunulan hata komponentleri tek tip olmalı; her feature kendi uyarı kutusunu icat ettiğinde marka sesi dağılır. Merkezi hata bileşeni + feature-spesifik bağlam parametreleri iyi çalışır.
+
+## Async State Makinesi Karmaşıklığı
+
+UI state grafikleri büyüdüğünde `useReducer` veya küçük state makineleri okunabilirliği yükseltir; fakat her davranışı otomatik durum diyagramına taşımak da abartıdır. Makine yaklaşımı yüksek dallanmalı süreçlerde kendini amorti eder.
+
+## Erişilebilirlik Yerleşimi
+
+Layout sırasında odak sırasının bozulmaması modals ve drawers için başlıkta net etiket ister; bu detay tasarımla birlikte erken düşünülmeli.
+
+## Test Piramidası Dengesi
+
+Birim test eforu ile E2E eforunun dengeli olması flake ve bakım maliyetini tayin eder. UI testinde “her pixel” yerine kullanıcı yolunun kritik adımları hedeflenir.
+
+## Sürdürülebilir Lint Kuralları
+
+Agresif lint kuralını kapatmak yerince kaldırmaktansa, kademeli uyarlama ile ekip uyumu sağlanır.
+
+## İnsan Süreleri ve Ritim
+
+Uzun yaşayan dallar küçük entegrasyon adımlarına bölünmezse mimari refactor review’ları tıkanır; günlük veya günboyu mikro teslim kültürü mimari kararların pratiğe dönüşmesini hızlandırır.
+
+## Sürdürülebilir Dokümantasyon Kodu
+
+Kod içi kısa yorumların yerini uzun dökümanlar alması okumayı güçleştirir; karar özeti olarak ADR daha iyi yaşar ve kod satırını kirletmez.
+
+## Kullanıcıya Dönük Hata Dilinin Tutarlılığı
+
+Çok dillilik gerekiyorsa hata kodları sabit anahtar, metin ise locale dosyasında tutulur.
+
+## Mimari Güvenilirlik Yerine “Sihirli Kütüphane”
+
+Her sorunu harici paketle çözmek yüz yüzeyi ve güven güncellemelerini şişirir; önce doğal dil React desenleri değerlendirilir.
+
+## Veri Modeli ve UI Ayrımının Sınırında
+
+Sunucu şeması doğrudan bileşenlere sızdırıldığında sunucu refactor’u UI’ı kırar; ince adaptör katmanı sıkça iyi yatırım olur.
+
+## Sürdürülebilir Mimari Diyaloğu
+
+Küçük ekiplerde bile haftalık kısa “mimari bekleme odası” toplantısı, dağınık kararların birikmesini önler; konuşulmayan karar sonra kod olarak patlar ve geri alınması maliyetlidir.
+
+## Ölçek ve Karmaşıklık Eşiği
+
+Dosya boyutu veya dallanma eşikleri aşıldığında refactor planı yazılı olmalıdır; ani “big bang” yerine sırayla güven veren teslim küçük refactor dalgaları tercih edilir.
+
+Temiz mimari iddiası sürekli seçim gerektirir; bir kez çizilmiş diyagram işi bitirmez.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

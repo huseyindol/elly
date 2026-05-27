@@ -1,0 +1,363 @@
+---
+title: 'JavaScript Event Loop: Asenkron Dünyanın Motoru'
+description: 'Call Stack, Web APIs, Macrotask ve Microtask Queue ile JavaScript Event Loop nasıl çalışır? Promise sırası, async/await, Node.js farkları ve performans tuzakları.'
+publishedAt: '2026-04-16'
+category: 'Frontend'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2000&auto=format&fit=crop'
+readingTime: '9'
+order: 3
+---
+
+JavaScript tek thread'li bir dildir — yani aynı anda yalnızca bir işlemi gerçekleştirebilir. Peki o zaman bir API çağrısı yaparken kullanıcı arayüzü neden donmuyor? Bir `setTimeout` ile geciktirilen kod neden tam zamanında çalışıyor? Bu soruların cevabı Event Loop mekanizmasında yatıyor.
+
+Event Loop, JavaScript'in asenkron operasyonları nasıl yönettiğini belirleyen temel algoritmadır. Bunu kavramadan Promise zincirleri, `async/await` davranışı veya `setTimeout(fn, 0)` gibi klasik tuzaklar anlaşılmaz kalır. Elly admin panelinde 10.000+ satırlık veri tablolarının render süresini optimize ederken, yanlış sıralanmış Promise zincirlerinin UI freeze yarattığını bizzat yaşadım. Bu makale o deneyimin ürünüdür.
+
+## Call Stack: Senkron Yürütmenin Temeli
+
+Call Stack, JavaScript motorunun (V8, SpiderMonkey) hangi fonksiyonun şu an çalıştığını takip ettiği veri yapısıdır. LIFO (Last In, First Out) prensibiyle çalışır.
+
+```js
+function add(a, b) {
+  return a + b
+}
+
+function calculate() {
+  const result = add(3, 4)
+  return result
+}
+
+calculate()
+```
+
+Bu kodun yürütme sırası:
+
+1. `calculate()` → stack'e eklenir
+2. `add(3, 4)` → stack'e eklenir
+3. `add` döner → stack'ten çıkar
+4. `calculate` döner → stack'ten çıkar
+5. Stack boşalır
+
+Stack'teki bir fonksiyon çalışırken başka hiçbir şey çalışamaz. Bu yüzden uzun süren senkron işlemler (örn. büyük bir `for` döngüsü) tarayıcıyı dondurur — Event Loop bir sonraki göreve geçemez.
+
+```js
+// ❌ UI'ı 3-4 saniye dondurur
+function heavySync() {
+  const start = Date.now()
+  while (Date.now() - start < 3000) {
+    // Senkron blokaj — Event Loop kilitlendi
+  }
+}
+
+// ✅ Ağır işleri parçalara böl
+async function heavyAsync(items) {
+  const CHUNK_SIZE = 500
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const chunk = items.slice(i, i + CHUNK_SIZE)
+    processChunk(chunk)
+    await new Promise(resolve => setTimeout(resolve, 0)) // Event Loop'a nefes aldır
+  }
+}
+```
+
+## Web APIs: Asenkron Operasyonların Yaşadığı Alan
+
+Tarayıcıda `setTimeout`, `fetch`, `addEventListener` gibi fonksiyonlar aslında JavaScript motoru tarafından değil, **Web APIs** tarafından sunulur. Node.js'de bu rol **libuv** kütüphanesi tarafından üstlenilir.
+
+```js
+console.log('1 - Start')
+
+setTimeout(() => {
+  console.log('3 - Timeout callback')
+}, 1000)
+
+fetch('/api/data').then(res => {
+  console.log('4 - Fetch resolved')
+})
+
+console.log('2 - End')
+
+// Çıktı sırası: 1, 2, 4, 3
+// (fetch genellikle timeout'dan önce tamamlanır)
+```
+
+`setTimeout` çağrıldığında:
+
+1. Web API timer'ı başlatır — JavaScript thread bunu beklemez
+2. `console.log('2 - End')` senkron olarak çalışır
+3. 1000ms sonra Web API callback'i **Task Queue**'ya ekler
+4. Event Loop, stack boşaldığında callback'i alıp stack'e iter
+
+> **Önemli:** `setTimeout(fn, 0)` sıfır gecikme demek değildir. Sadece "mümkün olan en kısa süre içinde" anlamına gelir — genellikle 4ms minimum gecikmesi vardır ve stack + microtask queue'nun boş olmasını bekler.
+
+## Macrotask Queue: Zamanlanmış Görevlerin Sırası
+
+Macrotask queue (Task Queue olarak da bilinir), şu operasyonların callback'lerini barındırır:
+
+| Kaynak                  | Açıklama                                     |
+| ----------------------- | -------------------------------------------- |
+| `setTimeout`            | Belirli süreden sonra çalışacak callback     |
+| `setInterval`           | Periyodik callback                           |
+| `MessageEvent`          | `postMessage` / Web Workers                  |
+| `I/O Events`            | Click, keydown, mousemove gibi DOM eventleri |
+| `requestAnimationFrame` | Tarayıcı render döngüsüyle senkronize        |
+
+Kritik kural: **Event Loop her döngüde (tick) yalnızca bir macrotask çalıştırır.** Çalıştırdıktan sonra microtask queue'yu tamamen tüketir, sonra tekrar macrotask alır.
+
+```js
+setTimeout(() => console.log('Macrotask 1'), 0)
+setTimeout(() => console.log('Macrotask 2'), 0)
+setTimeout(() => console.log('Macrotask 3'), 0)
+
+// Her setTimeout ayrı bir macrotask tick'te çalışır
+// Aralarında render fırsatı doğabilir
+```
+
+## Microtask Queue: Promis'lerin Öncelikli Koridoru
+
+Microtask queue, macrotask queue'dan **daha yüksek önceliğe** sahiptir. Her macrotask tamamlandıktan sonra Event Loop, microtask queue **tamamen boşalana kadar** microtask çalıştırır.
+
+Microtask kaynakları:
+
+- `Promise.then()`, `.catch()`, `.finally()`
+- `queueMicrotask(fn)`
+- `MutationObserver`
+- `async/await` (await sonrası kodlar)
+
+```js
+console.log('1 - Sync start')
+
+setTimeout(() => console.log('5 - Macrotask'), 0)
+
+Promise.resolve()
+  .then(() => console.log('3 - Microtask 1'))
+  .then(() => console.log('4 - Microtask 2'))
+
+console.log('2 - Sync end')
+
+// Çıktı: 1, 2, 3, 4, 5
+```
+
+**Neden bu sıra?**
+
+- `1` ve `2`: Call Stack'te senkron çalışır
+- `5`: Web API → Macrotask queue'ya gider
+- `3` ve `4`: Promise chain → Microtask queue'ya gider
+- Sync kod biter → Microtask queue tüketilir (3, 4) → Macrotask çalışır (5)
+
+### Tehlikeli Senaryo: Sonsuz Microtask
+
+```js
+// ❌ Tarayıcıyı dondurur — microtask hiç bitmez
+function infiniteMicrotask() {
+  Promise.resolve().then(infiniteMicrotask)
+}
+infiniteMicrotask()
+
+// ✅ requestAnimationFrame ile render döngüsüne saygı göster
+function animationLoop() {
+  updateState()
+  requestAnimationFrame(animationLoop)
+}
+requestAnimationFrame(animationLoop)
+```
+
+## async/await ve Promise Yürütme Sırası
+
+`async/await` aslında Promise'lerin üstüne inşa edilmiş sözdizimsel şekerdir. `await` ifadesi bir microtask checkpoint oluşturur.
+
+```js
+async function fetchUser(id) {
+  console.log('A - Fetch start')
+  const user = await getUser(id) // Buraya kadar senkron
+  console.log('C - After await') // Microtask olarak devam eder
+  return user
+}
+
+console.log('1 - Before call')
+fetchUser(1)
+console.log('B - After call (sync)')
+
+// Çıktı: 1, A, B, C
+```
+
+`await` bir `Promise` döndürür — fonksiyon orada askıya alınır ve kontrol çağıran scope'a geri döner. Promise resolve olunca devam eden kod microtask olarak kuyruğa girer.
+
+```js
+// Promise zinciri karşılaştırması
+async function example() {
+  const a = await Promise.resolve(1)
+  const b = await Promise.resolve(2)
+  const c = await Promise.resolve(3)
+  return a + b + c
+}
+
+// Her await = bir microtask kuyruğu geçişi
+// Toplam 3 microtask checkpoint
+```
+
+### queueMicrotask Kullanım Senaryosu
+
+`queueMicrotask` bir Promise oluşturmadan doğrudan microtask queue'ya fonksiyon ekler:
+
+```js
+// Bir callback'in senkron mı yoksa async mı çalışacağını normalize etmek
+function notifyChange(callback) {
+  if (currentState !== previousState) {
+    queueMicrotask(() => callback(currentState))
+  }
+}
+
+// Promise.resolve().then() ile aynı priority, daha az overhead
+queueMicrotask(() => {
+  console.log('Microtask — Promise'den daha hafif')
+})
+```
+
+## Node.js Event Loop: libuv ile Faz Mimarisi
+
+Node.js tarayıcıdan farklı olarak **libuv** kütüphanesi üzerine kurulu çok fazlı bir Event Loop kullanır:
+
+```
+   ┌───────────────────────────┐
+   │           timers          │  → setTimeout, setInterval callbacks
+   └─────────────┬─────────────┘
+   ┌─────────────┴─────────────┐
+   │     pending callbacks     │  → I/O hataları (TCP ECONNREFUSED)
+   └─────────────┬─────────────┘
+   ┌─────────────┴─────────────┐
+   │       idle, prepare       │  → Dahili kullanım
+   └─────────────┬─────────────┘
+   ┌─────────────┴─────────────┐
+   │           poll            │  → Yeni I/O eventleri bekle ve çalıştır
+   └─────────────┬─────────────┘
+   ┌─────────────┴─────────────┐
+   │           check           │  → setImmediate callbacks
+   └─────────────┬─────────────┘
+   ┌─────────────┴─────────────┐
+   │      close callbacks      │  → socket.on('close', ...) gibi
+   └───────────────────────────┘
+```
+
+```js
+// Node.js'e özgü: setImmediate vs setTimeout(fn, 0)
+setImmediate(() => console.log('setImmediate — check phase'))
+setTimeout(() => console.log('setTimeout — timers phase'), 0)
+
+// I/O callback içinde çalışıyorsa setImmediate her zaman önce gelir
+// Ana script'te sıra belirsizdir (OS zamanlayıcısına bağlı)
+
+// process.nextTick: Microtask'tan bile ÖNCE çalışır!
+process.nextTick(() => console.log('nextTick — faz geçişinde çalışır'))
+Promise.resolve().then(() => console.log('Promise microtask'))
+
+// Çıktı: nextTick, Promise microtask (her iki faz geçişinde nextTick önce)
+```
+
+> **Node.js Özel Durum:** `process.nextTick` kuyruğu microtask queue'dan bile önce tüketilir. Her faz geçişinde nextTick queue boşaltılır, ardından microtask queue çalışır.
+
+## Performans Tuzakları ve Gerçek Dünya Senaryoları
+
+### Tuzak 1: Promise.all ile Paralel Fetch
+
+```js
+// ❌ Sıralı — her fetch öncekini bekler
+async function sequentialFetch() {
+  const users = await fetch('/api/users').then(r => r.json())
+  const posts = await fetch('/api/posts').then(r => r.json())
+  const comments = await fetch('/api/comments').then(r => r.json())
+  return { users, posts, comments }
+  // ~900ms (3 × 300ms)
+}
+
+// ✅ Paralel — hepsi aynı anda başlar
+async function parallelFetch() {
+  const [users, posts, comments] = await Promise.all([
+    fetch('/api/users').then(r => r.json()),
+    fetch('/api/posts').then(r => r.json()),
+    fetch('/api/comments').then(r => r.json()),
+  ])
+  return { users, posts, comments }
+  // ~300ms (paralel)
+}
+```
+
+### Tuzak 2: Event Loop Latency Ölçümü
+
+Elly admin panelinde tablo performansını izlerken Event Loop latency'yi şöyle ölçtük:
+
+```ts
+// Event Loop'un ne kadar meşgul olduğunu ölç
+function measureEventLoopLag(): Promise<number> {
+  return new Promise(resolve => {
+    const start = performance.now()
+    setImmediate(() => {
+      resolve(performance.now() - start)
+    })
+  })
+}
+
+// Her 5 saniyede bir ölç, 50ms+ gecikmede log at
+setInterval(async () => {
+  const lag = await measureEventLoopLag()
+  if (lag > 50) {
+    console.warn(
+      `Event Loop lag: ${lag.toFixed(2)}ms — heavy synchronous work?`,
+    )
+  }
+}, 5000)
+```
+
+### Tuzak 3: requestAnimationFrame ile Smooth Animasyon
+
+```ts
+// ❌ setTimeout ile animasyon — frame rate'e duyarsız
+let position = 0
+function animateWithTimeout() {
+  position += 2
+  element.style.transform = `translateX(${position}px)`
+  setTimeout(animateWithTimeout, 16) // ~60fps varsayımı, ama garanti değil
+}
+
+// ✅ rAF ile animasyon — tarayıcı render döngüsüyle senkron
+function animateWithRAF(timestamp: number) {
+  const delta = timestamp - lastTimestamp
+  position += (speed * delta) / 1000
+  element.style.transform = `translateX(${position}px)`
+  lastTimestamp = timestamp
+  requestAnimationFrame(animateWithRAF)
+}
+requestAnimationFrame(animateWithRAF)
+```
+
+## Özet: Event Loop Algoritması
+
+Tüm öğrendiklerimizi bir araya getirirsek Event Loop şu döngüyü tekrarlar:
+
+```
+1. Call Stack boşalana kadar senkron kodu çalıştır
+2. process.nextTick queue'yu tüket (Node.js)
+3. Microtask queue'yu tamamen tüket (Promise.then, queueMicrotask)
+   → Yeni microtask eklenirse onları da tüket
+4. Tarayıcıda: UI render / paint (gerekirse)
+5. Macrotask queue'dan bir görev al ve çalıştır
+6. 2. adıma geri dön
+```
+
+Bu algoritmayı bilmek somut fayda sağlar:
+
+- Promise callback'lerinin `setTimeout`'tan neden önce çalıştığını anlarsın
+- `await` sonrasındaki kodun neden "başka kod"dan sonra çalıştığını kavrasın
+- Uzun senkron döngülerin neden UI'ı dondurduğunu ve nasıl önleneceğini öngörsün
+- `setImmediate` vs `setTimeout` vs `process.nextTick` seçimini Node.js'de doğru yaparsın
+
+Event Loop JavaScript'in kalp atışıdır. Onu anlamak, async kod yazarken tahmin edilebilir, performanslı ve debug edilebilir uygulamalar inşa etmenin temelidir.
+
+---
+
+## Önerilen Kaynaklar
+
+- [MDN: Concurrency model and the event loop](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Event_loop)
+- [Jake Archibald: In The Loop (JSConf Asia)](https://www.youtube.com/watch?v=cCOL7MC4Pl0)
+- [Node.js Event Loop resmi dokümantasyonu](https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick)
+- [javascript.info: Event loop, microtasks and macrotasks](https://javascript.info/event-loop)

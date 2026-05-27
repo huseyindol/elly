@@ -1,0 +1,166 @@
+---
+title: "AI Agent'lar İle Yazılım Geliştirme Kültürü"
+description: 'Artık sadece kod yazmak yetmiyor, kod yazdıran sistemleri (Agent, Antigravity, Claude, vs.) mimarimi...'
+publishedAt: '2026-04-23'
+category: 'AI'
+author: 'Hüseyin DOL'
+coverImage: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?q=80&w=2000&auto=format&fit=crop'
+readingTime: '6'
+order: 99
+---
+
+Bu makale **AI** alanındaki deneyimlerimi ve yazılım geliştirme metodolojimi aktarmaktadır.
+
+## Genel Bakış
+
+> Artık sadece kod yazmak yetmiyor, kod yazdıran sistemleri (Agent, Antigravity, Claude, vs.) mimarimize entegre etmek gerekiyor. Kodlamadaki Agentic Workflow (ajan tabanlı akış) devrimi.
+
+Yakın geçmişte geliştiriciler manuel terminal betiklerine bağımlıydı. Ancak bugün, hata bildirimleri üzerinden otonom şekilde projeyi tarayıp düzeltebilen, testleri koşup PR açan "Agentic Workflow" mimarisine ulaştık.
+
+## Agentic Workflow Nedir?
+
+Klasik yazılım geliştirmede döngü şöyledir: developer kodu yazar → test eder → hata bulur → düzeltir → commit eder → review ister. Agentic workflow'da bu adımların büyük kısmı otonom agent'lar tarafından yürütülür. Developer'ın rolü **yönetici ve denetçi** olmaya evrilir.
+
+```
+Klasik Akış:
+Developer → Kod Yaz → Test Et → Debug → Fix → PR → Review
+
+Agentic Akış:
+Developer → Talimat Ver → [Agent: Kod Yaz + Test Et + Fix] → Review → Merge
+```
+
+## Pratikte Agent Kullanım Senaryoları
+
+Elly projesinde agent'ları günlük iş akışımıza entegre ettik. İşte gerçek senaryolardan örnekler:
+
+**Senaryo 1 — Bug Fix Otomasyonu:**
+Sentry'den gelen bir hata bildirimi agent'a iletiliyor. Agent ilgili dosyaları tarayıp hatanın kaynağını tespit ediyor, fix yazıyor, ilgili test'i güncelliyor ve PR açıyor.
+
+```
+Input: "TypeError: Cannot read property 'name' of undefined at OrderCard.tsx:42"
+
+Agent Akışı:
+1. OrderCard.tsx dosyasını oku → 42. satırdaki null reference'ı tespit et
+2. order.customer?.name şeklinde optional chaining ekle
+3. İlgili test dosyasını bul → null case için test ekle
+4. bun run test:ci → testleri çalıştır → PASS
+5. PR aç: "fix: handle null customer in OrderCard"
+```
+
+**Senaryo 2 — Kod Review Asistanı:**
+PR açıldığında agent otomatik olarak değişiklikleri analiz ediyor: güvenlik zaafiyetleri, performans sorunları, naming convention ihlalleri ve test coverage eksiklikleri raporlanıyor.
+
+**Senaryo 3 — Refactoring Desteği:**
+"Bu modüldeki tüm class component'leri functional component'e çevir" gibi geniş kapsamlı talimatlar veriliyor ve agent dosya dosya dönüşümü yapıyor.
+
+## Agent Teams: Paralel Çalışma Modeli
+
+Tek bir agent yerine, farklı uzmanlık alanlarına sahip agent takımları kullanıyoruz. Bu projede uyguladığımız takım yapısı:
+
+```
+┌─────────────────┐
+│   Team Lead     │  → Görevi alt task'lara böler
+│   (Orchestrator)│
+└────────┬────────┘
+         │
+    ┌────┴────┬──────────┬──────────┐
+    ▼         ▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│  Test  │ │Security│ │  UI    │ │ Perf   │
+│ Writer │ │Reviewer│ │Reviewer│ │Reviewer│
+└────────┘ └────────┘ └────────┘ └────────┘
+```
+
+Her agent kendi sorumluluğundaki dosyalarda çalışır, aynı dosyaya birden fazla agent yazamaz (conflict önleme). Bulgular yapılandırılmış formatta (impact, location, issue, fix) raporlanır.
+
+## CLAUDE.md: Agent'ın Hafızası
+
+Agent'ların projeyi anlaması için `CLAUDE.md` dosyası kritik öneme sahiptir. Bu dosya projenin tech stack'ini, kodlama kurallarını, dizin yapısını ve kaçınılması gereken anti-pattern'leri içerir. Agent her oturum başında bu dosyayı okuyarak projenin bağlamını kavrar.
+
+Junior ya da Senior ayırt etmeksizin tüm ekibin sadece bir kodlayıcıdan ziyade, bir planlayıcı ve Geliştirici Mühendis gibi projeye geniş tepeden bakabilen mimar seviyesine yükselmesi artık bu akışlarla saatler değil dakikalar alıyor.
+
+## Riskler: Güvenlik ve Yasal Sorumluluk
+
+Ajan doğrudan dosya yazabiliyor veya PR açabiliyorsa branch politikası, imza gereksinimi ve secret sızıntısı kontrolleri ihmal edilmemeli. Müşteri verisi içeren repolarda tam otonomi yerine insan onayı veya sandbox zorunludur.
+
+## Kalite Kapısı Aynı Kalmalı
+
+`bun run lint`, `type-check`, `test:ci` ajan çıktısı için de şart — pipeline yeşillemeden merge edilmemeli. Agent hızını kalite güvencesiz satın almak teknik borç üretir.
+
+## MCP ile Araç Genişlemesi
+
+MCP ile log, metrik ve issue tracker bağlandığında ajan bağlamı zenginleşir fakat yüzey alanı da büyür; hangi araçların okuma / yazma olduğu net politika gerektirir.
+
+## Sürdürülebilir Süreç
+
+Talimat şablonları, ADR ve `CLAUDE.md` güncellemeleri yaşayan doküman olmalı; aksi halde ajan yanlış varsayımla eski mimariyi üretir.
+
+## İnsan Onay Kuyruğu ve SLAs
+
+Otonom PR’lar review beklerken birikirse değer kaybolur; günlük veya haftalık SLA ile “bekleyen ajan PR’ı” metriği izlenir. Review yükü yüksek ekiplerde küçük otomatik özetler insanı hızlandırır fakat özetin kendisi de gözden geçirilmelidir.
+
+## Tehdit Modeli: Ajanın Yetkileri
+
+Repo yazma, issue kapatma veya deploy tetikleme ayrı ayrı risk sınıflarıdır. En az yetki prensibiyle araç izinleri ayrıştırılır ve geçici genişletmeler süreli olur.
+
+## Öğrenme Döngüsü ve Geri Bildirim
+
+Ajanın ürettiği hatalı patch’ler kısa postmortem ile kayda geçirilir; prompt veya kural seti güncellenir. Bu döngü olmadan aynı hata tekrarlanır.
+
+## Çoklu Ajan Koordinasyonu
+
+Paralel ajanlar aynı dosyaya yazmaya kalkarsa conflict patlar; ownership matrisi ve küçük görev dilimleri bu riski azaltır.
+
+## Etik ve Şeffaflık
+
+Kullanıcıya sunulan otomatik içerik veya mesajlarda kaynak veya insan denetimi gereksinimi ürün politikasıyla uyumlu olmalıdır.
+
+## Ölçek ve Ekip Genişlemesi
+
+Agent sayısı arttıkça koordinasyon maliyeti de artar; küçük ekiplerde bile görev kuyruğu ve sahiplik kuralları erken oturtulmalıdır. Aksi halde “herkes ajan kullanıyor ama kimse sorumlu değil” kaosu doğar.
+
+## Bilgi Kaçağı Önleme
+
+PR açıklamaları ve log özetleri hassas veri sızdırmamalıdır; otomatik özetleyiciler maskeleme kurallarından geçmelidir.
+
+## Deneyim Aktarımı
+
+Kıdemli mühendislerin review notları kısa playbooks’a dönüştürülürse junior’lar aynı tuzağı tekrar etmez; bu playbooks `CLAUDE.md` ile senkron tutulur.
+
+## SLA ve İş Kaynak Planlaması
+
+Ajan otomasyonunun getirdiği hız bazen beklenenden fazla review yükü üretir; sprint kapasitesi buna göre ayarlanmaz ise kalite düşer.
+
+## Geri Alma Planı
+
+Ajan çıktısı yanlışlıkla ana dala karıştıysa güvenli revert ve feature flag kapatma prosedürü hazır olmalıdır. Panik anında “manuel diff avcılığı” yapmak yerine kısa koşu kartları devreye girer.
+
+## Görev Ayrımı: Araştırma vs Uygulama
+
+Araştırma aşamasında geniş tarama, uygulama aşamasında dar dosya seti hedeflenmezse token israfı ve gereksiz yan etki oluşur. Bu ayrım görev şablonlarında açık yazılmalıdır.
+
+## İnsan Güveni Ölçümü
+
+Ekip anketi veya retrospektifte “ajana ne kadar güveniyoruz?” sorusu nabız gibi izlenir; güven düştüğünde kural seti ve eğitim müdahalesi gecikmeden yapılmalıdır.
+
+## Regresyon Avı
+
+Ajan ile hızlanan teslimat sıklığı, regresyon yüzeyini de genişletir; kritik kullanıcı akışları için minimum E2E kümesi dokunulmaz kabul edilir.
+
+## Sonuç
+
+Agentic workflow sürdürülebilir olmak için yaşayan politika, yaşayan dokümantasyon ve ölçülebilir güven isteyen bir kültürdür.
+
+## Denet İzi ve Görev Kartları
+
+Her ajan çıktısının hangi görev kartından geldiği (issue bağlantısı, kabul kriteri) izlenmezse retrospective’de kök neden analizi yapılamaz ve aynı hatalı talimat yeniden yazılır.
+
+## İnsanın Son Sözü
+
+Tam otonominin uygun olduğu yüzeyler ile mutlaka insan onayı gerektiren yüzeyler yazılı politikada ayrılır; gri alanda kalan süreçler en çok aksilik çıkarır.
+
+Bu çerçeveyle agent’lar hız katmanı olur; disiplinsiz kullanımda ise gürültü ve risk katmanına dönerler.
+
+---
+
+_Bu içerik kişisel geliştirme laboratuvarımdan ve prodüksiyon maceralarımdan derlenmiştir._

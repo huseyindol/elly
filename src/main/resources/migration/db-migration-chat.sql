@@ -5,14 +5,18 @@
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS chat_groups (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        VARCHAR(100),
-  description TEXT,
-  type        VARCHAR(10) NOT NULL CHECK (type IN ('GROUP', 'DM')),
-  created_by  BIGINT NOT NULL REFERENCES users(id),
-  created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name             VARCHAR(100),
+  description      TEXT,
+  type             VARCHAR(10) NOT NULL CHECK (type IN ('GROUP', 'DM')),
+  created_by       BIGINT NOT NULL REFERENCES users(id),
+  visibility_level INT NOT NULL DEFAULT 1,
+  created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- Add visibility_level to existing installations that ran an earlier migration
+ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS visibility_level INT NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS chat_group_members (
   group_id  UUID    NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,

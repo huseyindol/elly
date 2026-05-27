@@ -109,17 +109,56 @@ public class RoleService implements IRoleService {
 
   @Override
   @Transactional
-  public void assignRolesToUser(Long userId, Set<Long> roleIds) {
+  public void assignRolesToUser(Long userId, Set<Long> roleIds, Long requesterId) {
     executeInDefaultTenant(() -> {
+      // Requester'ın maksimum rol seviyesini belirle
+      User requester = userRepository.findById(requesterId)
+          .orElseThrow(() -> new ResourceNotFoundException("User", "id", requesterId));
+      int requesterLevel = getUserRoleLevel(requester);
+
+      // Atanacak rollerin hiçbiri requester'ın seviyesini geçemez
+      Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
+      for (Role role : roles) {
+        int roleLevel = getRoleLevel(role.getName());
+        if (roleLevel > requesterLevel) {
+          throw new com.cms.exception.ForbiddenException(
+              "Cannot assign role '" + role.getName() + "': exceeds your own permission level");
+        }
+      }
+
       User user = userRepository.findById(userId)
           .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-      Set<Role> roles = new HashSet<>(roleRepository.findAllById(roleIds));
       user.setRoles(roles);
       userRepository.save(user);
       // Kullanıcının auth cache'ini temizle — yeni roller hemen uygulanır
       userAuthCacheService.evictUserCache(user.getUsername());
       return null;
     });
+  }
+
+  /**
+   * Kullanıcının en yüksek rol seviyesini döner.
+   * SUPER_ADMIN=4, ADMIN=3, EDITOR=2, VIEWER/diğer=1
+   */
+  private int getUserRoleLevel(User user) {
+    if (user.getRoles() == null || user.getRoles().isEmpty()) return 1;
+    return user.getRoles().stream()
+        .mapToInt(r -> getRoleLevel(r.getName()))
+        .max()
+        .orElse(1);
+  }
+
+  /**
+   * Rol adını sayısal seviyeye çevirir.
+   * SUPER_ADMIN=4, ADMIN=3, EDITOR=2, diğer=1
+   */
+  private int getRoleLevel(String roleName) {
+    return switch (roleName) {
+      case "SUPER_ADMIN" -> 4;
+      case "ADMIN"       -> 3;
+      case "EDITOR"      -> 2;
+      default            -> 1;
+    };
   }
 
   @Override

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,12 +14,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cms.config.JwtAuthenticationFilter;
 import com.cms.controller.IRoleController;
 import com.cms.dto.DtoPermission;
 import com.cms.dto.DtoRole;
 import com.cms.dto.DtoRoleIU;
 import com.cms.dto.DtoUserRoleAssignment;
 import com.cms.entity.RootEntityResponse;
+import com.cms.exception.UnauthorizedException;
 import com.cms.service.IRoleService;
 
 import jakarta.validation.Valid;
@@ -81,8 +84,21 @@ public class RoleController extends BaseController implements IRoleController {
   public RootEntityResponse<Void> assignRolesToUser(
       @PathVariable Long userId,
       @Valid @RequestBody DtoUserRoleAssignment dto) {
-    roleService.assignRolesToUser(userId, dto.getRoleIds());
+    roleService.assignRolesToUser(userId, dto.getRoleIds(), getCurrentUserId());
     return ok(null);
+  }
+
+  // =============== Helpers ===============
+
+  private Long getCurrentUserId() {
+    var auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth == null || auth.getPrincipal() == null) {
+      throw new UnauthorizedException("Not authenticated");
+    }
+    if (auth.getPrincipal() instanceof JwtAuthenticationFilter.CachedUserPrincipal principal) {
+      return principal.getUserId();
+    }
+    throw new UnauthorizedException("Cannot resolve user identity");
   }
 
   // =============== Permission Endpoints ===============

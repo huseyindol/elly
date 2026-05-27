@@ -213,6 +213,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         User user = userByEmail.get();
         user.setProvider(provider);
         user.setProviderId(providerId);
+        user.setEmailVerified(true); // M5: OAuth provider email'i doğrulamış sayılır
         return userRepository.save(user);
       }
     }
@@ -227,6 +228,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     newUser.setLastName(lastName);
     newUser.setPassword(null); // OAuth kullanıcıları için password yok
     newUser.setIsActive(true);
+    newUser.setEmailVerified(true); // M5: Provider (Google/GitHub) email'i zaten doğrulamış
 
     return userRepository.save(newUser);
   }

@@ -54,6 +54,8 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
         if (accessor == null) return message;
 
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+          // H4: authenticateConnect() içindeki jwtUtil.validateToken(token, username, tokenVersion)
+          // çağrısı zaten token version kontrolü yapıyor — iptal edilmiş token'lar reject edilir.
           authenticateConnect(accessor, message);
         } else if (accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth) {
           // SEND/SUBSCRIBE vb. — REST ile aynı SecurityContext (ROLE_* dahil)

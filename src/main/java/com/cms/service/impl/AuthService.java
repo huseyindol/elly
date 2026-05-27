@@ -115,8 +115,16 @@ public class AuthService implements IAuthService {
         user.getRoles().add(viewerRole);
       }
 
+      // managedTenants sadece SUPER_ADMIN tarafından set edilebilir
+      // Public register endpoint'inden gelen isteklerde bu alan yok sayılır
       if (dtoRegister.getManagedTenants() != null && !dtoRegister.getManagedTenants().isEmpty()) {
-        user.setManagedTenants(dtoRegister.getManagedTenants());
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = auth != null && auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        if (isSuperAdmin) {
+          user.setManagedTenants(dtoRegister.getManagedTenants());
+        }
+        // SUPER_ADMIN değilse sessizce yok say — hata fırlatma, kayıt devam eder
       }
 
       User savedUser = userRepository.save(user);

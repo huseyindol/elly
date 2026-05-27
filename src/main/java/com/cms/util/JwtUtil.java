@@ -238,14 +238,18 @@ public class JwtUtil {
   /**
    * Website ziyaretçileri için kısa ömürlü guest token üretir.
    * loginSource=website, userId yok, sessionId + displayName claim'leri var.
+   * tenantId verilirse claim'e eklenir; null verilirse basedb fallback.
    * TTL: jwt.guest.expiration (default 1 saat)
    */
-  public String generateGuestToken(String displayName, String sessionId) {
+  public String generateGuestToken(String displayName, String sessionId, String tenantId) {
     Map<String, Object> claims = new HashMap<>();
     claims.put("sessionId", sessionId);
     claims.put("displayName", displayName);
     claims.put("loginSource", "website");
     claims.put("type", "guest");
+    if (tenantId != null && !tenantId.isBlank()) {
+      claims.put("tenantId", tenantId);
+    }
 
     return Jwts.builder()
         .claims(claims)

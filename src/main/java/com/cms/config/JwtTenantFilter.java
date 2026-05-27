@@ -57,9 +57,12 @@ public class JwtTenantFilter extends OncePerRequestFilter {
 
   /**
    * Authorization Bearer token'ından tenantId claim'ini çıkarır.
-   * loginSource="admin" ve auth/user path'lerinde null döner → basedb kullanılır.
-   * /api/v1/chat/ her zaman basedb'ye yönlendirilir (chat tabloları yalnızca basedb'de).
-   * loginSource="tenant" veya diğer path'lerde tenantId döner → tenantX kullanılır.
+   *
+   * Routing kuralları:
+   * - loginSource="admin" → her zaman basedb (null)
+   * - /api/v1/chat/ + loginSource="admin" → basedb (admin chat izolasyonu)
+   * - /api/v1/chat/ + loginSource="website"|"tenant" → JWT'deki tenantId (null ise basedb)
+   * - Diğer path'ler + loginSource="tenant"/"website" → JWT'deki tenantId
    */
   private String resolveTenantId(HttpServletRequest request) {
     String authHeader = request.getHeader("Authorization");
@@ -74,23 +77,16 @@ public class JwtTenantFilter extends OncePerRequestFilter {
       String loginSource = jwtUtil.extractLoginSource(jwt);
       String path = request.getRequestURI();
 
-      // Chat verisi (chat_groups, chat_group_members, chat_messages, ...) yalnızca
-      // basedb'de tutuluyor. JWT'in tenantId claim'i ne olursa olsun chat çağrıları
-      // basedb'ye gitmeli — aksi halde userRepository.findById tenant DB'sinde
-      // arayıp role bilgisini kaçırır ve SUPER_ADMIN bile "VIEWER" gibi davranır.
-      if (path.startsWith("/api/v1/chat/") || path.equals("/api/v1/chat")) {
-        log.debug("Chat path detected, forcing basedb (ignoring JWT tenantId={})", tenantId);
+      // Admin her zaman basedb'ye gider
+      if ("admin".equals(loginSource)) {
+        log.debug("Admin loginSource, forcing basedb for path: {}", path);
         return null;
       }
 
-      boolean isBaseDbPath = path.startsWith("/api/v1/auth/")
-          || path.startsWith("/api/v1/users")
-          || path.startsWith("/api/v1/roles");
-
-      // Admin login: auth, user ve role endpointleri her zaman basedb kullanır
-      if ("admin".equals(loginSource) && isBaseDbPath) {
-        log.debug("Admin login source, forcing basedb for path: {}", path);
-        return null;
+      // Chat path — tenant/guest kendi DB'sine gider
+      if (path.startsWith("/api/v1/chat/") || path.equals("/api/v1/chat")) {
+        log.debug("Chat path ({}), tenantId={}", loginSource, tenantId);
+        return (tenantId != null && !tenantId.isBlank()) ? tenantId : null;
       }
 
       if (tenantId != null && !tenantId.isBlank()) {

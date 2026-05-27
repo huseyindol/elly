@@ -533,8 +533,17 @@ public class AuthService implements IAuthService {
 
   @Override
   public DtoGuestTokenResponse getGuestToken(DtoGuestTokenRequest request) {
-    String sessionId = java.util.UUID.randomUUID().toString();
-    String token = jwtUtil.generateGuestToken(request.getDisplayName(), sessionId);
+    String tenantId = request.getTenantId();
+    // tenantId verilmişse geçerliliğini doğrula
+    if (tenantId != null && !tenantId.isBlank()) {
+      if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+        throw new BadRequestException("Unknown tenant: " + tenantId);
+      }
+    } else {
+      tenantId = null; // normalize — boş string → null
+    }
+    String sessionId = UUID.randomUUID().toString();
+    String token = jwtUtil.generateGuestToken(request.getDisplayName(), sessionId, tenantId);
     long expiresInSeconds = 3600L; // jwt.guest.expiration default 1 saat
     return new DtoGuestTokenResponse(token, expiresInSeconds, request.getDisplayName());
   }

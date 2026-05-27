@@ -42,7 +42,7 @@ public class ChatWebSocketController {
   public void sendMessage(@DestinationVariable UUID groupId,
       @Payload DtoChatMessageSend payload,
       SimpMessageHeaderAccessor headerAccessor) {
-    TenantContext.setTenantId(null);
+    TenantContext.setTenantId(resolveTenantId(headerAccessor));
     try {
       Long userId = resolveUserIdNullable(headerAccessor);
       if (userId != null) {
@@ -68,7 +68,7 @@ public class ChatWebSocketController {
   @MessageMapping("/chat/{groupId}/typing")
   public void typing(@DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
-    TenantContext.setTenantId(null);
+    TenantContext.setTenantId(resolveTenantId(headerAccessor));
     try {
       Long userId = resolveUserId(headerAccessor);
       String username = resolveUsername(headerAccessor);
@@ -83,7 +83,7 @@ public class ChatWebSocketController {
   @MessageMapping("/chat/{groupId}/read")
   public void markRead(@DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
-    TenantContext.setTenantId(null);
+    TenantContext.setTenantId(resolveTenantId(headerAccessor));
     try {
       Long userId = resolveUserId(headerAccessor);
       String username = resolveUsername(headerAccessor);
@@ -97,9 +97,9 @@ public class ChatWebSocketController {
 
   @EventListener
   public void handleSessionConnect(SessionConnectEvent event) {
-    TenantContext.setTenantId(null);
+    SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
+    TenantContext.setTenantId(resolveTenantIdFromSessionAttrs(accessor));
     try {
-      SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
       Long userId = resolveUserIdFromSessionAttrs(accessor);
       String username = resolveUsernameFromSessionAttrs(accessor);
       if (userId == null) return;
@@ -116,9 +116,9 @@ public class ChatWebSocketController {
 
   @EventListener
   public void handleSessionDisconnect(SessionDisconnectEvent event) {
-    TenantContext.setTenantId(null);
+    SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
+    TenantContext.setTenantId(resolveTenantIdFromSessionAttrs(accessor));
     try {
-      SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
       Long userId = resolveUserIdFromSessionAttrs(accessor);
       String username = resolveUsernameFromSessionAttrs(accessor);
       if (userId == null) return;
@@ -130,6 +130,25 @@ public class ChatWebSocketController {
       }
     } finally {
       TenantContext.clear();
+    }
+  }
+
+  /**
+   * Session attributes'tan tenantId okur.
+   * Admin için null (basedb), guest için token'daki tenantId (null ise basedb).
+   */
+  private String resolveTenantId(SimpMessageHeaderAccessor accessor) {
+    return resolveTenantIdFromSessionAttrs(accessor);
+  }
+
+  private String resolveTenantIdFromSessionAttrs(SimpMessageHeaderAccessor accessor) {
+    try {
+      Map<String, Object> attrs = accessor.getSessionAttributes();
+      if (attrs == null) return null;
+      Object tenantId = attrs.get("tenantId");
+      return (tenantId != null && !tenantId.toString().isBlank()) ? tenantId.toString() : null;
+    } catch (Exception e) {
+      return null;
     }
   }
 

@@ -77,14 +77,18 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
               if (sessionAttrs != null) {
                 sessionAttrs.put("userId", userId);
                 sessionAttrs.put("username", username);
+                sessionAttrs.put("tenantId", null); // admin → basedb
               }
 
+              // Admin her zaman basedb
+              TenantContext.setTenantId(null);
               log.debug("WebSocket admin authenticated: user={}, userId={}", username, userId);
 
             } else {
               // Guest (website) bağlantısı
               String sessionId = jwtUtil.extractSessionId(token);
               String displayName = jwtUtil.extractDisplayName(token);
+              String guestTenantId = jwtUtil.extractTenantId(token); // null ise basedb
 
               UsernamePasswordAuthenticationToken auth =
                   new UsernamePasswordAuthenticationToken(sessionId, null,
@@ -96,13 +100,14 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
                 sessionAttrs.put("sessionId", sessionId);
                 sessionAttrs.put("displayName", displayName);
                 sessionAttrs.put("username", displayName);
+                sessionAttrs.put("tenantId", guestTenantId); // null → basedb, değer → tenant DB
               }
 
-              log.debug("WebSocket guest connected: sessionId={}, displayName={}", sessionId, displayName);
+              // Guest: tenantId varsa o DB'ye, yoksa basedb
+              TenantContext.setTenantId(guestTenantId);
+              log.debug("WebSocket guest connected: sessionId={}, displayName={}, tenantId={}",
+                  sessionId, displayName, guestTenantId);
             }
-
-            // Chat her zaman basedb'de çalışır
-            TenantContext.setTenantId(null);
 
             log.debug("WebSocket CONNECT completed. loginSource={}", loginSource);
           } catch (org.springframework.messaging.MessageDeliveryException e) {

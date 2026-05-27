@@ -26,5 +26,12 @@ public class DtoAuthResponse {
 
   /** Kullanıcının tüm izinleri: ["posts:create", "posts:read", ...] */
   private List<String> permissions;
+
+  // ── 2FA ────────────────────────────────────────────────────────────────
+  /** true ise tam JWT henüz yok; sadece mfaToken geçerli */
+  private Boolean mfaRequired;
+
+  /** Kısa ömürlü (5 dk) MFA token — sadece /api/v1/auth/mfa/verify'e gönderilir */
+  private String mfaToken;
 }
 

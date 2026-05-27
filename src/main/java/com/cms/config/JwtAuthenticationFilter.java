@@ -185,6 +185,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
           .isActive(user.getIsActive())
           .tokenVersion(user.getTokenVersion())
           .authorities(authorities)
+          .mfaEnabled(user.getMfaEnabled())
           .build();
 
       try {

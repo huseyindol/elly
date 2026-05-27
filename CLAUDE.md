@@ -159,6 +159,7 @@ Agent Teams aktif (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Buyuk gorevlerde p
 | `code-reviewer` | Kod kalitesi, pattern uyumu | sonnet | Read, Glob, Grep |
 | `devops-engineer` | K8s, Docker, CI/CD | sonnet | Read, Glob, Grep, Bash, Write, Edit |
 | `security-guard` | Guvenlik analizi | sonnet | Read, Glob, Grep |
+| `product-advisor` | Ozellik tartismasi, piyasa arastirmasi, yalakalik yapmadan elesti | sonnet | Read, Glob, Grep, WebSearch, WebFetch, Bash |
 
 **Kullanim:**
 ```

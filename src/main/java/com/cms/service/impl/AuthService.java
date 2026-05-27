@@ -24,10 +24,16 @@ import java.util.stream.Collectors;
 
 import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
+import com.cms.dto.DtoMfaDisableRequest;
+import com.cms.dto.DtoMfaSetupResponse;
+import com.cms.dto.DtoMfaSetupVerifyRequest;
+import com.cms.dto.DtoMfaVerifyRequest;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
 import com.cms.dto.DtoTenantTokenResponse;
 import com.cms.dto.EmailRequest;
+import com.cms.service.TotpService;
+import com.cms.util.AesEncryptor;
 import com.cms.entity.RefreshToken;
 import com.cms.entity.Role;
 import com.cms.entity.User;
@@ -61,6 +67,8 @@ public class AuthService implements IAuthService {
   private final RoleRepository roleRepository;
   private final MailAccountRepository mailAccountRepository;
   private final IEmailService emailService;
+  private final TotpService totpService;
+  private final AesEncryptor aesEncryptor;
 
   @Value("${jwt.refresh.expiration:3600000}")
   private Long refreshTokenExpiration;
@@ -271,6 +279,27 @@ public class AuthService implements IAuthService {
       }
     }
 
+    String loginSource = isAdminLogin ? "admin" : "tenant";
+
+    // ── 2FA kontrolü ────────────────────────────────────────────────────
+    // Şifre doğrulandı; MFA aktifse kısa ömürlü mfaToken dön, JWT henüz yok.
+    // tokenVersion bu adımda artırılmaz — MFA doğrulandığında artırılır.
+    if (Boolean.TRUE.equals(user.getMfaEnabled()) && Boolean.TRUE.equals(user.getMfaSetupVerified())) {
+      String mfaToken = jwtUtil.generateMfaToken(user.getId(), loginSource, tenantId);
+      DtoAuthResponse mfaResponse = new DtoAuthResponse();
+      mfaResponse.setMfaRequired(true);
+      mfaResponse.setMfaToken(mfaToken);
+      return mfaResponse;
+    }
+
+    return issueFullAuthToken(user, loginSource, tenantId);
+  }
+
+  /**
+   * Kullanıcı için access + refresh token üretir ve DtoAuthResponse döner.
+   * login() ve verifyMfaLogin() tarafından paylaşılır.
+   */
+  private DtoAuthResponse issueFullAuthToken(User user, String loginSource, String tenantId) {
     // Token version'ı artır
     Long newTokenVersion = (user.getTokenVersion() != null ? user.getTokenVersion() : 0L) + 1;
 
@@ -278,8 +307,6 @@ public class AuthService implements IAuthService {
     userRepository.updateTokenVersion(user.getId(), newTokenVersion);
     // Token version değişti, cache'i temizle
     userAuthCacheService.evictUserCache(user.getUsername());
-
-    String loginSource = isAdminLogin ? "admin" : "tenant";
 
     // JWT token oluştur (güncel version ile)
     String token = jwtUtil.generateToken(user.getId(), user.getUsername(), newTokenVersion, tenantId, loginSource);
@@ -382,6 +409,124 @@ public class AuthService implements IAuthService {
     populateRolesAndPermissions(response, user);
 
     return response;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // 2FA (TOTP) Metodları
+  // ════════════════════════════════════════════════════════════════════════
+
+  @Override
+  @Transactional
+  public DtoMfaSetupResponse initMfaSetup(Long userId, String tenantId) {
+    User user = loadUserForMfa(userId, tenantId);
+
+    // Her çağrıda yeni secret üret (henüz doğrulanmamış setup sıfırlanabilir)
+    String plainSecret = totpService.generateSecret();
+    String encryptedSecret = aesEncryptor.encrypt(plainSecret);
+
+    user.setMfaSecret(encryptedSecret);
+    user.setMfaEnabled(false);      // setup tamamlanana kadar aktif değil
+    user.setMfaSetupVerified(false);
+    userRepository.save(user);
+    userAuthCacheService.evictUserCache(user.getUsername());
+
+    String qrUri = totpService.buildQrUri(plainSecret, user.getUsername());
+    return DtoMfaSetupResponse.builder()
+        .secret(plainSecret)
+        .qrUri(qrUri)
+        .issuer("Elly CMS")
+        .build();
+  }
+
+  @Override
+  @Transactional
+  public void completeMfaSetup(Long userId, DtoMfaSetupVerifyRequest request, String tenantId) {
+    User user = loadUserForMfa(userId, tenantId);
+
+    if (user.getMfaSecret() == null) {
+      throw new BadRequestException("2FA kurulumu başlatılmamış. Önce /mfa/setup endpoint'ini çağırın.");
+    }
+
+    String plainSecret = aesEncryptor.decrypt(user.getMfaSecret());
+    if (!totpService.verify(plainSecret, request.getCode())) {
+      throw new UnauthorizedException("Geçersiz doğrulama kodu. Authenticator uygulamanızı kontrol edin.");
+    }
+
+    user.setMfaEnabled(true);
+    user.setMfaSetupVerified(true);
+    userRepository.save(user);
+    userAuthCacheService.evictUserCache(user.getUsername());
+  }
+
+  @Override
+  @Transactional
+  public DtoAuthResponse verifyMfaLogin(DtoMfaVerifyRequest request) {
+    // 1. MFA token'ı doğrula
+    if (!jwtUtil.validateMfaToken(request.getMfaToken())) {
+      throw new UnauthorizedException("Geçersiz veya süresi dolmuş MFA token. Lütfen yeniden giriş yapın.");
+    }
+
+    // 2. Token'dan bağlamı çıkar
+    Long userId = jwtUtil.extractUserId(request.getMfaToken());
+    String loginSource = jwtUtil.extractLoginSource(request.getMfaToken());
+    String tenantId = jwtUtil.extractTenantId(request.getMfaToken());
+
+    // 3. Kullanıcıyı yükle (doğru tenant context ile)
+    User user = loadUserForMfa(userId, tenantId);
+
+    if (!Boolean.TRUE.equals(user.getMfaEnabled()) || !Boolean.TRUE.equals(user.getMfaSetupVerified())) {
+      throw new BadRequestException("Bu kullanıcı için 2FA etkin değil.");
+    }
+
+    // 4. TOTP kodunu doğrula
+    String plainSecret = aesEncryptor.decrypt(user.getMfaSecret());
+    if (!totpService.verify(plainSecret, request.getCode())) {
+      throw new UnauthorizedException("Geçersiz 2FA kodu.");
+    }
+
+    // 5. Tam JWT üret
+    return issueFullAuthToken(user, loginSource, tenantId);
+  }
+
+  @Override
+  @Transactional
+  public void disableMfa(Long userId, DtoMfaDisableRequest request, String tenantId) {
+    User user = loadUserForMfa(userId, tenantId);
+
+    if (!Boolean.TRUE.equals(user.getMfaEnabled())) {
+      throw new BadRequestException("2FA zaten devre dışı.");
+    }
+
+    // Şifreyi doğrula
+    if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+      throw new UnauthorizedException("Şifre hatalı.");
+    }
+
+    user.setMfaEnabled(false);
+    user.setMfaSetupVerified(false);
+    user.setMfaSecret(null);
+    userRepository.save(user);
+    userAuthCacheService.evictUserCache(user.getUsername());
+  }
+
+  /**
+   * MFA işlemleri için kullanıcıyı doğru tenant context'te yükler.
+   * Admin login = basedb, tenant login = tenantId.
+   */
+  private User loadUserForMfa(Long userId, String tenantId) {
+    String originalTenant = TenantContext.getTenantId();
+    // loginSource bilinmiyorsa tenantId'ye göre context belirle
+    if (tenantId == null || tenantId.isBlank()) {
+      TenantContext.setTenantId(null); // basedb fallback
+    } else {
+      TenantContext.setTenantId(tenantId);
+    }
+    try {
+      return userRepository.findById(userId)
+          .orElseThrow(() -> new UnauthorizedException("Kullanıcı bulunamadı."));
+    } finally {
+      TenantContext.setTenantId(originalTenant);
+    }
   }
 
   @Override

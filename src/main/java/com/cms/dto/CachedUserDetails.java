@@ -29,4 +29,5 @@ public class CachedUserDetails implements Serializable {
   private Boolean isActive;
   private Long tokenVersion;
   private Set<String> authorities; // "ROLE_SUPER_ADMIN", "posts:create", vb.
+  private Boolean mfaEnabled;
 }

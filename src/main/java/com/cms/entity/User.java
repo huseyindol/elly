@@ -82,4 +82,16 @@ public class User extends BaseEntity {
   @CollectionTable(name = "user_tenants", joinColumns = @JoinColumn(name = "user_id"))
   @Column(name = "tenant_id")
   private List<String> managedTenants = new ArrayList<>();
+
+  // ── 2FA (TOTP) ──────────────────────────────────────────────────────────
+  @Column(name = "mfa_enabled", nullable = false)
+  private Boolean mfaEnabled = false;
+
+  /** AES-256-CBC ile şifreli Base32 TOTP secret. Format: base64(IV):base64(ciphertext) */
+  @Column(name = "mfa_secret", length = 128)
+  private String mfaSecret;
+
+  /** true → kullanıcı en az bir kez kodu doğruladı; 2FA aktif olarak uygulanır */
+  @Column(name = "mfa_setup_verified", nullable = false)
+  private Boolean mfaSetupVerified = false;
 }

@@ -30,6 +30,9 @@ public class JwtUtil {
   @Value("${jwt.refresh.expiration:604800000}")
   private Long refreshExpiration; // 7 gün (milisaniye cinsinden)
 
+  @Value("${jwt.mfa.expiration:300000}")
+  private Long mfaExpiration; // 5 dakika (milisaniye cinsinden)
+
   private SecretKey getSigningKey() {
     return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
   }
@@ -172,6 +175,46 @@ public class JwtUtil {
       Claims claims = extractAllClaims(token);
       String type = claims.get("type", String.class);
       return "refresh".equals(type) && !isTokenExpired(token);
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  // ==========================================
+  // MFA JWT Methods
+  // ==========================================
+  // NOT: Guest JWT (generateGuestToken) bu turda atlandı — main'in VisitorIdentity
+  // yapısıyla guest chat birleşimi ayrı oturuma kaldı.
+
+  /**
+   * 2FA ikinci adımı için kısa ömürlü MFA token üretir.
+   * TTL: jwt.mfa.expiration (default 5 dakika).
+   * Bu token sadece /api/v1/auth/mfa/verify endpoint'ine gönderilebilir.
+   */
+  public String generateMfaToken(Long userId, String loginSource, String tenantId) {
+    Map<String, Object> claims = new HashMap<>();
+    claims.put("userId", userId);
+    claims.put("loginSource", loginSource);
+    claims.put("tenantId", tenantId);
+    claims.put("type", "mfa");
+    return Jwts.builder()
+        .claims(claims)
+        .subject(String.valueOf(userId))
+        .issuedAt(new Date(System.currentTimeMillis()))
+        .expiration(new Date(System.currentTimeMillis() + mfaExpiration))
+        .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
+        .compact();
+  }
+
+  /**
+   * MFA token'ının geçerli ve tip kontrolü için.
+   * @return true eğer token type=mfa, süresi dolmamış ve parse edilebilir ise
+   */
+  public Boolean validateMfaToken(String token) {
+    try {
+      Claims claims = extractAllClaims(token);
+      String type = claims.get("type", String.class);
+      return "mfa".equals(type) && !isTokenExpired(token);
     } catch (Exception e) {
       return false;
     }

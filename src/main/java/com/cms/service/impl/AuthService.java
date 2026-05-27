@@ -196,8 +196,12 @@ public class AuthService implements IAuthService {
         return;
       }
 
-      String verifyUrl = frontendUrl + "/verify-email?token=" + verificationToken
-          + "&tenantId=" + (tenantId != null ? tenantId : "");
+      String verifyUrl = org.springframework.web.util.UriComponentsBuilder
+          .fromUriString(frontendUrl)
+          .path("/verify-email")
+          .queryParam("token", verificationToken)
+          .queryParam("tenantId", tenantId != null ? tenantId : "")
+          .build().toUriString();
 
       EmailRequest emailRequest = new EmailRequest();
       emailRequest.setTo(user.getEmail());

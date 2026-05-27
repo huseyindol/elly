@@ -1,6 +1,7 @@
 package com.cms.controller;
 
 import com.cms.dto.DtoChatGroup;
+import com.cms.dto.DtoChatGroupAccess;
 import com.cms.dto.DtoChatGroupCreate;
 import com.cms.dto.DtoChatMember;
 import com.cms.entity.RootEntityResponse;
@@ -34,6 +35,9 @@ public interface IChatGroupController {
 
   @Operation(summary = "Grup üyelerini listele")
   ResponseEntity<RootEntityResponse<List<DtoChatMember>>> getMembers(UUID groupId);
+
+  @Operation(summary = "Mevcut kullanıcının gruptaki okuma/yazma durumu")
+  ResponseEntity<RootEntityResponse<DtoChatGroupAccess>> getGroupAccess(UUID groupId);
 
   @Operation(summary = "Grubu sil")
   ResponseEntity<Void> deleteGroup(UUID groupId);

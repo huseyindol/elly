@@ -11,6 +11,8 @@ import com.cms.service.ChatPresenceService;
 import com.cms.service.ChatTypingService;
 import com.cms.service.ChatRateLimitService;
 import com.cms.config.TenantContext;
+import com.cms.exception.ForbiddenException;
+import com.cms.util.ChatTopics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -38,17 +40,58 @@ public class ChatWebSocketController {
   private final ChatRateLimitService rateLimitService;
   private final SimpMessagingTemplate messagingTemplate;
 
+  /**
+   * AC mesajı: {@code /app/chat/{groupId}/send}.
+   * TenantContext basedb'ye sabitlenir (mevcut davranış).
+   */
   @MessageMapping("/chat/{groupId}/send")
   public void sendMessage(@DestinationVariable UUID groupId,
       @Payload DtoChatMessageSend payload,
       SimpMessageHeaderAccessor headerAccessor) {
+    Long userId = resolveUserId(headerAccessor);
+    rateLimitService.checkRateLimit(userId);
+    String sessionTenant = resolveOptionalSessionTenant(headerAccessor);
+
     TenantContext.setTenantId(null);
+    String activeTenant = null;
+    try {
+      DtoChatMessage saved;
+      try {
+        saved = messageService.saveMessage(groupId, userId, payload);
+      } catch (ForbiddenException e) {
+        // Eski AC grupları JWT tenantId varken yanlışlıkla tenant DB'ye yazılmış olabilir
+        if (sessionTenant == null || sessionTenant.isBlank()) {
+          throw e;
+        }
+        log.debug("AC send denied on basedb for group {}, retrying tenant {}", groupId, sessionTenant);
+        TenantContext.setTenantId(sessionTenant);
+        activeTenant = sessionTenant;
+        saved = messageService.saveMessage(groupId, userId, payload);
+      }
+      messagingTemplate.convertAndSend(ChatTopics.messageTopic(activeTenant, groupId), saved);
+      log.debug("AC message sent to group {} by user {} (tenant={})", groupId, userId, activeTenant);
+    } finally {
+      TenantContext.clear();
+    }
+  }
+
+  /**
+   * TC mesajı: {@code /app/tenant-chat/{tenantId}/{groupId}/send}.
+   * TenantContext destination'daki {@code tenantId}'ye set edilir; mesaj o tenant
+   * DB'sine yazılır ve broadcast'i tenant-aware topic'e gider.
+   */
+  @MessageMapping("/tenant-chat/{tenantId}/{groupId}/send")
+  public void sendTenantMessage(@DestinationVariable String tenantId,
+      @DestinationVariable UUID groupId,
+      @Payload DtoChatMessageSend payload,
+      SimpMessageHeaderAccessor headerAccessor) {
+    TenantContext.setTenantId(tenantId);
     try {
       Long userId = resolveUserId(headerAccessor);
       rateLimitService.checkRateLimit(userId);
       DtoChatMessage saved = messageService.saveMessage(groupId, userId, payload);
-      messagingTemplate.convertAndSend("/topic/group/" + groupId, saved);
-      log.debug("Message sent to group {} by user {}", groupId, userId);
+      messagingTemplate.convertAndSend(ChatTopics.messageTopic(tenantId, groupId), saved);
+      log.debug("TC message sent to tenant={} group={} by user={}", tenantId, groupId, userId);
     } finally {
       TenantContext.clear();
     }
@@ -63,7 +106,23 @@ public class ChatWebSocketController {
       String username = resolveUsername(headerAccessor);
       typingService.setTyping(groupId, userId);
       DtoChatTyping event = new DtoChatTyping(groupId, userId, username, true);
-      messagingTemplate.convertAndSend("/topic/group/" + groupId + "/typing", event);
+      messagingTemplate.convertAndSend(ChatTopics.typingTopic(null, groupId), event);
+    } finally {
+      TenantContext.clear();
+    }
+  }
+
+  @MessageMapping("/tenant-chat/{tenantId}/{groupId}/typing")
+  public void typingTenant(@DestinationVariable String tenantId,
+      @DestinationVariable UUID groupId,
+      SimpMessageHeaderAccessor headerAccessor) {
+    TenantContext.setTenantId(tenantId);
+    try {
+      Long userId = resolveUserId(headerAccessor);
+      String username = resolveUsername(headerAccessor);
+      typingService.setTyping(groupId, userId);
+      DtoChatTyping event = new DtoChatTyping(groupId, userId, username, true);
+      messagingTemplate.convertAndSend(ChatTopics.typingTopic(tenantId, groupId), event);
     } finally {
       TenantContext.clear();
     }
@@ -78,7 +137,23 @@ public class ChatWebSocketController {
       String username = resolveUsername(headerAccessor);
       messageService.markGroupAsRead(groupId, userId);
       DtoChatRead event = new DtoChatRead(groupId, userId, username);
-      messagingTemplate.convertAndSend("/topic/group/" + groupId + "/read", event);
+      messagingTemplate.convertAndSend(ChatTopics.readTopic(null, groupId), event);
+    } finally {
+      TenantContext.clear();
+    }
+  }
+
+  @MessageMapping("/tenant-chat/{tenantId}/{groupId}/read")
+  public void markReadTenant(@DestinationVariable String tenantId,
+      @DestinationVariable UUID groupId,
+      SimpMessageHeaderAccessor headerAccessor) {
+    TenantContext.setTenantId(tenantId);
+    try {
+      Long userId = resolveUserId(headerAccessor);
+      String username = resolveUsername(headerAccessor);
+      messageService.markGroupAsRead(groupId, userId);
+      DtoChatRead event = new DtoChatRead(groupId, userId, username);
+      messagingTemplate.convertAndSend(ChatTopics.readTopic(tenantId, groupId), event);
     } finally {
       TenantContext.clear();
     }
@@ -128,6 +203,15 @@ public class ChatWebSocketController {
     Object userId = attrs.get("userId");
     if (userId == null) throw new com.cms.exception.UnauthorizedException("userId not found in session");
     return (userId instanceof Long l) ? l : Long.valueOf(userId.toString());
+  }
+
+  private String resolveOptionalSessionTenant(SimpMessageHeaderAccessor accessor) {
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    if (attrs == null) return null;
+    Object tenantId = attrs.get("tenantId");
+    if (tenantId == null) return null;
+    String value = tenantId.toString().trim();
+    return value.isEmpty() ? null : value;
   }
 
   private String resolveUsername(SimpMessageHeaderAccessor accessor) {

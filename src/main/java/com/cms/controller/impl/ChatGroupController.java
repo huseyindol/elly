@@ -2,9 +2,12 @@ package com.cms.controller.impl;
 
 import com.cms.controller.IChatGroupController;
 import com.cms.dto.DtoChatGroup;
+import com.cms.dto.DtoChatGroupAccess;
 import com.cms.dto.DtoChatGroupCreate;
 import com.cms.dto.DtoChatMember;
+import com.cms.dto.DtoChatMembershipEvent;
 import com.cms.service.IChatGroupService;
+import com.cms.service.ChatMembershipNotifier;
 import com.cms.entity.RootEntityResponse;
 import com.cms.exception.UnauthorizedException;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ import java.util.UUID;
 public class ChatGroupController implements IChatGroupController {
 
   private final IChatGroupService groupService;
+  private final ChatMembershipNotifier membershipNotifier;
   private final SimpMessagingTemplate messagingTemplate;
 
   @Override
@@ -65,9 +69,15 @@ public class ChatGroupController implements IChatGroupController {
   public ResponseEntity<RootEntityResponse<DtoChatMember>> addMember(
       @PathVariable UUID groupId, @PathVariable Long userId) {
     DtoChatMember member = groupService.addMember(groupId, userId, getCurrentUserId());
-    // Davet edilen kullanıcıya kişisel topic'ten grubu gönder
-    DtoChatGroup group = groupService.getGroupById(groupId, getCurrentUserId());
-    messagingTemplate.convertAndSend("/topic/user/" + userId + "/groups/joined", group);
+    DtoChatGroup group = groupService.getGroupById(groupId, userId);
+    DtoChatMembershipEvent event = DtoChatMembershipEvent.builder()
+        .action("JOINED")
+        .groupId(groupId)
+        .userId(userId)
+        .group(group)
+        .message("Gruba dahil edildiniz.")
+        .build();
+    membershipNotifier.notifyJoined(userId, group, event);
     return ResponseEntity.status(HttpStatus.CREATED).body(RootEntityResponse.ok(member));
   }
 
@@ -76,6 +86,13 @@ public class ChatGroupController implements IChatGroupController {
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<Void> removeMember(@PathVariable UUID groupId, @PathVariable Long userId) {
     groupService.removeMember(groupId, userId, getCurrentUserId());
+    DtoChatMembershipEvent event = DtoChatMembershipEvent.builder()
+        .action("REMOVED")
+        .groupId(groupId)
+        .userId(userId)
+        .message("Gruptan çıkarıldınız.")
+        .build();
+    membershipNotifier.notifyRemoved(userId, groupId, event);
     return ResponseEntity.noContent().build();
   }
 
@@ -84,6 +101,14 @@ public class ChatGroupController implements IChatGroupController {
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<List<DtoChatMember>>> getMembers(@PathVariable UUID groupId) {
     return ResponseEntity.ok(RootEntityResponse.ok(groupService.getMembers(groupId, getCurrentUserId())));
+  }
+
+  @Override
+  @GetMapping("/groups/{groupId}/access")
+  @PreAuthorize("hasAuthority('chat:read')")
+  public ResponseEntity<RootEntityResponse<DtoChatGroupAccess>> getGroupAccess(@PathVariable UUID groupId) {
+    return ResponseEntity.ok(
+        RootEntityResponse.ok(groupService.resolveGroupAccess(groupId, getCurrentUserId())));
   }
 
   @Override

@@ -117,4 +117,12 @@ public final class PermissionConstants {
   // =============== CHAT ===============
   public static final String CHAT_READ = "chat:read";
   public static final String CHAT_MANAGE = "chat:manage";
+
+  // =============== TENANT CHAT (TC) ===============
+  /** Tenant chat group'larını oku — admin VE kayıtlı tenant user'larına verilir. */
+  public static final String TENANT_CHAT_READ = "tenant_chat:read";
+  /** Tenant chat group'larında mesaj yaz — admin VE kayıtlı tenant user'larına verilir. */
+  public static final String TENANT_CHAT_WRITE = "tenant_chat:write";
+  /** Tenant chat group'u oluştur/sil — yalnızca ADMIN/SUPER_ADMIN. */
+  public static final String TENANT_CHAT_MANAGE = "tenant_chat:manage";
 }

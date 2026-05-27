@@ -16,8 +16,13 @@ Prompt sırası (baştan sona):
 - **Prompt 4:** Email Logs sayfası (v3 retry için)
 - **Prompt 5:** Mail Accounts sayfası (SMTP profil CRUD + test/verify — v2 DB-based)
 - **Prompt 6:** Forms sayfası (FormDefinition CRUD + Submissions + Mail+Form v4 — opsiyonel bildirim, çoklu alıcı)
+- **Prompt 7:** Chat sayfası (Admin Chat + Tenant Chat tenant-aware, polymorphic sender — admin/visitor)
+- **Prompt 8:** Tenant Website Chat Widget (Z için — bu prompt **tenant website projesinde** çalıştırılır, panel'de DEĞİL)
 
 Her prompt'un bağlamı **aynı CMS API**'ye dayanır — endpoint listeleri her promptta tekrar veriliyor ki agent diğer dokümanlara bakmak zorunda kalmasın.
+
+**Prompt 0-7 → elly-admin-panel projesinde** kullanılır.
+**Prompt 8 → tenant website projesinde** (tenant1.com, tenant2.com, ...) kullanılır.
 
 ---
 
@@ -1262,6 +1267,1085 @@ export const formsKeys = {
 
 ---
 
+## Prompt 7 — Chat (Admin Chat + Tenant Chat, polymorphic sender)
+
+**Ön koşul:** Prompt 1 tamam (http client `X-Tenant-Id` header'ını destekliyor olmalı — aksi halde aşağıdaki client wrapper'da elle eklersin). Backend chat-tenant-aware migration uygulanmış olmalı.
+
+```
+elly-admin-panel'e "Chat" admin sayfası ekle. CMS'in iki chat domain'i var:
+
+  • Admin Chat (AC) — basedb'de duran admin-only chat group'ları (mevcut).
+  • Tenant Chat (TC) — her tenant'ın kendi DB'sinde duran website chat'leri.
+    Bir TC group'una hem admin'ler hem (visitor_access=true ise) o tenant'ın
+    kayıtlı user'ları yazabilir.
+
+Tek bir chat module'ünden ikisini de yönet. Frontend'in işi:
+  1) AC ve TC group'larını ayrı listelemek (rozetlerle)
+  2) TC group'una giderken X-Tenant-Id header'ını set etmek
+  3) WebSocket subscribe'ında tenant-aware topic'i kullanmak
+  4) Mesaj render'ında sender_type'a göre admin/visitor rozetini göstermek
+
+## Bağlam — Data modeli
+
+CMS Response body alanları:
+
+  ChatGroup:
+    id              uuid
+    name            string
+    description     string | null
+    type            'GROUP' | 'DM'
+    createdBy       number (basedb users.id)
+    visibilityLevel 1..4
+    tenantId        string | null      ← NULL = AC; "tenant1" gibi = TC
+    visitorAccess   boolean             ← TRUE ise website ziyaretçileri görebilir
+    createdAt, updatedAt
+
+  ChatMessage:
+    id              uuid
+    groupId         uuid
+    senderType      'ADMIN' | 'VISITOR'  ← polymorphic discriminator
+    senderId        number | null        ← admin ise basedb users.id, visitor ise null
+    visitorId       number | null        ← visitor ise tenant DB visitor_identities.id
+    senderUsername  string               ← backend pre-resolved display name
+    content         string (sanitized)
+    contentType     'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM'
+    fileUrl         string | null
+    parentId        uuid | null
+    deleted         boolean
+    editedAt        Date | null
+    createdAt       Date
+
+## Bağlam — CMS Endpoint'leri
+
+REST (auth: admin JWT):
+  GET    /api/v1/chat/groups                          → kullanıcının görebildiği group'lar
+  POST   /api/v1/chat/groups                          → yeni group (body: name, description,
+                                                         memberIds[], tenantId?, visitorAccess?)
+  GET    /api/v1/chat/groups/{groupId}                → group detay
+  DELETE /api/v1/chat/groups/{groupId}                → group sil (owner/SUPER_ADMIN)
+  POST   /api/v1/chat/dm/{targetUserId}               → DM aç/getir
+  POST   /api/v1/chat/groups/{groupId}/members/{userId}   → üye ekle
+  DELETE /api/v1/chat/groups/{groupId}/members/{userId}   → üye çıkar
+  GET    /api/v1/chat/groups/{groupId}/members        → üye listesi
+  GET    /api/v1/chat/groups/{groupId}/access         → mevcut kullanıcının okuma/yazma durumu (NEW)
+  GET    /api/v1/chat/groups/{groupId}/messages?before=&limit=50  → history (cursor pagination)
+  POST   /api/v1/chat/groups/{groupId}/messages       → mesaj gönder (REST — NEW)
+                                                         body: { content, contentType?, fileUrl?, parentId? }
+  PUT    /api/v1/chat/messages/{messageId}            → düzenle (kendi mesajın)
+  DELETE /api/v1/chat/messages/{messageId}            → sil (soft delete)
+  POST   /api/v1/chat/files (multipart)               → dosya yükle
+
+**X-Tenant-Id header (kritik):**
+  TC group'larına yazarken/okurken her istekte X-Tenant-Id: {group.tenantId} ekle.
+  AC group'larında bu header HİÇ gönderilmez (backend AC için basedb kullanır).
+
+**Erişim kuralları (backend — panel buna göre davranmalı):**
+  - **Okuma** (liste, history, grup detay): üye VEYA `roleLevel >= visibilityLevel`
+  - **Yazma** (mesaj gönder): üye VEYA `roleLevel > visibilityLevel` (strict üst rol)
+  - Örnek: ADMIN (3) grup oluşturur → visibilityLevel=3 → SUPER_ADMIN (4) üye olmadan
+    görebilir **ve yazabilir** (4 > 3). ADMIN davet edilmeden SUPER_ADMIN grubuna yazamaz
+    (3 > 4 false) — davet gerekir.
+  - Gruptan çıkarılan kullanıcı: görmeye devam edebilir (visibility) ama **yazamaz**
+    (artık üye değil ve rolü visibility'dan üst değilse).
+  - `GET /groups/{id}/access` → `{ member, canRead, canWrite, denialMessage, denialCode }`
+
+## Bağlam — WebSocket
+
+  Endpoint: ${API}/ws (SockJS + STOMP)
+  Auth: STOMP CONNECT'te "Authorization: Bearer <JWT>" header şart.
+
+  Subscribe topic'leri:
+    AC group → /topic/group/{groupId}
+    TC group → /topic/tenant/{tenantId}/group/{groupId}
+
+    Typing:    + /typing  (aynı path'in altında)
+    Read:      + /read    (aynı path'in altında)
+
+    Group lifecycle (cross-cutting):
+      /topic/groups/new
+      /topic/groups/deleted
+      /topic/user/{userId}/groups/joined    ← payload: DtoChatGroup (legacy — sidebar'a ekle)
+      /topic/user/{userId}/groups/removed   ← payload: DtoChatMembershipEvent (action=REMOVED)
+      /topic/user/{userId}/membership       ← payload: DtoChatMembershipEvent (JOINED|REMOVED + banner)
+      /user/queue/groups/joined             ← aynı DtoChatGroup (Spring user destination — tercih edilen)
+      /user/queue/groups/removed            ← aynı DtoChatMembershipEvent
+      /user/queue/membership                ← aynı DtoChatMembershipEvent
+      /topic/presence
+
+    Kişisel hata kuyruğu (mesaj gönderme reddedilirse):
+      /user/queue/chat-errors               ← payload: DtoChatWsError
+
+  Publish destinations (alternatif — REST POST yerine de kullanılabilir):
+    AC: /app/chat/{groupId}/send
+    TC: /app/tenant-chat/{tenantId}/{groupId}/send
+    AC typing: /app/chat/{groupId}/typing
+    TC typing: /app/tenant-chat/{tenantId}/{groupId}/typing
+    AC read:   /app/chat/{groupId}/read
+    TC read:   /app/tenant-chat/{tenantId}/{groupId}/read
+
+**Mesaj gönderme tercihi:** REST POST kullan (sadelik için). WebSocket sadece
+subscribe için. Mesaj gönderdikten sonra backend zaten WebSocket topic'ine
+broadcast eder; gönderen taraf da subscribe ettiği topic'ten kendi mesajını
+geri alır. Optimistic UI istersen optimistic insert et + topic'ten gelen
+mesajı id ile reconcile et.
+
+## Görev
+
+### TypeScript tipleri (types/cms.ts veya benzeri)
+
+```typescript
+export type ChatGroupType = 'GROUP' | 'DM';
+export type ChatMessageSenderType = 'ADMIN' | 'VISITOR';
+export type ChatMessageType = 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM';
+
+export interface ChatGroup {
+  id: string;
+  name: string | null;
+  description: string | null;
+  type: ChatGroupType;
+  createdBy: number;
+  visibilityLevel: number;
+  tenantId: string | null;
+  visitorAccess: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  groupId: string;
+  senderType: ChatMessageSenderType;
+  senderId: number | null;
+  visitorId: number | null;
+  senderUsername: string;
+  content: string;
+  contentType: ChatMessageType;
+  fileUrl: string | null;
+  parentId: string | null;
+  deleted: boolean;
+  editedAt: string | null;
+  createdAt: string;
+}
+
+export interface ChatGroupCreatePayload {
+  name: string;
+  description?: string;
+  memberIds?: number[];
+  tenantId?: string | null;     // dolu ise TC, null ise AC
+  visitorAccess?: boolean;       // sadece tenantId ile birlikte
+}
+
+export interface SendMessagePayload {
+  content: string;
+  contentType?: ChatMessageType;
+  fileUrl?: string;
+  parentId?: string;
+}
+
+/** WebSocket /topic/user/{userId}/groups/joined|removed payload */
+export interface ChatMembershipEvent {
+  action: 'JOINED' | 'REMOVED';
+  groupId: string;
+  userId: number;
+  group?: ChatGroup;           // JOINED'da dolu
+  message: string;             // Banner metni — doğrudan göster
+}
+
+/** GET /groups/{id}/access yanıtı */
+export interface ChatGroupAccess {
+  groupId: string;
+  member: boolean;
+  canRead: boolean;
+  canWrite: boolean;
+  denialMessage: string | null;
+  denialCode: string | null;   // CHAT_WRITE_FORBIDDEN vb.
+}
+
+/** WebSocket /user/queue/chat-errors payload */
+export interface ChatWsError {
+  errorCode: string;
+  message: string;
+  groupId: string | null;
+}
+```
+
+### http client'a X-Tenant-Id desteği
+
+`lib/api/http.ts` (veya mevcut wrapper):
+
+```typescript
+// Her isteğe opsiyonel olarak X-Tenant-Id eklenebilmeli
+type RequestOptions = {
+  tenantId?: string | null;       // dolu ise X-Tenant-Id header'a eklenir
+  searchParams?: Record<string, unknown>;
+  json?: unknown;
+  // ...mevcut opsiyonlar
+};
+
+// Implementation:
+if (opts?.tenantId) {
+  headers['X-Tenant-Id'] = opts.tenantId;
+}
+```
+
+Yardımcı: `chatClient.tenantId(group.tenantId)` gibi bir helper'la
+group context'ini otomatik X-Tenant-Id'ye çevir.
+
+### Dosya yapısı
+
+```
+app/(admin)/admin/chat/
+├── page.tsx                       # Liste — AC + TC tek sayfada
+├── loading.tsx
+├── [groupId]/
+│   └── page.tsx                   # Chat detay (mesajlar + composer)
+└── _components/
+    ├── ChatSidebar.tsx            # Sol: group listesi (AC / TC sekmeleri)
+    ├── ChatGroupItem.tsx          # Her satır — rozetli (AC=mavi, TC=yeşil, +visitor=yıldız)
+    ├── ChatWindow.tsx             # Sağ: mesaj listesi
+    ├── MessageBubble.tsx          # Tek mesaj — sender rozetiyle
+    ├── ChatComposer.tsx           # Mesaj giriş kutusu
+    ├── CreateGroupDialog.tsx      # Yeni group (AC/TC toggle + tenant selector)
+    ├── MembersSheet.tsx           # Üye yönetim drawer'ı
+    └── DeleteGroupDialog.tsx
+
+lib/api/chat.ts
+lib/hooks/chat/
+├── useChatGroups.ts
+├── useChatGroup.ts
+├── useChatGroupAccess.ts        # GET /groups/{id}/access — composer enable/disable
+├── useChatHistory.ts            # infinite query (cursor pagination)
+├── useChatMutations.ts            # create/delete group, send message, add/remove member
+└── useChatSocket.ts               # WebSocket subscribe — tenant-aware + membership events
+```
+
+### Üyelik durumu ve composer kilidi (ZORUNLU)
+
+**Chat detay açıldığında:**
+```typescript
+// useChatGroupAccess.ts
+export function useChatGroupAccess(groupId: string, tenantId?: string | null) {
+  return useQuery({
+    queryKey: chatKeys.access(groupId),
+    queryFn: () => chatClient.getGroupAccess(groupId, tenantId),
+    enabled: !!groupId,
+  });
+}
+```
+
+**ChatComposer davranışı:**
+```typescript
+const { data: access } = useChatGroupAccess(group.id, group.tenantId);
+const canWrite = access?.canWrite ?? false;
+const banner = membershipBanner ?? access?.denialMessage;
+
+return (
+  <>
+    {banner && (
+      <Alert variant={membershipBanner ? 'warning' : 'muted'}>{banner}</Alert>
+    )}
+    <Textarea disabled={!canWrite} placeholder={canWrite ? 'Mesaj yaz...' : 'Mesaj gönderemezsiniz'} />
+    <Button disabled={!canWrite || !content.trim()} onClick={handleSend}>Gönder</Button>
+  </>
+);
+```
+
+- `membershipBanner` local state — WebSocket REMOVED/JOINED event'lerinden set edilir
+- REST mesaj gönderimi 403 + `errorCode: CHAT_WRITE_FORBIDDEN` dönerse toast + banner göster
+- WebSocket SEND reddedilirse `/user/queue/chat-errors` subscribe et → toast/banner
+
+### useChatSocket — genişletilmiş (mesaj + üyelik + hata)
+
+```typescript
+type ChatSocketCallbacks = {
+  onMessage: (msg: ChatMessage) => void;
+  onMembershipJoined?: (event: ChatMembershipEvent) => void;
+  onMembershipRemoved?: (event: ChatMembershipEvent) => void;
+  onChatError?: (err: ChatWsError) => void;
+};
+
+export function useChatSocket(
+  group: ChatGroup | null,
+  currentUserId: number,
+  callbacks: ChatSocketCallbacks,
+) {
+  useEffect(() => {
+    if (!group) return;
+    const client = new Client({
+      webSocketFactory: () => new SockJS(`${API_URL}/ws`),
+      connectHeaders: { Authorization: `Bearer ${getJwt()}` },
+      onConnect: () => {
+        const base = group.tenantId
+          ? `/topic/tenant/${group.tenantId}/group/${group.id}`
+          : `/topic/group/${group.id}`;
+
+        client.subscribe(base, (f) => callbacks.onMessage(JSON.parse(f.body)));
+        client.subscribe(`${base}/typing`, /* ... */);
+        client.subscribe(`${base}/read`, /* ... */);
+
+        // Kişisel üyelik event'leri — tek client tüm oturum boyunca
+        // Tercih: /user/queue/* (userId hesaplamaya gerek yok)
+        client.subscribe('/user/queue/groups/joined', (f) => {
+          const group: ChatGroup = JSON.parse(f.body);
+          callbacks.onMembershipJoined?.({
+            action: 'JOINED',
+            groupId: group.id,
+            userId: currentUserId,
+            group,
+            message: 'Gruba dahil edildiniz.',
+          });
+        });
+        client.subscribe('/user/queue/membership', (f) => {
+          callbacks.onMembership?.(JSON.parse(f.body) as ChatMembershipEvent);
+        });
+        // Legacy topic (geriye dönük)
+        client.subscribe(`/topic/user/${currentUserId}/groups/joined`, (f) => {
+          const group: ChatGroup = JSON.parse(f.body); // plain DtoChatGroup
+          callbacks.onMembershipJoined?.({
+            action: 'JOINED',
+            groupId: group.id,
+            userId: currentUserId,
+            group,
+            message: 'Gruba dahil edildiniz.',
+          });
+        });
+        client.subscribe(`/topic/user/${currentUserId}/membership`, (f) => {
+          const ev: ChatMembershipEvent = JSON.parse(f.body);
+          if (ev.action === 'JOINED') callbacks.onMembershipJoined?.(ev);
+          if (ev.action === 'REMOVED') callbacks.onMembershipRemoved?.(ev);
+        });
+        client.subscribe(`/topic/user/${currentUserId}/groups/removed`, (f) => {
+          const ev: ChatMembershipEvent = JSON.parse(f.body);
+          callbacks.onMembershipRemoved?.(ev);
+        });
+        client.subscribe('/user/queue/chat-errors', (f) => {
+          callbacks.onChatError?.(JSON.parse(f.body));
+        });
+      },
+    });
+    client.activate();
+    return () => { client.deactivate(); };
+  }, [group?.id, group?.tenantId, currentUserId]);
+}
+```
+
+**REMOVED handler (aktif chat ekranında):**
+```typescript
+onMembershipRemoved: (ev) => {
+  if (ev.groupId !== activeGroupId) {
+    // Sidebar'dan kaldır
+    queryClient.setQueryData(chatKeys.groups(), (old) =>
+      old?.filter((g) => g.id !== ev.groupId));
+    return;
+  }
+  setMembershipBanner(ev.message); // "Gruptan çıkarıldınız."
+  queryClient.invalidateQueries({ queryKey: chatKeys.access(ev.groupId) });
+  // Composer otomatik disabled (canWrite=false)
+},
+```
+
+**JOINED handler:**
+```typescript
+onMembershipJoined: (ev) => {
+  setMembershipBanner(ev.message); // "Gruba dahil edildiniz."
+  if (ev.group) {
+    queryClient.setQueryData(chatKeys.groups(), (old) => upsertGroup(old, ev.group));
+  }
+  queryClient.invalidateQueries({ queryKey: chatKeys.access(ev.groupId) });
+},
+```
+
+### Özellikler
+
+**Liste sayfası (`/admin/chat`)**
+- Server Component, `requirePermission('chat:read')`
+- Sol panel sekmeli: **Admin Chat** | **Tenant Chat**
+  - Admin Chat sekmesi → group.tenantId === null olanlar
+  - Tenant Chat sekmesi → group.tenantId !== null olanlar
+    - Üstte tenant filter dropdown ("Tümü", "tenant1", "tenant2", ...)
+    - Her satırda tenant rozeti + (visitorAccess ? "Ziyaretçi açık" : "Admin-only")
+- "Yeni Grup" butonu (sağ üst) → CreateGroupDialog açar
+- Default seçili group → ilk AC group; URL'de groupId varsa o yüklenir
+
+**Group listesi item bileşeni**
+- Sol: avatar (DM ise üyeden, GROUP ise initial)
+- Orta: name + son mesaj snippet
+- Sağ: timestamp + unread badge
+- **Rozet stratejisi:**
+  - group.tenantId === null → 🔵 mavi "Admin"
+  - group.tenantId !== null && !group.visitorAccess → 🟢 yeşil "{tenantId}"
+  - group.tenantId !== null && group.visitorAccess → 🟢 + 🌟 "{tenantId} · Ziyaretçi"
+
+**CreateGroupDialog**
+- react-hook-form + zod:
+  ```typescript
+  const schema = z.object({
+    name: z.string().min(1).max(100),
+    description: z.string().max(500).optional(),
+    memberIds: z.array(z.number()).optional(),
+    scope: z.enum(['ADMIN', 'TENANT']).default('ADMIN'),
+    tenantId: z.string().nullable().optional(),
+    visitorAccess: z.boolean().default(false),
+  }).superRefine((data, ctx) => {
+    if (data.scope === 'TENANT' && !data.tenantId) {
+      ctx.addIssue({ path: ['tenantId'], message: 'Tenant Chat için tenant seç' });
+    }
+    if (data.scope === 'ADMIN' && data.visitorAccess) {
+      ctx.addIssue({ path: ['visitorAccess'], message: 'Sadece TC için ziyaretçi erişimi açılabilir' });
+    }
+  });
+  ```
+- "Kapsam" RadioGroup: **Admin Chat (AC)** | **Tenant Chat (TC)**
+- TENANT seçildiyse:
+  - Tenant Select dropdown (admin'in yönettiği tenant'lar — `/api/v1/tenants` veya hard-coded MVP: ["tenant1", "tenant2"])
+  - "Ziyaretçilere açık" switch (visitorAccess=true → website kayıtlı user'ları yazabilir)
+- "Üye ekle" multi-select (admin user'ları — basedb)
+- Submit:
+  - POST /api/v1/chat/groups (gövdede tenantId + visitorAccess varsa)
+  - **Kapsam TENANT ise** isteğe `X-Tenant-Id: {tenantId}` header'ı eklenir
+  - Success → yeni group'a navigate et
+
+**Chat detay (`/[groupId]`)**
+- Server Component data: GET /api/v1/chat/groups/{groupId} (uygun X-Tenant-Id ile)
+- ChatWindow: history infinite scroll
+  - useChatHistory hook: `useInfiniteQuery`
+    - queryKey: `['chat','messages', groupId]`
+    - queryFn: GET /api/v1/chat/groups/{groupId}/messages?before={cursor}&limit=50
+    - X-Tenant-Id: group.tenantId
+- ChatComposer: text input + dosya butonu + gönder butonu
+  - Submit → POST /api/v1/chat/groups/{groupId}/messages
+  - X-Tenant-Id otomatik group.tenantId'den
+  - Optimistic insert (UUID v4 ile geçici id), backend response gelince swap
+
+**MessageBubble — polymorphic sender render**
+```typescript
+const isAdmin = msg.senderType === 'ADMIN';
+const isVisitor = msg.senderType === 'VISITOR';
+const isOwn = isAdmin && msg.senderId === currentUserId;
+
+return (
+  <div className={isOwn ? 'self-end' : 'self-start'}>
+    <div className="flex items-center gap-2">
+      <span className="font-semibold">{msg.senderUsername || 'Bilinmeyen'}</span>
+      {isAdmin && <Badge variant="info">Admin</Badge>}
+      {isVisitor && <Badge variant="muted">Ziyaretçi</Badge>}
+      <time>{formatRelative(msg.createdAt)}</time>
+    </div>
+    <div className="bubble">{msg.deleted ? '[silindi]' : msg.content}</div>
+    {msg.editedAt && <span className="text-xs muted">(düzenlendi)</span>}
+  </div>
+);
+```
+
+**useChatSocket hook — tenant-aware subscribe** (eski minimal örnek — yukarıdaki genişletilmiş sürümü kullan)
+
+### Permission gating
+
+- `chat:read` → tüm chat sayfalarına erişim (mevcut)
+- `chat:manage` → group delete + member yönetimi
+- TC oluşturma backend tarafında ADMIN+ kontrol ediyor — frontend'te yine
+  scope=TENANT seçeneğini sadece kullanıcının role'ü ADMIN/SUPER_ADMIN ise göster.
+  (Mevcut /me/permissions endpoint'inden role kontrol)
+
+### Edge case'ler
+
+1. **DM açıldığında** tenantId her zaman null (DM AC kapsamında). visibilityLevel=4.
+   Yalnızca üyeler (+ SUPER_ADMIN moderasyon) okuyup yazabilir.
+2. **Üst rol bypass:** EDITOR grubu (vis=2) → ADMIN/SUPER_ADMIN üye olmadan yazabilir.
+   ADMIN grubu (vis=3) → yalnızca SUPER_ADMIN üye olmadan yazabilir. VIEWER grubu (vis=1)
+   → EDITOR+ üye olmadan yazabilir; VIEWER davet edilmeden yazamaz.
+3. **Gruptan çıkarılma:** `/topic/user/{userId}/groups/removed` → sidebar'dan kaldır
+   (aktif grup değilse); aktif gruptaysa banner "Gruptan çıkarıldınız." + composer disabled.
+   Sayfa yenilemeden anında yansımalı.
+4. **Tekrar davet:** `/topic/user/{userId}/groups/joined` → banner "Gruba dahil edildiniz."
+   + sidebar'a ekle + composer tekrar aktif (`access.canWrite=true`).
+5. **Group silindiğinde** `/topic/groups/deleted` push → sidebar'dan kaldır,
+   kullanıcı şu an o group'daysa landing page'e redirect.
+6. **Yeni group yaratıldığında** `/topic/groups/new` push → sidebar'a ekle
+   (visibility level'a göre filtrele — kullanıcının roleLevel >= visibilityLevel ise göster).
+7. **Mesaj gönderme hatası:** REST 403 `CHAT_WRITE_FORBIDDEN` veya WS `/user/queue/chat-errors`
+   → toast + banner; sessiz fail OLMAYACAK.
+
+### TanStack Query keys
+
+```typescript
+export const chatKeys = {
+  all: ['chat'] as const,
+  groups: (filter?: { tenantId?: string | null }) => [...chatKeys.all, 'groups', filter] as const,
+  group: (id: string) => [...chatKeys.all, 'group', id] as const,
+  access: (groupId: string) => [...chatKeys.all, 'access', groupId] as const,
+  members: (groupId: string) => [...chatKeys.all, 'members', groupId] as const,
+  messages: (groupId: string) => [...chatKeys.all, 'messages', groupId] as const,
+};
+```
+
+Mutations (`onSuccess` → invalidate):
+- createGroup → `chatKeys.groups()`
+- deleteGroup → `chatKeys.groups()` + `chatKeys.group(id)`
+- addMember/removeMember → `chatKeys.members(groupId)` + `chatKeys.access(groupId)`
+- sendMessage → optimistic update + topic'ten gelen mesajla reconcile
+
+`lib/api/chat.ts` ek method:
+```typescript
+getGroupAccess: (groupId: string, tenantId?: string | null) =>
+  request<ChatGroupAccess>(`/api/v1/chat/groups/${groupId}/access`, { tenantId }),
+```
+
+### Doğrulama
+
+- ADMIN grup oluştur → SUPER_ADMIN listede görür + davet edilmeden mesaj yazabilir
+- SUPER_ADMIN grubu oluştur → ADMIN davet edilmeden yazamaz; davet sonrası yazabilir
+- SUPER_ADMIN ADMIN'i gruptan çıkarır → ADMIN ekranında anında banner + composer disabled
+  (sayfa yenilemeden); sidebar'dan grup kalkar (aktif grup değilse)
+- ADMIN tekrar davet edilir → "Gruba dahil edildiniz." banner + composer aktif
+- Mesaj gönderme reddedildiğinde toast/banner görünür (sessiz fail yok)
+- AC group oluştur → tenantId null, basedb'ye kaydedildi
+- TC group oluştur (scope=TENANT, tenantId=tenant1, visitorAccess=true) → tenant1 DB'sine kaydedildi
+- AC group'a mesaj yaz → /topic/group/{id} push geldi
+- WebSocket disconnect → otomatik reconnect (stompjs default)
+- `npm run build` hatasız, strict TS uyumlu
+```
+
+---
+
+## Prompt 8 — Tenant Website Chat Widget (Z için)
+
+**Bu prompt'u tenant website projesinde çalıştır** — admin panelde DEĞİL.
+
+> Hedef: Site ziyaretçisi (kayıtlı tenant user) sağ alttaki chat butonuna tıklar →
+> tenant'ın "ziyaretçi erişimine açık" chat grupları açılır → mesajlaşır. Admin
+> panel tarafında aynı konuşma görülebilir ve admin yanıt verir.
+
+**Ön koşul:**
+- Site kullanıcısı tenant login akışından geçmiş ve JWT'si (loginSource=tenant, tenantId=tenantX) cookie/store'da var.
+- Backend chat-tenant-aware migration uygulanmış ve admin tarafında `visitorAccess=true` olan bir TC group oluşturulmuş olmalı (yoksa "Aktif chat group yok" gösterilecek).
+
+```
+Bu tenant website projesine (Next.js) bir "Chat Widget" ekle. Sağ altta floating
+bir buton, tıklayınca açılan minimal chat paneli. Site user'ı (kayıtlı tenant user)
+admin'lerle ve diğer site kullanıcılarıyla mesajlaşabilir.
+
+## Bağlam
+
+elly CMS API'sini tüketiyoruz. Site user'ları zaten tenant login ile JWT alıyor:
+  - loginSource=tenant
+  - tenantId=<bu sitenin tenant id'si — örn "tenant1">
+  - userId=<bu tenant DB'sinde user'ın id'si>
+
+JWT, mevcut auth flow'unda zaten alınıyor (cookie/store'da). Bu widget'ın yapacağı:
+  1. /tenant-chat/session endpoint'ini çağırarak "VisitorIdentity" oluştur/al
+  2. visitor_access=true olan chat group'larını listele
+  3. Bir group'a girip mesaj geçmişini gör
+  4. Mesaj yaz (REST POST)
+  5. WebSocket subscribe → real-time mesaj akışı
+
+API base URL: process.env.NEXT_PUBLIC_ELLY_API_URL (örn https://api.huseyindol.com)
+WS endpoint: ${API}/ws (SockJS + STOMP)
+
+## Bağlam — CMS Endpoint'leri (sadece bu prompt için)
+
+Tüm endpoint'ler `Authorization: Bearer <tenant JWT>` ister.
+**X-Tenant-Id header GEREKMEZ** — JWT'in tenantId claim'i otomatik kullanılır.
+
+| Method | Path | Açıklama |
+|---|---|---|
+| POST | `/api/v1/tenant-chat/session` | VisitorIdentity'yi yarat/getir. Response: `{ id, displayName, email, ... }` |
+| GET  | `/api/v1/tenant-chat/groups` | Bu tenant'taki visitor_access=true olan chat group'ları |
+| GET  | `/api/v1/tenant-chat/groups/{groupId}/messages?before={cursor}&limit=50` | History (cursor pagination) |
+| POST | `/api/v1/tenant-chat/groups/{groupId}/messages` | Mesaj yaz. Body: `{ content, contentType?, fileUrl?, parentId? }` |
+
+CMS yanıtları her zaman wrapper'lı:
+```json
+{ "result": true, "message": null, "data": { ... } }
+```
+Hata:
+```json
+{ "result": false, "status": 403, "errorCode": "FORBIDDEN", "message": "..." }
+```
+
+## Bağlam — Data tipleri
+
+```typescript
+export interface VisitorIdentity {
+  id: number;
+  tenantUserId: number | null;
+  displayName: string;
+  email: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export interface ChatGroup {
+  id: string;
+  name: string | null;
+  description: string | null;
+  type: 'GROUP' | 'DM';
+  createdBy: number;
+  visibilityLevel: number;
+  tenantId: string;          // bu widget'ta her zaman dolu (TC)
+  visitorAccess: boolean;     // bu widget'ta her zaman true (filtrelenmiş)
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ChatSenderType = 'ADMIN' | 'VISITOR';
+
+export interface ChatMessage {
+  id: string;
+  groupId: string;
+  senderType: ChatSenderType;
+  senderId: number | null;       // ADMIN ise dolu (basedb users.id)
+  visitorId: number | null;      // VISITOR ise dolu (tenant DB visitor_identities.id)
+  senderUsername: string;        // backend pre-resolved — direkt göster
+  content: string;
+  contentType: 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM';
+  fileUrl: string | null;
+  parentId: string | null;
+  deleted: boolean;
+  editedAt: string | null;
+  createdAt: string;
+}
+
+export interface SendMessagePayload {
+  content: string;
+  contentType?: 'TEXT' | 'IMAGE' | 'FILE';
+  fileUrl?: string;
+  parentId?: string;
+}
+```
+
+## Bağlam — WebSocket
+
+CONNECT zorunlu header: `Authorization: Bearer <tenant JWT>` (backend bunu interceptor'da doğrular; loginSource=tenant kabul edilir).
+
+Subscribe topic'i:
+```
+/topic/tenant/{tenantId}/group/{groupId}
+```
+
+tenantId değeri JWT claim'inden veya `process.env.NEXT_PUBLIC_TENANT_ID`'den
+(eğer site build-time'da tenant'a sabitlenmişse) alınabilir. Site genelde tek
+tenant'a hizmet ettiği için bu env-var pattern'i en temiz.
+
+Pratik kütüphaneler:
+- `@stomp/stompjs` + `sockjs-client` — standart STOMP istemcisi
+- `process.env.NEXT_PUBLIC_ELLY_API_URL` + `/ws` → WS URL
+
+## Görev
+
+### Dosya yapısı
+
+```
+components/chat/
+├── ChatWidget.tsx               # Floating button + open panel state
+├── ChatPanel.tsx                # Panel header + group list veya aktif chat
+├── GroupList.tsx                # Açık group'ları listele (visitor_access=true)
+├── ChatView.tsx                 # Mesaj listesi + composer (tek group seçili)
+├── MessageBubble.tsx            # Tek mesaj — Admin/Visitor rozeti
+├── ChatComposer.tsx             # Input + gönder butonu
+└── _hooks/
+    ├── useVisitorSession.ts     # POST /tenant-chat/session — mount'ta bir kez
+    ├── useChatGroups.ts         # GET /tenant-chat/groups
+    ├── useChatHistory.ts        # GET messages + infinite scroll
+    ├── useSendMessage.ts        # POST messages
+    └── useChatSocket.ts         # STOMP subscribe — tenant-aware topic
+
+lib/api/tenantChat.ts            # Tüm fetch fonksiyonları (RootEntityResponse unwrap)
+lib/auth/getJwt.ts               # Mevcut tenant JWT'sini cookie/store'dan al
+```
+
+### ChatWidget — root bileşen
+
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { ChatPanel } from './ChatPanel';
+
+export function ChatWidget() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg"
+        aria-label="Chat aç"
+      >
+        💬
+      </button>
+      {open && <ChatPanel onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+```
+
+Bu bileşen sayfa layout'una eklenir (örn. `app/layout.tsx`'in alt kısmına),
+**yalnızca login olmuş user'lara gösterilir** (auth state'i kontrol et):
+
+```typescript
+// app/layout.tsx içinde
+const isLoggedIn = await getAuthState();  // mevcut auth helper
+return (
+  <html>
+    <body>
+      {children}
+      {isLoggedIn && <ChatWidget />}
+    </body>
+  </html>
+);
+```
+
+### ChatPanel — açık panel
+
+```typescript
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useVisitorSession } from './_hooks/useVisitorSession';
+import { useChatGroups } from './_hooks/useChatGroups';
+import { GroupList } from './GroupList';
+import { ChatView } from './ChatView';
+
+export function ChatPanel({ onClose }: { onClose: () => void }) {
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const { data: visitor, isLoading: visitorLoading } = useVisitorSession();
+  const { data: groups, isLoading: groupsLoading } = useChatGroups();
+
+  if (visitorLoading || groupsLoading) {
+    return <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-white shadow-xl rounded-lg p-4">Yükleniyor…</div>;
+  }
+  if (!groups || groups.length === 0) {
+    return (
+      <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-white shadow-xl rounded-lg p-4">
+        <button onClick={onClose} className="float-right">×</button>
+        <p className="text-gray-500">Şu an aktif bir destek konuşması yok.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-white shadow-xl rounded-lg flex flex-col">
+      <header className="p-3 border-b flex items-center justify-between">
+        <span className="font-semibold">Destek</span>
+        <button onClick={activeGroupId ? () => setActiveGroupId(null) : onClose}>
+          {activeGroupId ? '←' : '×'}
+        </button>
+      </header>
+      <div className="flex-1 overflow-hidden">
+        {activeGroupId ? (
+          <ChatView
+            groupId={activeGroupId}
+            visitorId={visitor!.id}
+            tenantId={process.env.NEXT_PUBLIC_TENANT_ID!}
+          />
+        ) : (
+          <GroupList groups={groups} onSelect={setActiveGroupId} />
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+### useVisitorSession — mount'ta bir kez çağrılır
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { tenantChat } from '@/lib/api/tenantChat';
+
+export function useVisitorSession() {
+  return useQuery({
+    queryKey: ['tenant-chat', 'session'],
+    queryFn: () => tenantChat.ensureSession(),
+    staleTime: Infinity,  // session bir kez alınır, refetch yok
+    retry: 1,
+  });
+}
+```
+
+### useChatGroups — sadece görünür gruplar
+
+```typescript
+export function useChatGroups() {
+  return useQuery({
+    queryKey: ['tenant-chat', 'groups'],
+    queryFn: () => tenantChat.listGroups(),
+    refetchInterval: 30_000,  // 30sn'de bir yeni group var mı kontrol
+  });
+}
+```
+
+### ChatView — aktif konuşma
+
+```typescript
+'use client';
+
+import { useChatHistory } from './_hooks/useChatHistory';
+import { useChatSocket } from './_hooks/useChatSocket';
+import { useSendMessage } from './_hooks/useSendMessage';
+import { MessageBubble } from './MessageBubble';
+import { ChatComposer } from './ChatComposer';
+import { useEffect, useRef } from 'react';
+
+export function ChatView({ groupId, visitorId, tenantId }: {
+  groupId: string;
+  visitorId: number;
+  tenantId: string;
+}) {
+  const history = useChatHistory(groupId);
+  const send = useSendMessage(groupId);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Real-time updates
+  useChatSocket({ groupId, tenantId, onMessage: history.appendMessage });
+
+  // Yeni mesaj geldiğinde alta scroll
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [history.messages.length]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {history.messages.map(msg => (
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            isOwn={msg.senderType === 'VISITOR' && msg.visitorId === visitorId}
+          />
+        ))}
+        <div ref={bottomRef} />
+      </div>
+      <ChatComposer onSubmit={(content) => send.mutateAsync({ content })} />
+    </div>
+  );
+}
+```
+
+### MessageBubble — polymorphic sender
+
+```typescript
+import type { ChatMessage } from '@/types/chat';
+
+export function MessageBubble({ message, isOwn }: { message: ChatMessage; isOwn: boolean }) {
+  const isAdmin = message.senderType === 'ADMIN';
+  const containerClass = isOwn ? 'flex justify-end' : 'flex justify-start';
+  const bubbleClass = isOwn
+    ? 'bg-blue-600 text-white rounded-lg px-3 py-2 max-w-[80%]'
+    : 'bg-gray-100 text-gray-900 rounded-lg px-3 py-2 max-w-[80%]';
+
+  return (
+    <div className={containerClass}>
+      <div>
+        <div className="flex items-center gap-2 text-xs mb-1">
+          <span className="font-semibold">{message.senderUsername}</span>
+          {isAdmin && (
+            <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+              Destek
+            </span>
+          )}
+          <time className="text-gray-500">
+            {new Date(message.createdAt).toLocaleTimeString('tr-TR', {
+              hour: '2-digit', minute: '2-digit',
+            })}
+          </time>
+        </div>
+        <div className={bubbleClass}>
+          {message.deleted ? '[silinmiş mesaj]' : message.content}
+        </div>
+        {message.editedAt && <span className="text-[10px] text-gray-400">(düzenlendi)</span>}
+      </div>
+    </div>
+  );
+}
+```
+
+### ChatComposer
+
+```typescript
+'use client';
+
+import { useState, FormEvent } from 'react';
+
+export function ChatComposer({ onSubmit }: { onSubmit: (content: string) => Promise<unknown> }) {
+  const [content, setContent] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!content.trim() || sending) return;
+    setSending(true);
+    try {
+      await onSubmit(content.trim());
+      setContent('');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="border-t p-2 flex gap-2">
+      <input
+        type="text"
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="Mesajınızı yazın…"
+        className="flex-1 border rounded px-3 py-2 text-sm"
+        disabled={sending}
+        maxLength={4000}
+      />
+      <button
+        type="submit"
+        disabled={!content.trim() || sending}
+        className="bg-blue-600 text-white px-3 py-2 rounded disabled:opacity-50"
+      >
+        Gönder
+      </button>
+    </form>
+  );
+}
+```
+
+### useChatSocket — STOMP subscribe
+
+```typescript
+'use client';
+
+import { useEffect } from 'react';
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+import { getJwt } from '@/lib/auth/getJwt';
+import type { ChatMessage } from '@/types/chat';
+
+export function useChatSocket({
+  groupId,
+  tenantId,
+  onMessage,
+}: {
+  groupId: string;
+  tenantId: string;
+  onMessage: (msg: ChatMessage) => void;
+}) {
+  useEffect(() => {
+    const jwt = getJwt();
+    if (!jwt) return;
+
+    const client = new Client({
+      webSocketFactory: () => new SockJS(`${process.env.NEXT_PUBLIC_ELLY_API_URL}/ws`),
+      connectHeaders: { Authorization: `Bearer ${jwt}` },
+      reconnectDelay: 5000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      onConnect: () => {
+        const topic = `/topic/tenant/${tenantId}/group/${groupId}`;
+        client.subscribe(topic, (frame) => {
+          try {
+            const msg: ChatMessage = JSON.parse(frame.body);
+            onMessage(msg);
+          } catch (e) {
+            console.error('Failed to parse chat message', e);
+          }
+        });
+      },
+      onStompError: (frame) => {
+        console.error('STOMP error', frame.headers, frame.body);
+      },
+    });
+
+    client.activate();
+    return () => {
+      client.deactivate();
+    };
+  }, [groupId, tenantId, onMessage]);
+}
+```
+
+### lib/api/tenantChat.ts
+
+```typescript
+import { getJwt } from '@/lib/auth/getJwt';
+
+const API = process.env.NEXT_PUBLIC_ELLY_API_URL!;
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const jwt = getJwt();
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${jwt}`,
+      ...(init?.headers || {}),
+    },
+    cache: 'no-store',
+  });
+  const body = await res.json();
+  if (!body.result) {
+    throw new Error(body.message || `HTTP ${res.status}`);
+  }
+  return body.data as T;
+}
+
+export const tenantChat = {
+  ensureSession: () => request<VisitorIdentity>('/api/v1/tenant-chat/session', { method: 'POST' }),
+  listGroups: () => request<ChatGroup[]>('/api/v1/tenant-chat/groups'),
+  getHistory: (groupId: string, before?: string, limit = 50) => {
+    const params = new URLSearchParams();
+    if (before) params.set('before', before);
+    params.set('limit', limit.toString());
+    return request<ChatMessage[]>(`/api/v1/tenant-chat/groups/${groupId}/messages?${params}`);
+  },
+  sendMessage: (groupId: string, payload: SendMessagePayload) =>
+    request<ChatMessage>(`/api/v1/tenant-chat/groups/${groupId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+};
+```
+
+### .env değişkenleri
+
+```
+NEXT_PUBLIC_ELLY_API_URL=https://api.huseyindol.com
+NEXT_PUBLIC_TENANT_ID=tenant1
+```
+
+`NEXT_PUBLIC_TENANT_ID` build-time'da hangi tenant olduğunu söyler.
+Eğer site multi-tenant değil de tek tenant'a sabitse bu yeterli.
+
+### Eksik kütüphaneler (kurulması gerekenler)
+
+```bash
+npm i @stomp/stompjs sockjs-client @tanstack/react-query
+npm i -D @types/sockjs-client
+```
+
+(Eğer projede mevcutsa atla.)
+
+### Doğrulama
+
+- Widget görünüyor mu? — Sayfayı aç, sağ altta floating buton.
+- Login yokken widget GİZLİ olmalı.
+- Login'li user widget'a tıklayınca panel açılır, "Yükleniyor" → ardından group listesi.
+- Bir group seçildiğinde ChatView yüklenir; geçmiş mesajlar görünür.
+- Composer'a yazı yaz, gönder → backend'e gider, **optimistic UI gerekmiyor** çünkü
+  WebSocket aynı mesajı geri alır (saniyeden az gecikme).
+- Admin panel tarafından mesaj yazılsa → widget'ta "Destek" rozetiyle anında görünür.
+- WebSocket disconnect (network kapatıldığında) → 5sn'de bir reconnect dener.
+- Permission yok / 403 → widget kapatılır, "Şu an aktif konuşma yok" gösterilir.
+- `npm run build` hatasız geçer.
+
+### UX iyileştirmeleri (opsiyonel, MVP sonrası)
+
+- Yeni mesaj geldiğinde butonun üzerinde kırmızı badge ("3")
+- Browser notification (Notification API)
+- Mesaj okundu işareti — POST /tenant-chat/groups/{id}/read ile (henüz endpoint yok, gerekirse backend'e eklenir)
+- Typing indicator — WebSocket typing event'i, mevcut backend destekliyor
+- Dosya yükleme — POST /api/v1/chat/files (multipart) ile (endpoint mevcut ama widget'ta MVP'de yok)
+```
+
+---
+
 ## Prompt'ları Kullanırken İpuçları
 
 1. **Prompt 0'ı mutlaka ilk çalıştır** — agent'ın stack'i bilmeden yazdığı
@@ -1285,7 +2369,10 @@ export const formsKeys = {
      -- Mail accounts (v2 DB-based) — Prompt 5
      ('mail:create'), ('mail:read'), ('mail:update'), ('mail:delete'),
      -- Forms + submissions — Prompt 6
-     ('forms:create'), ('forms:read'), ('forms:update'), ('forms:delete')
+     ('forms:create'), ('forms:read'), ('forms:update'), ('forms:delete'),
+     -- Chat (Admin Chat + Tenant Chat) — Prompt 7
+     ('chat:read'), ('chat:manage'),
+     ('tenant_chat:read'), ('tenant_chat:write'), ('tenant_chat:manage')
    ON CONFLICT (name) DO NOTHING;
 
    INSERT INTO role_permissions (role_id, permission_id)
@@ -1298,7 +2385,9 @@ export const formsKeys = {
        'emails:read', 'emails:retry',
        'rabbit:read', 'rabbit:manage',
        'mail:create', 'mail:read', 'mail:update', 'mail:delete',
-       'forms:create', 'forms:read', 'forms:update', 'forms:delete'
+       'forms:create', 'forms:read', 'forms:update', 'forms:delete',
+       'chat:read', 'chat:manage',
+       'tenant_chat:read', 'tenant_chat:write', 'tenant_chat:manage'
      )
    ON CONFLICT DO NOTHING;
    ```
@@ -1311,6 +2400,8 @@ export const formsKeys = {
    - Prompt 4 — Email Logs (`emails:read`, `emails:retry`) — auth: JWT Bearer only, **`X-API-KEY` header'ı yok** (legacy `ApiKeyFilter` kaldırıldı)
    - Prompt 5 — Mail Accounts (`mail:read/create/update/delete`)
    - Prompt 6 — Forms (`forms:read/create/update/delete`)
+   - Prompt 7 — Chat (`chat:read`, `chat:manage`, `tenant_chat:read/write/manage`) — AC + TC tek modülde, REST POST send + tenant-aware WebSocket topic'leri
+   - **Prompt 8 — Tenant Website Chat Widget** — tenant website projesine eklenir (panel'de DEĞİL). Site user'ı için floating chat butonu + admin yanıt akışı.
 
    Panel agent'ı 404 ile karşılaşırsa path'i kontrol et (`/api/v1/...` prefix'i şart) — backend eksikliği değil, path yazım hatası ihtimali yüksek.
 

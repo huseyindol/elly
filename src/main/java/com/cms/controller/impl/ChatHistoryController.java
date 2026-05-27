@@ -2,14 +2,23 @@ package com.cms.controller.impl;
 
 import com.cms.controller.IChatHistoryController;
 import com.cms.dto.DtoChatMessage;
+import com.cms.dto.DtoChatMessageSend;
 import com.cms.service.IChatMessageService;
 import com.cms.config.JwtAuthenticationFilter;
+import com.cms.entity.ChatGroup;
 import com.cms.entity.RootEntityResponse;
+import com.cms.exception.ResourceNotFoundException;
 import com.cms.exception.UnauthorizedException;
+import com.cms.repository.ChatGroupRepository;
+import com.cms.service.ChatRateLimitService;
 import com.cms.service.IFileService;
+import com.cms.util.ChatTopics;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +27,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/chat")
@@ -25,6 +35,40 @@ public class ChatHistoryController implements IChatHistoryController {
 
   private final IChatMessageService messageService;
   private final IFileService fileService;
+  private final ChatGroupRepository chatGroupRepository;
+  private final ChatRateLimitService rateLimitService;
+  private final SimpMessagingTemplate messagingTemplate;
+
+  /**
+   * Admin REST üzerinden mesaj gönderme (AC veya TC).
+   *
+   * <p>Routing: TenantContext {@code JwtTenantFilter} tarafından {@code X-Tenant-Id}
+   * header'ından (veya JWT claim'inden) set edilir; bu yüzden hangi DB'ye yazılacağı
+   * burada elle belirlenmez.
+   *
+   * <p>Broadcast: kaydedilen group'un {@code tenantId} alanına göre topic seçilir
+   * ({@link ChatTopics}).
+   */
+  @Override
+  @PostMapping("/groups/{groupId}/messages")
+  @PreAuthorize("hasAuthority('chat:read')")
+  public ResponseEntity<RootEntityResponse<DtoChatMessage>> sendMessage(
+      @PathVariable UUID groupId,
+      @Valid @RequestBody DtoChatMessageSend payload) {
+    Long userId = getCurrentUserId();
+    rateLimitService.checkRateLimit(userId);
+
+    DtoChatMessage saved = messageService.saveMessage(groupId, userId, payload);
+
+    // Topic'i belirlemek için group'u oku (aynı DB context'te)
+    ChatGroup group = chatGroupRepository.findById(groupId)
+        .orElseThrow(() -> new ResourceNotFoundException("Chat group not found: " + groupId));
+    String topic = ChatTopics.messageTopic(group);
+    messagingTemplate.convertAndSend(topic, saved);
+    log.debug("REST message broadcast to {}: msg={}", topic, saved.getId());
+
+    return ResponseEntity.status(HttpStatus.CREATED).body(RootEntityResponse.ok(saved));
+  }
 
   @Override
   @GetMapping("/groups/{groupId}/messages")

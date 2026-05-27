@@ -1,6 +1,7 @@
 package com.cms.service;
 
 import com.cms.dto.DtoChatGroup;
+import com.cms.dto.DtoChatGroupAccess;
 import com.cms.dto.DtoChatGroupCreate;
 import com.cms.dto.DtoChatMember;
 
@@ -24,6 +25,8 @@ public interface IChatGroupService {
   void deleteGroup(UUID groupId, Long requesterId);
 
   List<DtoChatMember> getMembers(UUID groupId, Long requesterId);
+
+  DtoChatGroupAccess resolveGroupAccess(UUID groupId, Long userId);
 
   boolean isMember(UUID groupId, Long userId);
 }

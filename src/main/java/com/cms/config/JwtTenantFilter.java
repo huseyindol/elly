@@ -56,14 +56,42 @@ public class JwtTenantFilter extends OncePerRequestFilter {
   }
 
   /**
-   * Authorization Bearer token'ından tenantId claim'ini çıkarır.
-   * loginSource="admin" ve auth/user path'lerinde null döner → basedb kullanılır.
-   * /api/v1/chat/ her zaman basedb'ye yönlendirilir (chat tabloları yalnızca basedb'de).
-   * loginSource="tenant" veya diğer path'lerde tenantId döner → tenantX kullanılır.
+   * Tenant ID kaynak sırası (en yüksekten en düşüğe):
+   * <ol>
+   *   <li><b>{@code X-Tenant-Id} header</b> — admin'in panel UI'sında seçtiği tenant
+   *       (örn. TC group'ları için). Header değeri "basedb" ya da boş ise null döner.</li>
+   *   <li>Admin login + basedb-only path (auth, users, roles) → null (basedb).</li>
+   *   <li>JWT {@code tenantId} claim'i — tenant user'ları için.</li>
+   * </ol>
+   *
+   * <p><b>Chat ve {@code X-Tenant-Id}:</b> Chat (AC + TC) tek endpoint ailesi
+   * (`/api/v1/chat/*`) altında. Admin AC'de iken header'ı göndermez → basedb'ye düşer.
+   * Admin TC'de iken {@code X-Tenant-Id: tenant1} gönderir → tenant1 DB'sine düşer.
+   * Tenant user (loginSource=tenant) JWT'inde zaten tenantId taşır.
    */
   private String resolveTenantId(HttpServletRequest request) {
-    String authHeader = request.getHeader("Authorization");
+    String path = request.getRequestURI();
 
+    // 1) X-Tenant-Id header açıkça verilmişse, JWT claim'ini override eder.
+    String headerTenant = request.getHeader("X-Tenant-Id");
+    if (headerTenant != null && !headerTenant.isBlank()) {
+      String normalized = headerTenant.trim();
+      if ("basedb".equalsIgnoreCase(normalized) || "null".equalsIgnoreCase(normalized)) {
+        log.debug("X-Tenant-Id header explicitly requests basedb for path: {}", path);
+        return null;
+      }
+      log.debug("X-Tenant-Id header set TenantContext={} for path: {}", normalized, path);
+      return normalized;
+    }
+
+    // 2) Chat REST: X-Tenant-Id yoksa AC (basedb). TC için header zorunlu.
+    if (path.startsWith("/api/v1/chat/")) {
+      log.debug("Chat path without X-Tenant-Id, forcing basedb: {}", path);
+      return null;
+    }
+
+    // 3) Authorization yoksa null (anonim akış zaten public filter'a bırakılıyor)
+    String authHeader = request.getHeader("Authorization");
     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
       return null;
     }
@@ -72,16 +100,6 @@ public class JwtTenantFilter extends OncePerRequestFilter {
       String jwt = authHeader.substring(7);
       String tenantId = jwtUtil.extractTenantId(jwt);
       String loginSource = jwtUtil.extractLoginSource(jwt);
-      String path = request.getRequestURI();
-
-      // Chat verisi (chat_groups, chat_group_members, chat_messages, ...) yalnızca
-      // basedb'de tutuluyor. JWT'in tenantId claim'i ne olursa olsun chat çağrıları
-      // basedb'ye gitmeli — aksi halde userRepository.findById tenant DB'sinde
-      // arayıp role bilgisini kaçırır ve SUPER_ADMIN bile "VIEWER" gibi davranır.
-      if (path.startsWith("/api/v1/chat/") || path.equals("/api/v1/chat")) {
-        log.debug("Chat path detected, forcing basedb (ignoring JWT tenantId={})", tenantId);
-        return null;
-      }
 
       boolean isBaseDbPath = path.startsWith("/api/v1/auth/")
           || path.startsWith("/api/v1/users")

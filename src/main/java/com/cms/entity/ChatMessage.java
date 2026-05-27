@@ -29,8 +29,25 @@ public class ChatMessage {
   @Column(name = "group_id", nullable = false)
   private UUID groupId;
 
-  @Column(name = "sender_id", nullable = false)
+  /**
+   * Admin gönderdiyse basedb users.id; visitor gönderdiyse NULL.
+   * Polymorphic sender — bkz. {@link #senderType}.
+   */
+  @Column(name = "sender_id")
   private Long senderId;
+
+  /**
+   * Polymorphic discriminator. Default 'ADMIN' (geriye uyumlu — mevcut AC mesajları).
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "sender_type", nullable = false, length = 10)
+  private ChatMessageSenderType senderType = ChatMessageSenderType.ADMIN;
+
+  /**
+   * Visitor (tenant DB visitor_identities.id) — sender_type=VISITOR ise dolu.
+   */
+  @Column(name = "visitor_id")
+  private Long visitorId;
 
   @Column(name = "content", nullable = false, columnDefinition = "TEXT")
   private String content;

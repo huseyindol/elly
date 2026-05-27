@@ -1,14 +1,18 @@
 package com.cms.service.impl;
 
+import com.cms.config.TenantContext;
 import com.cms.dto.DtoChatMessage;
 import com.cms.dto.DtoChatMessageSend;
 import com.cms.entity.ChatMessage;
 import com.cms.entity.ChatMessageEdit;
+import com.cms.entity.ChatMessageSenderType;
 import com.cms.entity.ChatMessageType;
+import com.cms.entity.VisitorIdentity;
 import com.cms.mapper.ChatMapper;
 import com.cms.repository.ChatMessageEditRepository;
 import com.cms.repository.ChatMessageReadRepository;
 import com.cms.repository.ChatMessageRepository;
+import com.cms.repository.VisitorIdentityRepository;
 import com.cms.service.IChatMessageService;
 import com.cms.exception.ForbiddenException;
 import com.cms.exception.ResourceNotFoundException;
@@ -19,6 +23,7 @@ import org.jsoup.safety.Safelist;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
@@ -32,6 +37,7 @@ public class ChatMessageService implements IChatMessageService {
   private final ChatMessageRepository messageRepository;
   private final ChatMessageReadRepository readRepository;
   private final ChatMessageEditRepository editRepository;
+  private final VisitorIdentityRepository visitorIdentityRepository;
   private final ChatGroupService groupService;
   private final UserRepository userRepository;
   private final ChatMapper chatMapper;
@@ -39,11 +45,44 @@ public class ChatMessageService implements IChatMessageService {
   @Value("${chat.message.max-length:4000}")
   private int maxMessageLength;
 
+  @Value("${app.tenants.default-tenant:basedb}")
+  private String defaultTenant;
+
   @Override
   @Transactional
   public DtoChatMessage saveMessage(UUID groupId, Long senderId, DtoChatMessageSend dto) {
-    groupService.checkAccess(groupId, senderId);
+    groupService.checkWriteAccess(groupId, senderId);
 
+    ChatMessage msg = buildBaseMessage(groupId, dto);
+    msg.setSenderType(ChatMessageSenderType.ADMIN);
+    msg.setSenderId(senderId);
+    msg.setVisitorId(null);
+    msg = messageRepository.save(msg);
+
+    return toDto(msg);
+  }
+
+  /**
+   * Visitor (Z) tarafından gelen mesaj — sender_type=VISITOR olarak kaydedilir.
+   * Çağıran tarafın TenantContext'i ilgili tenant DB'sine set etmiş olması beklenir
+   * (PublicApiFilter ya da TenantChatPublicController yapar).
+   */
+  @Transactional
+  public DtoChatMessage saveVisitorMessage(UUID groupId, Long visitorId, DtoChatMessageSend dto) {
+    if (!visitorIdentityRepository.existsById(visitorId)) {
+      throw new ResourceNotFoundException("VisitorIdentity not found: " + visitorId);
+    }
+
+    ChatMessage msg = buildBaseMessage(groupId, dto);
+    msg.setSenderType(ChatMessageSenderType.VISITOR);
+    msg.setSenderId(null);
+    msg.setVisitorId(visitorId);
+    msg = messageRepository.save(msg);
+
+    return toDto(msg);
+  }
+
+  private ChatMessage buildBaseMessage(UUID groupId, DtoChatMessageSend dto) {
     String sanitized = Jsoup.clean(dto.getContent(), Safelist.none());
     if (sanitized.length() > maxMessageLength) {
       throw new com.cms.exception.BadRequestException(
@@ -52,19 +91,16 @@ public class ChatMessageService implements IChatMessageService {
 
     ChatMessage msg = new ChatMessage();
     msg.setGroupId(groupId);
-    msg.setSenderId(senderId);
     msg.setContent(sanitized);
     msg.setContentType(dto.getContentType() != null ? dto.getContentType() : ChatMessageType.TEXT);
     msg.setFileUrl(dto.getFileUrl());
     msg.setParentId(dto.getParentId());
-    msg = messageRepository.save(msg);
-
-    return toDto(msg);
+    return msg;
   }
 
   @Override
   public List<DtoChatMessage> getHistory(UUID groupId, Long requesterId, UUID before, int limit) {
-    groupService.checkAccess(groupId, requesterId);
+    groupService.checkReadAccess(groupId, requesterId);
 
     Date beforeDate = null;
     if (before != null) {
@@ -87,7 +123,12 @@ public class ChatMessageService implements IChatMessageService {
   @Transactional
   public DtoChatMessage editMessage(UUID messageId, Long requesterId, String newContent) {
     ChatMessage msg = findMessageOrThrow(messageId);
-    if (!msg.getSenderId().equals(requesterId)) {
+
+    // Visitor mesajları edit edilemez (MVP) — sadece kendi admin mesajı edit edilebilir
+    if (msg.getSenderType() == ChatMessageSenderType.VISITOR) {
+      throw new ForbiddenException("Visitor messages are not editable");
+    }
+    if (!requesterId.equals(msg.getSenderId())) {
       throw new ForbiddenException("You can only edit your own messages");
     }
     if (msg.getDeletedAt() != null) {
@@ -112,7 +153,9 @@ public class ChatMessageService implements IChatMessageService {
   @Transactional
   public void deleteMessage(UUID messageId, Long requesterId) {
     ChatMessage msg = findMessageOrThrow(messageId);
-    if (!msg.getSenderId().equals(requesterId) && !groupService.isMember(msg.getGroupId(), requesterId)) {
+    boolean isOwnAdminMessage = msg.getSenderType() == ChatMessageSenderType.ADMIN
+        && requesterId.equals(msg.getSenderId());
+    if (!isOwnAdminMessage && !groupService.isMember(msg.getGroupId(), requesterId)) {
       throw new ForbiddenException("Cannot delete this message");
     }
     msg.setDeletedAt(new Date());
@@ -123,7 +166,7 @@ public class ChatMessageService implements IChatMessageService {
   @Override
   @Transactional
   public void markGroupAsRead(UUID groupId, Long userId) {
-    groupService.checkAccess(groupId, userId);
+    groupService.checkReadAccess(groupId, userId);
     readRepository.markAllAsRead(groupId, userId);
   }
 
@@ -132,10 +175,44 @@ public class ChatMessageService implements IChatMessageService {
         .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
   }
 
+  /**
+   * DTO'ya çevirir + sender display name'i zenginleştirir.
+   * <ul>
+   *   <li>ADMIN sender → username basedb'den çekilir (gerekirse tenant context geçici switch)</li>
+   *   <li>VISITOR sender → display_name aynı tenant DB visitor_identities'ten çekilir</li>
+   * </ul>
+   */
   private DtoChatMessage toDto(ChatMessage msg) {
     DtoChatMessage dto = chatMapper.toMessageDto(msg);
-    userRepository.findById(msg.getSenderId())
-        .ifPresent(u -> dto.setSenderUsername(u.getUsername()));
+    if (msg.getSenderType() == ChatMessageSenderType.VISITOR && msg.getVisitorId() != null) {
+      visitorIdentityRepository.findById(msg.getVisitorId())
+          .ifPresent(v -> dto.setSenderUsername(v.getDisplayName()));
+    } else if (msg.getSenderId() != null) {
+      // Admin sender — basedb'den çek (TC group'unda TenantContext tenant'a set olabilir)
+      String adminUsername = lookupAdminUsername(msg.getSenderId());
+      dto.setSenderUsername(adminUsername);
+    }
     return dto;
+  }
+
+  /**
+   * Admin user'ının username'ini basedb'den okur. TC akışında TenantContext tenant'a
+   * set olduğu için query basedb'ye yönlendirilmek üzere geçici switch yapılır.
+   *
+   * <p>{@code public} olarak işaretlendi çünkü VisitorChatService gibi başka servisler
+   * Spring proxy üzerinden bu method'u çağırabilsin ({@code REQUIRES_NEW} davranışı
+   * için).</p>
+   */
+  @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+  public String lookupAdminUsername(Long userId) {
+    String originalTenant = TenantContext.getTenantId();
+    try {
+      TenantContext.setTenantId(defaultTenant);
+      return userRepository.findById(userId)
+          .map(u -> u.getUsername())
+          .orElse(null);
+    } finally {
+      TenantContext.setTenantId(originalTenant);
+    }
   }
 }

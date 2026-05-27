@@ -1,6 +1,7 @@
 package com.cms.controller;
 
 import com.cms.dto.DtoChatMessage;
+import com.cms.dto.DtoChatMessageSend;
 import com.cms.entity.RootEntityResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,6 +13,9 @@ import java.util.UUID;
 
 @Tag(name = "Chat Messages", description = "Mesaj geçmişi ve yönetimi")
 public interface IChatHistoryController {
+
+  @Operation(summary = "Mesaj gönder (REST — admin, AC veya TC, X-Tenant-Id ile)")
+  ResponseEntity<RootEntityResponse<DtoChatMessage>> sendMessage(UUID groupId, DtoChatMessageSend payload);
 
   @Operation(summary = "Grup mesaj geçmişi (cursor-based pagination)")
   ResponseEntity<RootEntityResponse<List<DtoChatMessage>>> getHistory(UUID groupId, UUID before, int limit);

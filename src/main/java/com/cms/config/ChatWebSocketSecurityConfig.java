@@ -24,6 +24,7 @@ import java.util.Map;
 public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfigurer {
 
   private final JwtUtil jwtUtil;
+  private final UserAuthCacheService userAuthCacheService;
 
   @Override
   public void configureClientInboundChannel(ChannelRegistration registration) {
@@ -49,6 +50,18 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
 
             String username = jwtUtil.extractUsername(token);
             Long userId = jwtUtil.extractUserId(token);
+
+            // H4: Token version kontrolü — iptal edilmiş token'larla WebSocket bağlantısı kurulamaz
+            // Yalnızca admin loginSource için uygulanır
+            Long jwtTokenVersion = jwtUtil.extractTokenVersion(token);
+            com.cms.dto.CachedUserDetails cachedUser = userAuthCacheService.getUserFromCache(username);
+            if (cachedUser != null && cachedUser.getTokenVersion() != null
+                && jwtTokenVersion != null
+                && !jwtTokenVersion.equals(cachedUser.getTokenVersion())) {
+              throw new org.springframework.messaging.MessageDeliveryException(
+                  message, "Token revoked — please login again");
+            }
+            // cachedUser null ise (Redis down veya cache miss) → fail-open, JWT'nin kendi TTL'si koruyor
 
             List<SimpleGrantedAuthority> authorities = List.of(
                 new SimpleGrantedAuthority("chat:read"),

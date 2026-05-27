@@ -20,7 +20,15 @@ public class ChatRateLimitService {
   private int maxMessagesPerSecond;
 
   public void checkRateLimit(Long userId) {
-    String key = KEY_PREFIX + userId;
+    checkRateLimitByKey(String.valueOf(userId));
+  }
+
+  public void checkRateLimitForGuest(String sessionId) {
+    checkRateLimitByKey("guest:" + sessionId);
+  }
+
+  private void checkRateLimitByKey(String identifier) {
+    String key = KEY_PREFIX + identifier;
     Long count = redisTemplate.opsForValue().increment(key);
     if (count != null && count == 1) {
       // İlk mesaj bu saniyede — TTL 1 saniye koy

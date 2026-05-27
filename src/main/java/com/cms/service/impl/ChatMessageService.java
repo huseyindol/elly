@@ -63,6 +63,31 @@ public class ChatMessageService implements IChatMessageService {
   }
 
   @Override
+  @Transactional
+  public DtoChatMessage saveGuestMessage(UUID groupId, String sessionId, String displayName, DtoChatMessageSend dto) {
+    groupService.checkPublicAccess(groupId);
+
+    String sanitized = Jsoup.clean(dto.getContent(), Safelist.none());
+    if (sanitized.length() > maxMessageLength) {
+      throw new com.cms.exception.BadRequestException(
+          "Message exceeds max length of " + maxMessageLength + " characters");
+    }
+
+    ChatMessage msg = new ChatMessage();
+    msg.setGroupId(groupId);
+    msg.setSenderId(null); // guest — userId yok
+    msg.setSessionId(UUID.fromString(sessionId));
+    msg.setSenderDisplayName(displayName);
+    msg.setContent(sanitized);
+    msg.setContentType(dto.getContentType() != null ? dto.getContentType() : ChatMessageType.TEXT);
+    msg.setFileUrl(dto.getFileUrl());
+    msg.setParentId(dto.getParentId());
+    msg = messageRepository.save(msg);
+
+    return toDto(msg);
+  }
+
+  @Override
   public List<DtoChatMessage> getHistory(UUID groupId, Long requesterId, UUID before, int limit) {
     groupService.checkAccess(groupId, requesterId);
 
@@ -134,8 +159,14 @@ public class ChatMessageService implements IChatMessageService {
 
   private DtoChatMessage toDto(ChatMessage msg) {
     DtoChatMessage dto = chatMapper.toMessageDto(msg);
-    userRepository.findById(msg.getSenderId())
-        .ifPresent(u -> dto.setSenderUsername(u.getUsername()));
+    if (msg.getSenderId() != null) {
+      userRepository.findById(msg.getSenderId())
+          .ifPresent(u -> dto.setSenderUsername(u.getUsername()));
+    } else {
+      // Guest mesajı — displayName'i senderUsername olarak kullan (frontend uyumu)
+      dto.setSenderUsername(msg.getSenderDisplayName());
+      dto.setSenderDisplayName(msg.getSenderDisplayName());
+    }
     return dto;
   }
 }

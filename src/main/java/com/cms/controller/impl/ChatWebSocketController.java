@@ -44,11 +44,22 @@ public class ChatWebSocketController {
       SimpMessageHeaderAccessor headerAccessor) {
     TenantContext.setTenantId(null);
     try {
-      Long userId = resolveUserId(headerAccessor);
-      rateLimitService.checkRateLimit(userId);
-      DtoChatMessage saved = messageService.saveMessage(groupId, userId, payload);
-      messagingTemplate.convertAndSend("/topic/group/" + groupId, saved);
-      log.debug("Message sent to group {} by user {}", groupId, userId);
+      Long userId = resolveUserIdNullable(headerAccessor);
+      if (userId != null) {
+        // Admin / kayıtlı kullanıcı
+        rateLimitService.checkRateLimit(userId);
+        DtoChatMessage saved = messageService.saveMessage(groupId, userId, payload);
+        messagingTemplate.convertAndSend("/topic/group/" + groupId, saved);
+        log.debug("Message sent to group {} by user {}", groupId, userId);
+      } else {
+        // Guest kullanıcı
+        String sessionId = resolveSessionId(headerAccessor);
+        String displayName = resolveDisplayName(headerAccessor);
+        rateLimitService.checkRateLimitForGuest(sessionId);
+        DtoChatMessage saved = messageService.saveGuestMessage(groupId, sessionId, displayName, payload);
+        messagingTemplate.convertAndSend("/topic/group/" + groupId, saved);
+        log.debug("Guest message sent to group {} by session {}", groupId, sessionId);
+      }
     } finally {
       TenantContext.clear();
     }
@@ -122,12 +133,35 @@ public class ChatWebSocketController {
     }
   }
 
+  /** Admin kullanıcılar için — null ise exception fırlatır */
   private Long resolveUserId(SimpMessageHeaderAccessor accessor) {
-    Map<String, Object> attrs = accessor.getSessionAttributes();
-    if (attrs == null) throw new com.cms.exception.UnauthorizedException("No session attributes");
-    Object userId = attrs.get("userId");
+    Long userId = resolveUserIdNullable(accessor);
     if (userId == null) throw new com.cms.exception.UnauthorizedException("userId not found in session");
+    return userId;
+  }
+
+  /** Hem admin hem guest için — guest'te null döner */
+  private Long resolveUserIdNullable(SimpMessageHeaderAccessor accessor) {
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    if (attrs == null) return null;
+    Object userId = attrs.get("userId");
+    if (userId == null) return null;
     return (userId instanceof Long l) ? l : Long.valueOf(userId.toString());
+  }
+
+  private String resolveSessionId(SimpMessageHeaderAccessor accessor) {
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    if (attrs == null) throw new com.cms.exception.UnauthorizedException("No session");
+    Object sessionId = attrs.get("sessionId");
+    if (sessionId == null) throw new com.cms.exception.UnauthorizedException("sessionId not found");
+    return sessionId.toString();
+  }
+
+  private String resolveDisplayName(SimpMessageHeaderAccessor accessor) {
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    if (attrs == null) return "Guest";
+    Object name = attrs.get("displayName");
+    return name != null ? name.toString() : "Guest";
   }
 
   private String resolveUsername(SimpMessageHeaderAccessor accessor) {

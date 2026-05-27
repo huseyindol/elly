@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.config.TenantContext;
 import com.cms.controller.IAuthController;
 import com.cms.dto.DtoAuthResponse;
+import com.cms.dto.DtoGuestTokenRequest;
+import com.cms.dto.DtoGuestTokenResponse;
 import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
@@ -135,5 +137,11 @@ public class AuthController extends BaseController implements IAuthController {
         false, true, "/");
 
     return ok(response);
+  }
+
+  @Override
+  @PostMapping("/guest-token")
+  public RootEntityResponse<DtoGuestTokenResponse> getGuestToken(@Valid @RequestBody DtoGuestTokenRequest request) {
+    return ok(authService.getGuestToken(request));
   }
 }

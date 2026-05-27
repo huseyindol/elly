@@ -30,6 +30,9 @@ public class JwtUtil {
   @Value("${jwt.refresh.expiration:604800000}")
   private Long refreshExpiration; // 7 gün (milisaniye cinsinden)
 
+  @Value("${jwt.guest.expiration:3600000}")
+  private Long guestExpiration; // 1 saat (milisaniye cinsinden)
+
   private SecretKey getSigningKey() {
     return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
   }
@@ -84,6 +87,16 @@ public class JwtUtil {
   public String extractLoginSource(String token) {
     Claims claims = extractAllClaims(token);
     return claims.get("loginSource", String.class);
+  }
+
+  public String extractSessionId(String token) {
+    Claims claims = extractAllClaims(token);
+    return claims.get("sessionId", String.class);
+  }
+
+  public String extractDisplayName(String token) {
+    Claims claims = extractAllClaims(token);
+    return claims.get("displayName", String.class);
   }
 
   public Date extractExpiration(String token) {
@@ -175,6 +188,31 @@ public class JwtUtil {
     } catch (Exception e) {
       return false;
     }
+  }
+
+  // ==========================================
+  // Guest JWT Methods
+  // ==========================================
+
+  /**
+   * Website ziyaretçileri için kısa ömürlü guest token üretir.
+   * loginSource=website, userId yok, sessionId + displayName claim'leri var.
+   * TTL: jwt.guest.expiration (default 1 saat)
+   */
+  public String generateGuestToken(String displayName, String sessionId) {
+    Map<String, Object> claims = new HashMap<>();
+    claims.put("sessionId", sessionId);
+    claims.put("displayName", displayName);
+    claims.put("loginSource", "website");
+    claims.put("type", "guest");
+
+    return Jwts.builder()
+        .claims(claims)
+        .subject(sessionId)
+        .issuedAt(new Date(System.currentTimeMillis()))
+        .expiration(new Date(System.currentTimeMillis() + guestExpiration))
+        .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
+        .compact();
   }
 
   // ==========================================

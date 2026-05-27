@@ -29,8 +29,14 @@ public class ChatMessage {
   @Column(name = "group_id", nullable = false)
   private UUID groupId;
 
-  @Column(name = "sender_id", nullable = false)
+  @Column(name = "sender_id", nullable = true)
   private Long senderId;
+
+  @Column(name = "session_id")
+  private UUID sessionId;
+
+  @Column(name = "sender_display_name", length = 100)
+  private String senderDisplayName;
 
   @Column(name = "content", nullable = false, columnDefinition = "TEXT")
   private String content;

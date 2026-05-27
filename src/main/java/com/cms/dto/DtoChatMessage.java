@@ -12,6 +12,7 @@ public class DtoChatMessage {
   private UUID groupId;
   private Long senderId;
   private String senderUsername;
+  private String senderDisplayName; // guest kullanıcılar için (senderId null ise dolu gelir)
   private String content;
   private ChatMessageType contentType;
   private String fileUrl;

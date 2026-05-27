@@ -10,6 +10,9 @@ public interface IChatMessageService {
 
   DtoChatMessage saveMessage(UUID groupId, Long senderId, DtoChatMessageSend dto);
 
+  /** Guest kullanıcılar için — senderId null, sessionId + displayName ile çalışır */
+  DtoChatMessage saveGuestMessage(UUID groupId, String sessionId, String displayName, DtoChatMessageSend dto);
+
   List<DtoChatMessage> getHistory(UUID groupId, Long requesterId, UUID before, int limit);
 
   DtoChatMessage editMessage(UUID messageId, Long requesterId, String newContent);

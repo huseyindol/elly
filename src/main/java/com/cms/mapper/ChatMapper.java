@@ -13,6 +13,7 @@ public interface ChatMapper {
   DtoChatGroup toGroupDto(ChatGroup group);
 
   @Mapping(target = "deleted", expression = "java(message.getDeletedAt() != null)")
-  @Mapping(target = "senderUsername", ignore = true)
+  @Mapping(target = "senderUsername", ignore = true) // ChatMessageService.toDto() tarafından doldurulur
+  @Mapping(target = "senderDisplayName", source = "senderDisplayName")
   DtoChatMessage toMessageDto(ChatMessage message);
 }

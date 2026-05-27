@@ -1,6 +1,8 @@
 package com.cms.service;
 
 import com.cms.dto.DtoAuthResponse;
+import com.cms.dto.DtoGuestTokenRequest;
+import com.cms.dto.DtoGuestTokenResponse;
 import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
@@ -16,4 +18,6 @@ public interface IAuthService {
   DtoTenantTokenResponse getPublicToken(String tenantId);
 
   void verifyEmail(String token, String tenantId);
+
+  DtoGuestTokenResponse getGuestToken(DtoGuestTokenRequest request);
 }

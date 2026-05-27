@@ -23,6 +23,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.cms.dto.DtoAuthResponse;
+import com.cms.dto.DtoGuestTokenRequest;
+import com.cms.dto.DtoGuestTokenResponse;
 import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
@@ -382,6 +384,14 @@ public class AuthService implements IAuthService {
     populateRolesAndPermissions(response, user);
 
     return response;
+  }
+
+  @Override
+  public DtoGuestTokenResponse getGuestToken(DtoGuestTokenRequest request) {
+    String sessionId = java.util.UUID.randomUUID().toString();
+    String token = jwtUtil.generateGuestToken(request.getDisplayName(), sessionId);
+    long expiresInSeconds = 3600L; // jwt.guest.expiration default 1 saat
+    return new DtoGuestTokenResponse(token, expiresInSeconds, request.getDisplayName());
   }
 
   @Override

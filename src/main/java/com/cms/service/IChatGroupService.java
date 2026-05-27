@@ -26,4 +26,10 @@ public interface IChatGroupService {
   List<DtoChatMember> getMembers(UUID groupId, Long requesterId);
 
   boolean isMember(UUID groupId, Long userId);
+
+  /**
+   * Guest (anonim) kullanıcıların erişim kontrolü.
+   * Sadece visibilityLevel=1 (public) gruplara izin verir.
+   */
+  void checkPublicAccess(UUID groupId);
 }

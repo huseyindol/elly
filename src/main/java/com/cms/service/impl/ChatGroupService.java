@@ -153,6 +153,14 @@ public class ChatGroupService implements IChatGroupService {
     }
   }
 
+  @Override
+  public void checkPublicAccess(UUID groupId) {
+    ChatGroup group = findGroupOrThrow(groupId);
+    if (group.getVisibilityLevel() > 1) {
+      throw new ForbiddenException("This chat group is not public");
+    }
+  }
+
   // Returns 4=SUPER_ADMIN, 3=ADMIN, 2=EDITOR, 1=VIEWER (highest role wins)
   private int getUserRoleLevel(Long userId) {
     return userRepository.findById(userId)

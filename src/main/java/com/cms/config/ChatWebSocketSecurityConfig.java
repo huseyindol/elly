@@ -43,49 +43,73 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
           try {
             String token = authHeader.substring(7);
             String loginSource = jwtUtil.extractLoginSource(token);
-            if (!"admin".equals(loginSource)) {
+
+            boolean isAdmin = "admin".equals(loginSource);
+            boolean isGuest = "website".equals(loginSource);
+
+            if (!isAdmin && !isGuest) {
               throw new org.springframework.messaging.MessageDeliveryException(
-                  message, "Chat requires admin panel login (loginSource=admin)");
+                  message, "Chat requires admin or website login");
             }
-
-            String username = jwtUtil.extractUsername(token);
-            Long userId = jwtUtil.extractUserId(token);
-
-            // H4: Token version kontrolü — iptal edilmiş token'larla WebSocket bağlantısı kurulamaz
-            // Yalnızca admin loginSource için uygulanır
-            Long jwtTokenVersion = jwtUtil.extractTokenVersion(token);
-            com.cms.dto.CachedUserDetails cachedUser = userAuthCacheService.getUserFromCache(username);
-            if (cachedUser != null && cachedUser.getTokenVersion() != null
-                && jwtTokenVersion != null
-                && !jwtTokenVersion.equals(cachedUser.getTokenVersion())) {
-              throw new org.springframework.messaging.MessageDeliveryException(
-                  message, "Token revoked — please login again");
-            }
-            // cachedUser null ise (Redis down veya cache miss) → fail-open, JWT'nin kendi TTL'si koruyor
-
-            List<SimpleGrantedAuthority> authorities = List.of(
-                new SimpleGrantedAuthority("chat:read"),
-                new SimpleGrantedAuthority("chat:manage"));
-
-            UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken(username, null, authorities);
-            accessor.setUser(auth);
 
             Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
-            if (sessionAttrs != null) {
-              sessionAttrs.put("userId", userId);
-              sessionAttrs.put("username", username);
+
+            if (isAdmin) {
+              String username = jwtUtil.extractUsername(token);
+              Long userId = jwtUtil.extractUserId(token);
+
+              // H4: Token version kontrolü — iptal edilmiş admin token'larla bağlantı kurulamaz
+              Long jwtTokenVersion = jwtUtil.extractTokenVersion(token);
+              com.cms.dto.CachedUserDetails cachedUser = userAuthCacheService.getUserFromCache(username);
+              if (cachedUser != null && cachedUser.getTokenVersion() != null
+                  && jwtTokenVersion != null
+                  && !jwtTokenVersion.equals(cachedUser.getTokenVersion())) {
+                throw new org.springframework.messaging.MessageDeliveryException(
+                    message, "Token revoked — please login again");
+              }
+
+              UsernamePasswordAuthenticationToken auth =
+                  new UsernamePasswordAuthenticationToken(username, null,
+                      List.of(new SimpleGrantedAuthority("chat:read"),
+                              new SimpleGrantedAuthority("chat:manage")));
+              accessor.setUser(auth);
+
+              if (sessionAttrs != null) {
+                sessionAttrs.put("userId", userId);
+                sessionAttrs.put("username", username);
+              }
+
+              log.debug("WebSocket admin authenticated: user={}, userId={}", username, userId);
+
+            } else {
+              // Guest (website) bağlantısı
+              String sessionId = jwtUtil.extractSessionId(token);
+              String displayName = jwtUtil.extractDisplayName(token);
+
+              UsernamePasswordAuthenticationToken auth =
+                  new UsernamePasswordAuthenticationToken(sessionId, null,
+                      List.of(new SimpleGrantedAuthority("chat:read")));
+              accessor.setUser(auth);
+
+              if (sessionAttrs != null) {
+                sessionAttrs.put("userId", null);
+                sessionAttrs.put("sessionId", sessionId);
+                sessionAttrs.put("displayName", displayName);
+                sessionAttrs.put("username", displayName);
+              }
+
+              log.debug("WebSocket guest connected: sessionId={}, displayName={}", sessionId, displayName);
             }
 
             // Chat her zaman basedb'de çalışır
             TenantContext.setTenantId(null);
 
-            log.debug("WebSocket authenticated: user={}, userId={}", username, userId);
+            log.debug("WebSocket CONNECT completed. loginSource={}", loginSource);
           } catch (org.springframework.messaging.MessageDeliveryException e) {
             throw e;
           } catch (Exception e) {
             throw new org.springframework.messaging.MessageDeliveryException(
-                message, "Invalid JWT token: " + e.getMessage());
+                message, "Invalid or expired token: " + e.getMessage());
           }
         }
         return message;

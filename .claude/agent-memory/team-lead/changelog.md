@@ -5,6 +5,110 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-05-27] Per-Tenant Chat Routing + Guest Token tenantId Zorunlu
+**Tip:** 🆕 Özellik + 🔧 Refactor | **Boyut:** Orta
+
+### Özet
+Guest kullanıcılar artık hangi tenant'ın sitesinde chat kullanıyorlarsa o tenant DB'sine bağlanıyor.
+Önceki: Tüm chat (admin + tenant + guest) → basedb zorla.
+Şimdi: admin → basedb, tenant/guest → JWT'deki tenantId → o tenant DB.
+
+### Senaryo Tablosu
+| Kullanıcı | loginSource | TenantContext | DB |
+|---|---|---|---|
+| Admin panel | admin | null | basedb |
+| Tenant kullanıcısı | tenant | tenantId | tenant DB |
+| Guest (tenantId'li) | website | tenantId | tenant DB |
+| Guest (tenantId'siz) | website | — | **400 hata** (zorunlu) |
+
+### Değişen Dosyalar
+- `DtoGuestTokenRequest` — `tenantId` alanı **zorunlu** (`@NotBlank`) eklendi
+- `JwtUtil.generateGuestToken()` — `tenantId` parametresi, claim'e yazılıyor
+- `AuthService.getGuestToken()` — tenant varlık validasyonu, token'a iletim
+- `JwtTenantFilter` — chat path'inde admin→null, diğerleri→tenantId
+- `ChatWebSocketSecurityConfig` — session attrs'a `tenantId` eklendi, TenantContext loginSource'a göre
+- `ChatWebSocketController` — TenantContext hardcoded null yerine session attrs'tan okuyor
+- `migration/db-migration-chat-tenant.sql` — **YENİ** — tenant DB'lerine chat tabloları
+
+### Migration Gereksinimi
+```bash
+# Tenant DB'lerine chat tablolarını kur (henüz uygulanmadıysa)
+psql elly_tenant1 -f src/main/resources/migration/db-migration-chat-tenant.sql
+psql elly_tenant2 -f src/main/resources/migration/db-migration-chat-tenant.sql
+```
+
+---
+
+## [2026-05-27] 2FA (TOTP) Desteği — Google Authenticator Uyumlu
+**Tip:** 🆕 Özellik | **Boyut:** Büyük
+
+### Özet
+Admin kullanıcılar için isteğe bağlı TOTP tabanlı 2FA. Google Authenticator / Authy uyumlu.
+Login akışında mfaEnabled=true ise normal JWT yerine 5 dakika geçerli mfaToken döner;
+kullanıcı 6 haneli kodu `/api/v1/auth/mfa/verify` ile doğrulayınca gerçek JWT alır.
+
+### Yeni Endpoint'ler
+| Method | Path | Açıklama |
+|--------|------|---------|
+| GET | `/api/v1/auth/mfa/setup` | TOTP secret + QR URI üret |
+| POST | `/api/v1/auth/mfa/setup/verify` | İlk kodu gir, setup tamamla |
+| POST | `/api/v1/auth/mfa/verify` | Login 2. adım — mfaToken + kod → JWT |
+| POST | `/api/v1/auth/mfa/disable` | 2FA'yı kapat |
+
+### Değişen/Eklenen Dosyalar
+- `User` entity — `mfaEnabled`, `mfaSecret` (AES şifreli), `mfaSetupVerified` alanları
+- `TotpService` — `dev.samstevens.totp:1.5.1` kütüphanesi, secret üret / QR URI / verify
+- `IMfaController` + `MfaController` — 4 endpoint
+- `JwtUtil` — `generateMfaToken()` (5 dk TTL, `type=mfa`)
+- `AuthService` — login'de mfaEnabled kontrolü, mfaToken dönüşü
+- `DtoAuthResponse` — `mfaRequired`, `mfaToken` alanları eklendi
+- `CachedUserDetails` — `mfaEnabled` cache'e eklendi
+- `SecurityConfig` — `/api/v1/auth/mfa/**` permitAll
+
+### Migration Gereksinimi
+```sql
+-- Tüm tenant DB'lerine (basedb dahil) uygulanmalı
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS mfa_secret VARCHAR(64),
+  ADD COLUMN IF NOT EXISTS mfa_setup_verified BOOLEAN NOT NULL DEFAULT FALSE;
+```
+**Dosya:** `src/main/resources/mfa-migration.sql` (commit içinde mevcut mu kontrol et)
+
+---
+
+## [2026-05-27] Guest WebSocket Chat Desteği
+**Tip:** 🆕 Özellik | **Boyut:** Orta
+
+### Özet
+Website ziyaretçileri (kayıtsız) public chat gruplarına (visibilityLevel=1) mesaj yazabilir.
+
+### Akış
+```
+POST /api/v1/auth/guest-token { displayName, tenantId }
+→ { token, expiresIn: 3600 }
+→ STOMP CONNECT Authorization: Bearer <token>
+→ /chat/{groupId}/send → broadcast { senderDisplayName, ... }
+```
+
+### Değişen Dosyalar
+- `ChatMessage` — `sender_id` nullable, `session_id` + `sender_display_name` kolonları
+- `JwtUtil` — `generateGuestToken()`, `extractSessionId()`, `extractDisplayName()`
+- `ChatWebSocketSecurityConfig` — `loginSource=website` kabulü
+- `ChatWebSocketController` — guest mesaj akışı
+- `ChatMessageService` — `saveGuestMessage()`
+- `ChatGroupService` — `checkPublicAccess()`
+- `AuthController/Service` — `POST /api/v1/auth/guest-token`
+- `guest-chat-migration.sql` — `sender_id` nullable, iki yeni kolon
+
+### Migration Gereksinimi
+```bash
+# basedb'ye (zaten uygulandıysa atla)
+psql elly_basedb -f src/main/resources/guest-chat-migration.sql
+```
+
+---
+
 ## [2026-05-18] K8s CrashLoopBackOff Çözümü + Chat Paket Refactoring
 **Tip:** 🔧 Bugfix | **Boyut:** Orta
 

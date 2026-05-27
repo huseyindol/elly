@@ -534,13 +534,8 @@ public class AuthService implements IAuthService {
   @Override
   public DtoGuestTokenResponse getGuestToken(DtoGuestTokenRequest request) {
     String tenantId = request.getTenantId();
-    // tenantId verilmişse geçerliliğini doğrula
-    if (tenantId != null && !tenantId.isBlank()) {
-      if (!tenantProperties.getDatasources().containsKey(tenantId)) {
-        throw new BadRequestException("Unknown tenant: " + tenantId);
-      }
-    } else {
-      tenantId = null; // normalize — boş string → null
+    if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+      throw new BadRequestException("Unknown tenant: " + tenantId);
     }
     String sessionId = UUID.randomUUID().toString();
     String token = jwtUtil.generateGuestToken(request.getDisplayName(), sessionId, tenantId);

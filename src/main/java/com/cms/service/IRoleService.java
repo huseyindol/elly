@@ -21,7 +21,10 @@ public interface IRoleService {
 
   DtoRole assignPermissionsToRole(Long roleId, Set<Long> permissionIds);
 
-  void assignRolesToUser(Long userId, Set<Long> roleIds);
+  /**
+   * @param requesterId  işlemi yapan kullanıcı — kendi hiyerarşisinden yüksek rol atayamaz
+   */
+  void assignRolesToUser(Long userId, Set<Long> roleIds, Long requesterId);
 
   List<DtoPermission> getAllPermissions();
 

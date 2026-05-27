@@ -141,7 +141,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @DeleteMapping("/{id}/force")
-  @PreAuthorize("hasAuthority('forms:delete')")
+  @PreAuthorize("hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
   public RootEntityResponse<Boolean> forceDeleteFormDefinition(@PathVariable Long id) {
     Boolean deleted = formDefinitionService.forceDelete(id);
     if (deleted) {

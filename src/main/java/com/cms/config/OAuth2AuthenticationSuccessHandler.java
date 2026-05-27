@@ -4,7 +4,9 @@ import com.cms.entity.RefreshToken;
 import com.cms.entity.User;
 import com.cms.repository.RefreshTokenRepository;
 import com.cms.repository.UserRepository;
+import com.cms.util.CookieUtil;
 import com.cms.util.JwtUtil;
+import com.cms.util.UserUtil;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -28,12 +30,23 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
   private final UserRepository userRepository;
   private final RefreshTokenRepository refreshTokenRepository;
   private final JwtUtil jwtUtil;
+  private final CookieUtil cookieUtil;
+  private final UserUtil userUtil;
 
   @Value("${jwt.refresh.expiration:604800000}")
   private Long refreshTokenExpiration;
 
   @Value("${app.oauth2.redirect-uri:http://localhost:3000/oauth2/redirect}")
   private String redirectUri;
+
+  @Value("${cookie.access-token.expiration:14400}")
+  private Integer accessTokenCookieExpiration;
+
+  @Value("${cookie.refresh-token.expiration:15552000}")
+  private Integer refreshTokenCookieExpiration;
+
+  @Value("${cookie.user-code.expiration:3600}")
+  private Integer userCodeCookieExpiration;
 
   @Override
   public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
@@ -53,8 +66,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     // Kullanıcıyı bul veya oluştur
     User user = findOrCreateUser(provider, providerId, email, firstName, lastName, username);
 
-    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
-    // için)
+    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak için)
     Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
     user.setTokenVersion(currentVersion + 1);
     user = userRepository.save(user);
@@ -74,10 +86,17 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     refreshToken.setExpiryDate(new Date(System.currentTimeMillis() + refreshTokenExpiration));
     refreshTokenRepository.save(refreshToken);
 
-    // Redirect URL'e token'ları ekle
+    // Token'ları normal login ile aynı şekilde HttpOnly cookie olarak set et
+    // (URL'de token taşımak: server log, browser history, Referrer header sızıntısı)
+    cookieUtil.setAccessTokenCookie(response, token, accessTokenCookieExpiration);
+    cookieUtil.setRefreshTokenCookie(response, refreshTokenString, refreshTokenCookieExpiration);
+    cookieUtil.setUserCodeCookie(response, userUtil.generateUserCode(user), userCodeCookieExpiration);
+    cookieUtil.setCookie(response, "expiredDate",
+        String.valueOf(System.currentTimeMillis() + (long) accessTokenCookieExpiration * 1000),
+        refreshTokenCookieExpiration, false, true, "/");
+
+    // Redirect: hassas veri yok, sadece UI için userId/username/email
     String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
-        .queryParam("token", token)
-        .queryParam("refreshToken", refreshTokenString)
         .queryParam("userId", user.getId())
         .queryParam("username", user.getUsername())
         .queryParam("email", user.getEmail())

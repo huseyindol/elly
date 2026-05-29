@@ -24,6 +24,7 @@ import com.cms.dto.DtoCmsContentBulkRequest;
 import com.cms.dto.PagedResponse;
 import com.cms.entity.CmsContent;
 import com.cms.entity.RootEntityResponse;
+import com.cms.mapper.CmsBasicInfoMapper;
 import com.cms.mapper.CmsContentMapper;
 import com.cms.service.ICmsContentService;
 
@@ -37,6 +38,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
   private final ICmsContentService cmsContentService;
   private final CmsContentMapper cmsContentMapper;
+  private final CmsBasicInfoMapper cmsBasicInfoMapper;
 
   @Override
   @GetMapping("/section/list")
@@ -94,7 +96,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
     com.cms.entity.CmsBasicInfo basicInfoPayload = null;
     if (dtoCmsContentIU.getBasicInfo() != null) {
-      basicInfoPayload = new com.cms.mapper.CmsBasicInfoMapperImpl().toCmsBasicInfo(dtoCmsContentIU.getBasicInfo());
+      basicInfoPayload = cmsBasicInfoMapper.toCmsBasicInfo(dtoCmsContentIU.getBasicInfo());
     }
 
     CmsContent savedContent = cmsContentService.createCmsContent(cmsContent, dtoCmsContentIU.getBasicInfoId(),
@@ -110,7 +112,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
       @Valid @RequestBody DtoCmsContentBulkRequest request) {
     com.cms.entity.CmsBasicInfo basicInfoPayload = null;
     if (request.getBasicInfo() != null) {
-      basicInfoPayload = new com.cms.mapper.CmsBasicInfoMapperImpl().toCmsBasicInfo(request.getBasicInfo());
+      basicInfoPayload = cmsBasicInfoMapper.toCmsBasicInfo(request.getBasicInfo());
     }
 
     List<CmsContent> contentsToSave = request.getContents().stream().map(item -> {
@@ -135,7 +137,7 @@ public class CmsContentController extends BaseController implements ICmsContentC
 
     com.cms.entity.CmsBasicInfo basicInfoPayload = null;
     if (dtoCmsContentIU.getBasicInfo() != null) {
-      basicInfoPayload = new com.cms.mapper.CmsBasicInfoMapperImpl().toCmsBasicInfo(dtoCmsContentIU.getBasicInfo());
+      basicInfoPayload = cmsBasicInfoMapper.toCmsBasicInfo(dtoCmsContentIU.getBasicInfo());
     }
 
     CmsContent savedContent = cmsContentService.updateCmsContent(id, contentUpdate, dtoCmsContentIU.getBasicInfoId(),

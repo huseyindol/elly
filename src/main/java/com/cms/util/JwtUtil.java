@@ -33,6 +33,9 @@ public class JwtUtil {
   @Value("${jwt.mfa.expiration:300000}")
   private Long mfaExpiration; // 5 dakika (milisaniye cinsinden)
 
+  @Value("${jwt.guest.expiration:3600000}")
+  private Long guestExpiration; // 1 saat (milisaniye cinsinden) — anonim guest chat token'ı
+
   private SecretKey getSigningKey() {
     return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
   }
@@ -87,6 +90,18 @@ public class JwtUtil {
   public String extractLoginSource(String token) {
     Claims claims = extractAllClaims(token);
     return claims.get("loginSource", String.class);
+  }
+
+  /** Guest token'daki anonim oturum kimliği (sessionId claim). */
+  public String extractSessionId(String token) {
+    Claims claims = extractAllClaims(token);
+    return claims.get("sessionId", String.class);
+  }
+
+  /** Guest token'daki ekran adı (displayName claim). */
+  public String extractDisplayName(String token) {
+    Claims claims = extractAllClaims(token);
+    return claims.get("displayName", String.class);
   }
 
   public Date extractExpiration(String token) {
@@ -218,6 +233,51 @@ public class JwtUtil {
     } catch (Exception e) {
       return false;
     }
+  }
+
+  // ==========================================
+  // Guest JWT Methods (anonim website ziyaretçi chat'i)
+  // ==========================================
+
+  /**
+   * Website ziyaretçileri için kısa ömürlü guest token üretir.
+   * loginSource=website, userId yok; sessionId + displayName + tenantId claim'leri var.
+   * tenantId zorunlu — guest hangi tenant'ın chat grubuna bağlanacağını belirtir.
+   * TTL: jwt.guest.expiration (default 1 saat).
+   */
+  public String generateGuestToken(String displayName, String sessionId, String tenantId) {
+    Map<String, Object> claims = new HashMap<>();
+    claims.put("sessionId", sessionId);
+    claims.put("displayName", displayName);
+    claims.put("tenantId", tenantId);
+    claims.put("loginSource", "website");
+    claims.put("type", "guest");
+    return Jwts.builder()
+        .claims(claims)
+        .subject(sessionId)
+        .issuedAt(new Date(System.currentTimeMillis()))
+        .expiration(new Date(System.currentTimeMillis() + guestExpiration))
+        .encryptWith(getEncryptionKey(), Jwts.ENC.A256GCM)
+        .compact();
+  }
+
+  /**
+   * Guest token'ının geçerli ve tip kontrolü.
+   * @return true eğer token type=guest, süresi dolmamış ve parse edilebilir ise
+   */
+  public Boolean validateGuestToken(String token) {
+    try {
+      Claims claims = extractAllClaims(token);
+      String type = claims.get("type", String.class);
+      return "guest".equals(type) && !isTokenExpired(token);
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /** Guest token TTL'i saniye cinsinden (response'ta expiresIn için). */
+  public long getGuestExpirationSeconds() {
+    return guestExpiration / 1000;
   }
 
   // ==========================================

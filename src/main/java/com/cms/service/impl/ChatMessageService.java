@@ -82,6 +82,28 @@ public class ChatMessageService implements IChatMessageService {
     return toDto(msg);
   }
 
+  /**
+   * Anonim guest (website ziyaretçisi) mesajı — sender_type=GUEST.
+   * session_id + sender_display_name doldurulur; sender_id/visitor_id null.
+   * Erişim kontrolü {@code visitorAccess=true} flag'i üzerinden yapılır.
+   * Çağıran tarafın TenantContext'i ilgili tenant DB'sine set etmiş olması beklenir.
+   */
+  @Transactional
+  public DtoChatMessage saveGuestMessage(UUID groupId, String sessionId, String displayName,
+      DtoChatMessageSend dto) {
+    groupService.checkGuestWriteAccess(groupId);
+
+    ChatMessage msg = buildBaseMessage(groupId, dto);
+    msg.setSenderType(ChatMessageSenderType.GUEST);
+    msg.setSenderId(null);
+    msg.setVisitorId(null);
+    msg.setSessionId(UUID.fromString(sessionId));
+    msg.setSenderDisplayName(displayName);
+    msg = messageRepository.save(msg);
+
+    return toDto(msg);
+  }
+
   private ChatMessage buildBaseMessage(UUID groupId, DtoChatMessageSend dto) {
     String sanitized = Jsoup.clean(dto.getContent(), Safelist.none());
     if (sanitized.length() > maxMessageLength) {
@@ -184,7 +206,10 @@ public class ChatMessageService implements IChatMessageService {
    */
   private DtoChatMessage toDto(ChatMessage msg) {
     DtoChatMessage dto = chatMapper.toMessageDto(msg);
-    if (msg.getSenderType() == ChatMessageSenderType.VISITOR && msg.getVisitorId() != null) {
+    if (msg.getSenderType() == ChatMessageSenderType.GUEST) {
+      // Guest — isim mesaja denormalize edilmiş, DB lookup gerekmez
+      dto.setSenderUsername(msg.getSenderDisplayName());
+    } else if (msg.getSenderType() == ChatMessageSenderType.VISITOR && msg.getVisitorId() != null) {
       visitorIdentityRepository.findById(msg.getVisitorId())
           .ifPresent(v -> dto.setSenderUsername(v.getDisplayName()));
     } else if (msg.getSenderId() != null) {

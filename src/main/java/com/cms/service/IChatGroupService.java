@@ -29,4 +29,10 @@ public interface IChatGroupService {
   DtoChatGroupAccess resolveGroupAccess(UUID groupId, Long userId);
 
   boolean isMember(UUID groupId, Long userId);
+
+  /**
+   * Anonim guest'in yazma erişimini doğrular: grup tenant'a ait + visitorAccess=true.
+   * Aksi halde {@code ForbiddenException(CHAT_GUEST_FORBIDDEN)}.
+   */
+  void checkGuestWriteAccess(UUID groupId);
 }

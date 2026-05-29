@@ -87,11 +87,21 @@ public class ChatWebSocketController {
       SimpMessageHeaderAccessor headerAccessor) {
     TenantContext.setTenantId(tenantId);
     try {
-      Long userId = resolveUserId(headerAccessor);
-      rateLimitService.checkRateLimit(userId);
-      DtoChatMessage saved = messageService.saveMessage(groupId, userId, payload);
+      DtoChatMessage saved;
+      if (isGuestSession(headerAccessor)) {
+        // Anonim guest — userId yok; sessionId + displayName ile yaz
+        String sessionId = resolveSessionId(headerAccessor);
+        String displayName = resolveUsername(headerAccessor);
+        rateLimitService.checkRateLimitForGuest(sessionId);
+        saved = messageService.saveGuestMessage(groupId, sessionId, displayName, payload);
+        log.debug("TC guest message sent to tenant={} group={} session={}", tenantId, groupId, sessionId);
+      } else {
+        Long userId = resolveUserId(headerAccessor);
+        rateLimitService.checkRateLimit(userId);
+        saved = messageService.saveMessage(groupId, userId, payload);
+        log.debug("TC message sent to tenant={} group={} by user={}", tenantId, groupId, userId);
+      }
       messagingTemplate.convertAndSend(ChatTopics.messageTopic(tenantId, groupId), saved);
-      log.debug("TC message sent to tenant={} group={} by user={}", tenantId, groupId, userId);
     } finally {
       TenantContext.clear();
     }
@@ -116,6 +126,11 @@ public class ChatWebSocketController {
   public void typingTenant(@DestinationVariable String tenantId,
       @DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
+    // Guest oturumlarının userId'si yok → typing takip edilmez (no-op). Aksi halde
+    // resolveUserId UnauthorizedException fırlatırdı. Send akışı guest-aware'dir.
+    if (isGuestSession(headerAccessor)) {
+      return;
+    }
     TenantContext.setTenantId(tenantId);
     try {
       Long userId = resolveUserId(headerAccessor);
@@ -147,6 +162,10 @@ public class ChatWebSocketController {
   public void markReadTenant(@DestinationVariable String tenantId,
       @DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
+    // Guest oturumlarında read-receipt takibi yok (chat_message_reads userId bazlı) → no-op.
+    if (isGuestSession(headerAccessor)) {
+      return;
+    }
     TenantContext.setTenantId(tenantId);
     try {
       Long userId = resolveUserId(headerAccessor);
@@ -203,6 +222,22 @@ public class ChatWebSocketController {
     Object userId = attrs.get("userId");
     if (userId == null) throw new com.cms.exception.UnauthorizedException("userId not found in session");
     return (userId instanceof Long l) ? l : Long.valueOf(userId.toString());
+  }
+
+  /** Session loginSource=website ise anonim guest oturumu. */
+  private boolean isGuestSession(SimpMessageHeaderAccessor accessor) {
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    if (attrs == null) return false;
+    Object loginSource = attrs.get("loginSource");
+    return loginSource != null && "website".equals(loginSource.toString());
+  }
+
+  private String resolveSessionId(SimpMessageHeaderAccessor accessor) {
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    if (attrs == null) throw new com.cms.exception.UnauthorizedException("No session attributes");
+    Object sessionId = attrs.get("sessionId");
+    if (sessionId == null) throw new com.cms.exception.UnauthorizedException("sessionId not found in session");
+    return sessionId.toString();
   }
 
   private String resolveOptionalSessionTenant(SimpMessageHeaderAccessor accessor) {

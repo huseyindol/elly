@@ -292,6 +292,22 @@ public class ChatGroupService implements IChatGroupService {
         "CHAT_WRITE_FORBIDDEN");
   }
 
+  /**
+   * Anonim guest yazma erişimi: grup tenant'a ait olmalı ({@code tenantId != null})
+   * ve {@code visitorAccess=true} işaretli olmalı. Guest'in userId/rolü/üyeliği yok;
+   * tek kapı bu flag. Kayıtlı VISITOR ile aynı kapıyı paylaşır.
+   */
+  @Override
+  public void checkGuestWriteAccess(UUID groupId) {
+    ChatGroup group = tenantRouter.requireGroup(groupId);
+    tenantRouter.useGroupDatabase(group);
+    if (group.getTenantId() == null || group.getTenantId().isBlank() || !group.isVisitorAccess()) {
+      throw new ForbiddenException(
+          "This group is not open to guests",
+          "CHAT_GUEST_FORBIDDEN");
+    }
+  }
+
   private boolean canReadGroup(ChatGroup group, UUID groupId, Long userId) {
     if (memberRepository.existsByIdGroupIdAndIdUserId(groupId, userId)) {
       return true;

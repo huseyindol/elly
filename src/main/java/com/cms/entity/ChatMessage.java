@@ -49,6 +49,19 @@ public class ChatMessage {
   @Column(name = "visitor_id")
   private Long visitorId;
 
+  /**
+   * Anonim guest oturum kimliği (guest token'daki sessionId) — sender_type=GUEST ise dolu.
+   */
+  @Column(name = "session_id")
+  private UUID sessionId;
+
+  /**
+   * Anonim guest'in ekranda görünecek adı — sender_type=GUEST ise dolu.
+   * Guest hesabı olmadığı için isim mesaja denormalize edilir.
+   */
+  @Column(name = "sender_display_name", length = 100)
+  private String senderDisplayName;
+
   @Column(name = "content", nullable = false, columnDefinition = "TEXT")
   private String content;
 

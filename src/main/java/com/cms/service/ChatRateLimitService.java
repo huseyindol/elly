@@ -20,7 +20,18 @@ public class ChatRateLimitService {
   private int maxMessagesPerSecond;
 
   public void checkRateLimit(Long userId) {
-    String key = KEY_PREFIX + userId;
+    enforce(KEY_PREFIX + userId);
+  }
+
+  /**
+   * Anonim guest için rate limit — userId yerine sessionId anahtarı kullanılır.
+   * Aynı saniye-bazlı pencere ve limit uygulanır.
+   */
+  public void checkRateLimitForGuest(String sessionId) {
+    enforce(KEY_PREFIX + "guest:" + sessionId);
+  }
+
+  private void enforce(String key) {
     Long count = redisTemplate.opsForValue().increment(key);
     if (count != null && count == 1) {
       // İlk mesaj bu saniyede — TTL 1 saniye koy

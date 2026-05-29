@@ -89,9 +89,16 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
 
       boolean isAdmin = "admin".equals(loginSource);
       boolean isTenant = "tenant".equals(loginSource);
-      if (!isAdmin && !isTenant) {
+      boolean isGuest = "website".equals(loginSource);
+      if (!isAdmin && !isTenant && !isGuest) {
         throw new org.springframework.messaging.MessageDeliveryException(
-            message, "Chat requires admin or tenant login (loginSource=admin|tenant)");
+            message, "Chat requires admin, tenant or guest login (loginSource=admin|tenant|website)");
+      }
+
+      // Guest (anonim website ziyaretçisi) — DB user'ı yok, token version yok.
+      if (isGuest) {
+        authenticateGuestConnect(accessor, message, token);
+        return;
       }
 
       String username = jwtUtil.extractUsername(token);
@@ -142,6 +149,43 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
       throw new org.springframework.messaging.MessageDeliveryException(
           message, "Invalid JWT token: " + e.getMessage());
     }
+  }
+
+  /**
+   * Guest CONNECT: token type=guest doğrulanır; minimal principal + session attrs set edilir.
+   * DB user'ı yok, token version kontrolü yok (guest hesabı yok). Sadece chat:guest authority verilir.
+   */
+  private void authenticateGuestConnect(StompHeaderAccessor accessor, Message<?> message, String token) {
+    if (!Boolean.TRUE.equals(jwtUtil.validateGuestToken(token))) {
+      throw new org.springframework.messaging.MessageDeliveryException(
+          message, "Invalid or expired guest token");
+    }
+    String sessionId = jwtUtil.extractSessionId(token);
+    String displayName = jwtUtil.extractDisplayName(token);
+    String tenantIdClaim = jwtUtil.extractTenantId(token);
+
+    if (sessionId == null || tenantIdClaim == null || tenantIdClaim.isBlank()) {
+      throw new org.springframework.messaging.MessageDeliveryException(
+          message, "Guest token missing sessionId/tenantId");
+    }
+
+    List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("chat:guest"));
+    UsernamePasswordAuthenticationToken auth =
+        new UsernamePasswordAuthenticationToken("guest:" + sessionId, null, authorities);
+    accessor.setUser(auth);
+    SecurityContextHolder.getContext().setAuthentication(auth);
+
+    Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
+    if (sessionAttrs != null) {
+      sessionAttrs.put("sessionId", sessionId);
+      sessionAttrs.put("username", displayName != null ? displayName : "guest");
+      sessionAttrs.put("loginSource", "website");
+      sessionAttrs.put("tenantId", tenantIdClaim);
+    }
+
+    TenantContext.clear();
+    log.debug("WebSocket guest authenticated: sessionId={}, displayName={}, tenantId={}",
+        sessionId, displayName, tenantIdClaim);
   }
 
   private CachedUserDetails resolveCachedUser(String username, String loginSource) {

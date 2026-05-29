@@ -77,7 +77,8 @@ public class PublicApiFilter extends OncePerRequestFilter {
   private static final List<PublicWriteEndpoint> ALLOWED_WRITE_ENDPOINTS = List.of(
       new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/forms/\\d+/submit$")),
       new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/register$")),
-      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/login$")));
+      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/login$")),
+      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/guest-token$")));
 
   private final DataSourceConfig.TenantDataSourceProperties tenantDataSourceProperties;
 

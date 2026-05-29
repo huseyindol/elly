@@ -16,6 +16,11 @@ public class DtoGuestTokenRequest {
   @Size(max = 80, message = "displayName en fazla 80 karakter olabilir")
   private String displayName;
 
-  @NotBlank(message = "tenantId zorunludur")
+  /**
+   * Opsiyonel: {@code /api/v1/public/{tenantId}/auth/guest-token} yolundan gelince
+   * tenantId path'ten alınır (PublicApiFilter TenantContext'e set eder); body'de
+   * gönderilmesi gerekmez. Direkt {@code /api/v1/auth/guest-token} çağrısında ise body'de
+   * gönderilmelidir.
+   */
   private String tenantId;
 }

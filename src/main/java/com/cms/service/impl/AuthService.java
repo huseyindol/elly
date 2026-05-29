@@ -554,7 +554,11 @@ public class AuthService implements IAuthService {
 
   @Override
   public DtoGuestTokenResponse getGuestToken(DtoGuestTokenRequest request) {
-    String tenantId = request.getTenantId();
+    // tenantId body'den; yoksa public path'ten gelen TenantContext'ten alınır
+    // (/api/v1/public/{tenantId}/auth/guest-token → PublicApiFilter TenantContext'i set eder).
+    String tenantId = (request.getTenantId() != null && !request.getTenantId().isBlank())
+        ? request.getTenantId()
+        : TenantContext.getTenantId();
     if (tenantId == null || tenantId.isBlank()) {
       throw new BadRequestException("tenantId zorunludur");
     }

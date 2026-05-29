@@ -7,6 +7,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.jsoup.Jsoup;
+import org.jsoup.safety.Safelist;
 
 import com.cms.config.CustomUserDetailsService;
 import com.cms.config.DataSourceConfig;
@@ -27,9 +29,12 @@ import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoMfaDisableRequest;
 import com.cms.dto.DtoMfaSetupResponse;
 import com.cms.dto.DtoMfaSetupVerifyRequest;
+import com.cms.dto.DtoMfaStatusResponse;
 import com.cms.dto.DtoMfaVerifyRequest;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.dto.DtoGuestTokenRequest;
+import com.cms.dto.DtoGuestTokenResponse;
 import com.cms.dto.DtoTenantTokenResponse;
 import com.cms.dto.EmailRequest;
 import com.cms.service.TotpService;
@@ -509,6 +514,15 @@ public class AuthService implements IAuthService {
     userAuthCacheService.evictUserCache(user.getUsername());
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public DtoMfaStatusResponse getMfaStatus(Long userId, String tenantId) {
+    User user = loadUserForMfa(userId, tenantId);
+    return DtoMfaStatusResponse.builder()
+        .mfaEnabled(Boolean.TRUE.equals(user.getMfaEnabled()))
+        .build();
+  }
+
   /**
    * MFA işlemleri için kullanıcıyı doğru tenant context'te yükler.
    * Admin login = basedb, tenant login = tenantId.
@@ -536,6 +550,35 @@ public class AuthService implements IAuthService {
     }
     String token = jwtUtil.generateTenantToken(tenantId);
     return new DtoTenantTokenResponse(token, "Bearer", tenantId);
+  }
+
+  @Override
+  public DtoGuestTokenResponse getGuestToken(DtoGuestTokenRequest request) {
+    String tenantId = request.getTenantId();
+    if (tenantId == null || tenantId.isBlank()) {
+      throw new BadRequestException("tenantId zorunludur");
+    }
+    if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+      throw new BadRequestException("Unknown tenant: " + tenantId);
+    }
+    // displayName public endpoint'ten gelen kullanıcı girdisi — HTML/script temizlenir
+    // (stored XSS önlemi). Mesaj içeriğiyle aynı strateji: Jsoup Safelist.none().
+    // Entity-encode sonrası uzunluk artabileceği için DB kolonuna (VARCHAR 100) göre kırpılır.
+    String displayName = Jsoup.clean(request.getDisplayName(), Safelist.none()).trim();
+    if (displayName.length() > 100) {
+      displayName = displayName.substring(0, 100);
+    }
+    if (displayName.isBlank()) {
+      displayName = "guest";
+    }
+    String sessionId = UUID.randomUUID().toString();
+    String token = jwtUtil.generateGuestToken(displayName, sessionId, tenantId);
+    return DtoGuestTokenResponse.builder()
+        .token(token)
+        .expiresIn(jwtUtil.getGuestExpirationSeconds())
+        .displayName(displayName)
+        .tenantId(tenantId)
+        .build();
   }
 
   /**

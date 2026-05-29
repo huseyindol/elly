@@ -13,11 +13,14 @@ import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoMfaDisableRequest;
 import com.cms.dto.DtoMfaSetupResponse;
 import com.cms.dto.DtoMfaSetupVerifyRequest;
+import com.cms.dto.DtoMfaStatusResponse;
 import com.cms.dto.DtoMfaVerifyRequest;
 import com.cms.entity.RootEntityResponse;
 import com.cms.exception.UnauthorizedException;
 import com.cms.service.IAuthService;
+import com.cms.util.AuthCookieWriter;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
@@ -34,6 +37,16 @@ import lombok.RequiredArgsConstructor;
 public class MfaController implements IMfaController {
 
   private final IAuthService authService;
+  private final AuthCookieWriter authCookieWriter;
+
+  // ── GET /api/v1/auth/mfa/status ────────────────────────────────────────
+  @Override
+  @PreAuthorize("isAuthenticated()")
+  public ResponseEntity<RootEntityResponse<DtoMfaStatusResponse>> status() {
+    Long userId = getCurrentUserId();
+    String tenantId = getCurrentTenantId();
+    return ResponseEntity.ok(RootEntityResponse.ok(authService.getMfaStatus(userId, tenantId)));
+  }
 
   // ── GET /api/v1/auth/mfa/setup ─────────────────────────────────────────
   @Override
@@ -60,8 +73,10 @@ public class MfaController implements IMfaController {
   // Bu endpoint login akışının 2. adımı: JWT gerektirmez, mfaToken yeterli.
   @Override
   public ResponseEntity<RootEntityResponse<DtoAuthResponse>> verifyLogin(
-      @Valid DtoMfaVerifyRequest request) {
+      @Valid DtoMfaVerifyRequest request, HttpServletResponse httpResponse) {
     DtoAuthResponse response = authService.verifyMfaLogin(request);
+    // GAP-2: /login ile aynı HttpOnly oturum cookie'lerini set et (yollar arası drift kapatıldı)
+    authCookieWriter.writeAuthCookies(httpResponse, response);
     return ResponseEntity.ok(RootEntityResponse.ok(response));
   }
 

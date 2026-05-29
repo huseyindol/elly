@@ -4,8 +4,10 @@ import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoMfaDisableRequest;
 import com.cms.dto.DtoMfaSetupResponse;
 import com.cms.dto.DtoMfaSetupVerifyRequest;
+import com.cms.dto.DtoMfaStatusResponse;
 import com.cms.dto.DtoMfaVerifyRequest;
 import com.cms.entity.RootEntityResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +19,13 @@ import org.springframework.web.bind.annotation.RequestBody;
  * Tümü /api/v1/auth/mfa prefix'i ile erişilebilir.
  */
 public interface IMfaController {
+
+  /**
+   * Mevcut kullanıcının 2FA durumunu döner (panel "açık/kapalı" göstergesi için).
+   * Gerektirir: Geçerli JWT.
+   */
+  @GetMapping("/status")
+  ResponseEntity<RootEntityResponse<DtoMfaStatusResponse>> status();
 
   /**
    * TOTP secret üret ve QR URI döner.
@@ -42,7 +51,7 @@ public interface IMfaController {
    */
   @PostMapping("/verify")
   ResponseEntity<RootEntityResponse<DtoAuthResponse>> verifyLogin(
-      @Valid @RequestBody DtoMfaVerifyRequest request);
+      @Valid @RequestBody DtoMfaVerifyRequest request, HttpServletResponse httpResponse);
 
   /**
    * 2FA'yı deaktive et.

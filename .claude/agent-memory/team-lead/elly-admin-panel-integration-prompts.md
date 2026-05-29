@@ -1395,7 +1395,7 @@ mesajı id ile reconcile et.
 
 ```typescript
 export type ChatGroupType = 'GROUP' | 'DM';
-export type ChatMessageSenderType = 'ADMIN' | 'VISITOR';
+export type ChatMessageSenderType = 'ADMIN' | 'VISITOR' | 'GUEST'; // GUEST: anonim website ziyaretçisi — bkz. Prompt 9
 export type ChatMessageType = 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM';
 
 export interface ChatGroup {
@@ -1808,87 +1808,84 @@ getGroupAccess: (groupId: string, tenantId?: string | null) =>
 
 ---
 
-## Prompt 8 — Tenant Website Chat Widget (Z için)
+## Prompt 8 — Tenant Website Chat Widget (anonim GUEST için)
 
 **Bu prompt'u tenant website projesinde çalıştır** — admin panelde DEĞİL.
 
-> Hedef: Site ziyaretçisi (kayıtlı tenant user) sağ alttaki chat butonuna tıklar →
-> tenant'ın "ziyaretçi erişimine açık" chat grupları açılır → mesajlaşır. Admin
-> panel tarafında aynı konuşma görülebilir ve admin yanıt verir.
+> Hedef: Siteye giren **anonim ziyaretçi** (login YOK) sağ alttaki chat butonuna
+> tıklar → bir görünen ad (display name) girer → tenant'ın "ziyaretçi erişimine
+> açık" destek grubuyla **anlık** mesajlaşır. Admin panel (Prompt 7 + 9) aynı
+> konuşmayı görür ve yanıt verir.
 
 **Ön koşul:**
-- Site kullanıcısı tenant login akışından geçmiş ve JWT'si (loginSource=tenant, tenantId=tenantX) cookie/store'da var.
-- Backend chat-tenant-aware migration uygulanmış ve admin tarafında `visitorAccess=true` olan bir TC group oluşturulmuş olmalı (yoksa "Aktif chat group yok" gösterilecek).
+- Admin panelde `visitorAccess=true` bir TC group oluşturulmuş ve **group id'si** website'e env ile verilmiş (guest grup listeleyemez — sabit id şart).
+- Backend `chat-guest` migration uygulanmış.
+
+> **Bu prompt anonim GUEST içindir.** Tenant siten login'li kullanıcılara sahipse ve onları kayıtlı VISITOR olarak bağlamak istersen REST tabanlı `/api/v1/tenant-chat/*` akışı ayrı bir seçenektir (eski sürüm) — sonda "Alternatif" notu var.
 
 ```
-Bu tenant website projesine (Next.js) bir "Chat Widget" ekle. Sağ altta floating
-bir buton, tıklayınca açılan minimal chat paneli. Site user'ı (kayıtlı tenant user)
-admin'lerle ve diğer site kullanıcılarıyla mesajlaşabilir.
+Bu tenant website projesine (Next.js) anonim bir "Chat Widget" ekle. Sağ altta
+floating buton; tıklayınca ad sorar, ad girilince login'siz guest token alınır ve
+ziyaretçi destek grubuyla anlık mesajlaşır. Admin'ler panelden yanıtlar.
 
-## Bağlam
+## Bağlam — anonim GUEST akışı (login yok)
 
-elly CMS API'sini tüketiyoruz. Site user'ları zaten tenant login ile JWT alıyor:
-  - loginSource=tenant
-  - tenantId=<bu sitenin tenant id'si — örn "tenant1">
-  - userId=<bu tenant DB'sinde user'ın id'si>
-
-JWT, mevcut auth flow'unda zaten alınıyor (cookie/store'da). Bu widget'ın yapacağı:
-  1. /tenant-chat/session endpoint'ini çağırarak "VisitorIdentity" oluştur/al
-  2. visitor_access=true olan chat group'larını listele
-  3. Bir group'a girip mesaj geçmişini gör
-  4. Mesaj yaz (REST POST)
-  5. WebSocket subscribe → real-time mesaj akışı
+Akış:
+  1. Ziyaretçi bir "görünen ad" (display name) girer.
+  2. POST /api/v1/auth/guest-token { displayName, tenantId }
+     → { token, expiresIn, displayName, tenantId }   (public, auth YOK)
+     token = kısa ömürlü guest JWT (varsayılan 1 saat; loginSource=website).
+  3. WebSocket CONNECT, header: Authorization: Bearer <guestToken>
+  4. SUBSCRIBE: /topic/tenant/{tenantId}/group/{groupId}
+  5. Mesaj gönder: WebSocket SEND → /app/tenant-chat/{tenantId}/{groupId}/send
+     body { content }   (guest için REST mesaj endpoint'i YOK — gönderim sadece WS)
 
 API base URL: process.env.NEXT_PUBLIC_ELLY_API_URL (örn https://api.huseyindol.com)
 WS endpoint: ${API}/ws (SockJS + STOMP)
+tenantId: process.env.NEXT_PUBLIC_TENANT_ID, groupId: process.env.NEXT_PUBLIC_SUPPORT_GROUP_ID
 
-## Bağlam — CMS Endpoint'leri (sadece bu prompt için)
+## ÖNEMLİ kısıtlar (kayıtlı user'dan farkları)
 
-Tüm endpoint'ler `Authorization: Bearer <tenant JWT>` ister.
-**X-Tenant-Id header GEREKMEZ** — JWT'in tenantId claim'i otomatik kullanılır.
+- **REST yok.** Guest token yalnızca WebSocket'te geçerli. `/api/v1/tenant-chat/*`
+  REST endpoint'leri `isAuthenticated()` ister ve guest token'ı KABUL ETMEZ.
+- **Geçmiş (history) YOK.** Guest, bağlanmadan ÖNCEki mesajları göremez; sadece
+  connect sonrası gelen mesajlar akar → client state'inde biriktir.
+- **Group id sabit.** Guest grup listeleyemez → desteklenen grup id'si env'den
+  (`NEXT_PUBLIC_SUPPORT_GROUP_ID`). Admin panelde visitorAccess=true grubu açıp
+  id'sini buraya koy.
+- **typing / read YOK.** Backend guest için no-op yapar; bu event'leri gönderme.
+- **Token süreli.** expiresIn dolunca STOMP error/disconnect olur → yeni guest-token
+  al + reconnect.
 
-| Method | Path | Açıklama |
+## Endpoint'ler — guest-reachable yüzey (hepsi bu kadar)
+
+| Tür | Adres | Auth |
 |---|---|---|
-| POST | `/api/v1/tenant-chat/session` | VisitorIdentity'yi yarat/getir. Response: `{ id, displayName, email, ... }` |
-| GET  | `/api/v1/tenant-chat/groups` | Bu tenant'taki visitor_access=true olan chat group'ları |
-| GET  | `/api/v1/tenant-chat/groups/{groupId}/messages?before={cursor}&limit=50` | History (cursor pagination) |
-| POST | `/api/v1/tenant-chat/groups/{groupId}/messages` | Mesaj yaz. Body: `{ content, contentType?, fileUrl?, parentId? }` |
+| REST POST | `/api/v1/auth/guest-token` | yok (public) |
+| WS CONNECT | `${API}/ws` | header `Bearer <guestToken>` |
+| WS SUBSCRIBE | `/topic/tenant/{tenantId}/group/{groupId}` | connect ile |
+| WS SEND | `/app/tenant-chat/{tenantId}/{groupId}/send` | connect ile |
 
-CMS yanıtları her zaman wrapper'lı:
+guest-token REST yanıtı wrapper'lı:
 ```json
-{ "result": true, "message": null, "data": { ... } }
+{ "result": true, "data": { "token": "...", "expiresIn": 3600, "displayName": "Ayşe", "tenantId": "tenant1" } }
 ```
 Hata:
 ```json
-{ "result": false, "status": 403, "errorCode": "FORBIDDEN", "message": "..." }
+{ "result": false, "status": 400, "errorCode": "BAD_REQUEST", "message": "..." }
 ```
 
 ## Bağlam — Data tipleri
 
 ```typescript
-export interface VisitorIdentity {
-  id: number;
-  tenantUserId: number | null;
-  displayName: string;
-  email: string | null;
-  createdAt: string;
-  lastSeenAt: string;
+export interface GuestTokenResponse {
+  token: string;
+  expiresIn: number;     // saniye (varsayılan 3600)
+  displayName: string;   // backend sanitize eder (HTML strip)
+  tenantId: string;
 }
 
-export interface ChatGroup {
-  id: string;
-  name: string | null;
-  description: string | null;
-  type: 'GROUP' | 'DM';
-  createdBy: number;
-  visibilityLevel: number;
-  tenantId: string;          // bu widget'ta her zaman dolu (TC)
-  visitorAccess: boolean;     // bu widget'ta her zaman true (filtrelenmiş)
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type ChatSenderType = 'ADMIN' | 'VISITOR';
+export type ChatSenderType = 'ADMIN' | 'VISITOR' | 'GUEST';
 
 export interface ChatMessage {
   id: string;
@@ -1896,7 +1893,7 @@ export interface ChatMessage {
   senderType: ChatSenderType;
   senderId: number | null;       // ADMIN ise dolu (basedb users.id)
   visitorId: number | null;      // VISITOR ise dolu (tenant DB visitor_identities.id)
-  senderUsername: string;        // backend pre-resolved — direkt göster
+  senderUsername: string;        // backend pre-resolved — GUEST'te display name; direkt göster
   content: string;
   contentType: 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM';
   fileUrl: string | null;
@@ -1906,26 +1903,35 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+// Guest gönderiminde WS payload — sadece content yeterli
 export interface SendMessagePayload {
   content: string;
   contentType?: 'TEXT' | 'IMAGE' | 'FILE';
-  fileUrl?: string;
-  parentId?: string;
 }
 ```
 
-## Bağlam — WebSocket
+> Not: `VisitorIdentity` ve grup listeleme tipleri guest akışında kullanılmaz
+> (grup id sabit, kayıt yok). Bunlar yalnızca kayıtlı VISITOR akışında geçerlidir.
 
-CONNECT zorunlu header: `Authorization: Bearer <tenant JWT>` (backend bunu interceptor'da doğrular; loginSource=tenant kabul edilir).
+## Bağlam — WebSocket (guest)
 
-Subscribe topic'i:
+CONNECT zorunlu header: `Authorization: Bearer <guestToken>` (backend
+`loginSource=website` + `type=guest` token'ını doğrular; DB user'ı yoktur).
+
+Subscribe topic'i (mesajları al):
 ```
 /topic/tenant/{tenantId}/group/{groupId}
 ```
 
-tenantId değeri JWT claim'inden veya `process.env.NEXT_PUBLIC_TENANT_ID`'den
-(eğer site build-time'da tenant'a sabitlenmişse) alınabilir. Site genelde tek
-tenant'a hizmet ettiği için bu env-var pattern'i en temiz.
+Mesaj gönder (guest REST kullanamaz — SEND ile publish):
+```
+/app/tenant-chat/{tenantId}/{groupId}/send     body: { "content": "..." }
+```
+
+tenantId ve groupId build-time env'den sabittir
+(`NEXT_PUBLIC_TENANT_ID`, `NEXT_PUBLIC_SUPPORT_GROUP_ID`). Gönderdiğin mesaj da
+aynı topic'ten geri döner (server id'li) — bu yüzden composer'da optimistic ekleme
+YAPMA, echo'yu bekle.
 
 Pratik kütüphaneler:
 - `@stomp/stompjs` + `sockjs-client` — standart STOMP istemcisi
@@ -1937,22 +1943,21 @@ Pratik kütüphaneler:
 
 ```
 components/chat/
-├── ChatWidget.tsx               # Floating button + open panel state
-├── ChatPanel.tsx                # Panel header + group list veya aktif chat
-├── GroupList.tsx                # Açık group'ları listele (visitor_access=true)
-├── ChatView.tsx                 # Mesaj listesi + composer (tek group seçili)
-├── MessageBubble.tsx            # Tek mesaj — Admin/Visitor rozeti
-├── ChatComposer.tsx             # Input + gönder butonu
+├── ChatWidget.tsx          # Floating buton + panel state
+├── ChatPanel.tsx           # Ad girme kapısı VEYA aktif chat
+├── GuestNameGate.tsx       # Display name formu → guest-token al
+├── ChatView.tsx            # Mesaj listesi (canlı) + composer
+├── MessageBubble.tsx       # ADMIN / VISITOR / GUEST mesajı
+├── ChatComposer.tsx        # Input + gönder butonu
 └── _hooks/
-    ├── useVisitorSession.ts     # POST /tenant-chat/session — mount'ta bir kez
-    ├── useChatGroups.ts         # GET /tenant-chat/groups
-    ├── useChatHistory.ts        # GET messages + infinite scroll
-    ├── useSendMessage.ts        # POST messages
-    └── useChatSocket.ts         # STOMP subscribe — tenant-aware topic
+    ├── useGuestToken.ts        # POST guest-token, token (sessionStorage)
+    └── useGuestChatSocket.ts   # CONNECT(+token) + SUBSCRIBE + SEND + mesaj buffer
 
-lib/api/tenantChat.ts            # Tüm fetch fonksiyonları (RootEntityResponse unwrap)
-lib/auth/getJwt.ts               # Mevcut tenant JWT'sini cookie/store'dan al
+lib/api/ellyAuth.ts         # fetchGuestToken (RootEntityResponse unwrap)
 ```
+
+Not: Kayıtlı VISITOR akışındaki `GroupList`, `useChatGroups`, `useChatHistory`,
+`useSendMessage`, `lib/auth/getJwt` guest akışında YOK (grup id sabit, REST yok).
 
 ### ChatWidget — root bileşen
 
@@ -1970,7 +1975,7 @@ export function ChatWidget() {
       <button
         onClick={() => setOpen(o => !o)}
         className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-blue-600 text-white shadow-lg"
-        aria-label="Chat aç"
+        aria-label="Destek"
       >
         💬
       </button>
@@ -1980,67 +1985,43 @@ export function ChatWidget() {
 }
 ```
 
-Bu bileşen sayfa layout'una eklenir (örn. `app/layout.tsx`'in alt kısmına),
-**yalnızca login olmuş user'lara gösterilir** (auth state'i kontrol et):
+Bu bileşen layout'a **herkese** eklenir (login şartı YOK — anonim ziyaretçi de görür):
 
 ```typescript
 // app/layout.tsx içinde
-const isLoggedIn = await getAuthState();  // mevcut auth helper
 return (
   <html>
     <body>
       {children}
-      {isLoggedIn && <ChatWidget />}
+      <ChatWidget />
     </body>
   </html>
 );
 ```
 
-### ChatPanel — açık panel
+### ChatPanel — ad kapısı veya aktif sohbet
 
 ```typescript
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useVisitorSession } from './_hooks/useVisitorSession';
-import { useChatGroups } from './_hooks/useChatGroups';
-import { GroupList } from './GroupList';
+import { useGuestToken } from './_hooks/useGuestToken';
+import { GuestNameGate } from './GuestNameGate';
 import { ChatView } from './ChatView';
 
 export function ChatPanel({ onClose }: { onClose: () => void }) {
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
-  const { data: visitor, isLoading: visitorLoading } = useVisitorSession();
-  const { data: groups, isLoading: groupsLoading } = useChatGroups();
-
-  if (visitorLoading || groupsLoading) {
-    return <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-white shadow-xl rounded-lg p-4">Yükleniyor…</div>;
-  }
-  if (!groups || groups.length === 0) {
-    return (
-      <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-white shadow-xl rounded-lg p-4">
-        <button onClick={onClose} className="float-right">×</button>
-        <p className="text-gray-500">Şu an aktif bir destek konuşması yok.</p>
-      </div>
-    );
-  }
+  const guest = useGuestToken();
 
   return (
     <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-white shadow-xl rounded-lg flex flex-col">
       <header className="p-3 border-b flex items-center justify-between">
         <span className="font-semibold">Destek</span>
-        <button onClick={activeGroupId ? () => setActiveGroupId(null) : onClose}>
-          {activeGroupId ? '←' : '×'}
-        </button>
+        <button onClick={onClose}>×</button>
       </header>
       <div className="flex-1 overflow-hidden">
-        {activeGroupId ? (
-          <ChatView
-            groupId={activeGroupId}
-            visitorId={visitor!.id}
-            tenantId={process.env.NEXT_PUBLIC_TENANT_ID!}
-          />
+        {guest.token ? (
+          <ChatView token={guest.token} myName={guest.displayName} />
         ) : (
-          <GroupList groups={groups} onSelect={setActiveGroupId} />
+          <GuestNameGate onSubmit={guest.start} loading={guest.loading} error={guest.error} />
         )}
       </div>
     </div>
@@ -2048,80 +2029,146 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
 }
 ```
 
-### useVisitorSession — mount'ta bir kez çağrılır
+### useGuestToken — ad girilince guest token al
 
 ```typescript
-import { useQuery } from '@tanstack/react-query';
-import { tenantChat } from '@/lib/api/tenantChat';
+'use client';
+import { useState, useCallback } from 'react';
+import { fetchGuestToken } from '@/lib/api/ellyAuth';
 
-export function useVisitorSession() {
-  return useQuery({
-    queryKey: ['tenant-chat', 'session'],
-    queryFn: () => tenantChat.ensureSession(),
-    staleTime: Infinity,  // session bir kez alınır, refetch yok
-    retry: 1,
-  });
+const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID!;
+const SS_TOKEN = 'elly_guest_token';
+const SS_NAME = 'elly_guest_name';
+
+export function useGuestToken() {
+  const [token, setToken] = useState<string | null>(
+    () => (typeof window !== 'undefined' ? sessionStorage.getItem(SS_TOKEN) : null),
+  );
+  const [displayName, setDisplayName] = useState<string | null>(
+    () => (typeof window !== 'undefined' ? sessionStorage.getItem(SS_NAME) : null),
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const start = useCallback(async (name: string) => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetchGuestToken(name.trim(), TENANT_ID);
+      sessionStorage.setItem(SS_TOKEN, res.token);
+      sessionStorage.setItem(SS_NAME, res.displayName);
+      setToken(res.token);
+      setDisplayName(res.displayName);
+      return res;
+    } catch (e: any) {
+      setError(e?.message || 'Bağlanılamadı');
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const reset = useCallback(() => {
+    sessionStorage.removeItem(SS_TOKEN);
+    sessionStorage.removeItem(SS_NAME);
+    setToken(null); setDisplayName(null);
+  }, []);
+
+  return { token, displayName, loading, error, start, reset };
 }
 ```
 
-### useChatGroups — sadece görünür gruplar
+### lib/api/ellyAuth.ts — guest-token fetch
 
 ```typescript
-export function useChatGroups() {
-  return useQuery({
-    queryKey: ['tenant-chat', 'groups'],
-    queryFn: () => tenantChat.listGroups(),
-    refetchInterval: 30_000,  // 30sn'de bir yeni group var mı kontrol
+const API = process.env.NEXT_PUBLIC_ELLY_API_URL!;
+
+export async function fetchGuestToken(displayName: string, tenantId: string) {
+  const res = await fetch(`${API}/api/v1/auth/guest-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName, tenantId }),
   });
+  const body = await res.json();
+  if (!body.result) throw new Error(body.message || `HTTP ${res.status}`);
+  return body.data as { token: string; expiresIn: number; displayName: string; tenantId: string };
 }
 ```
 
-### ChatView — aktif konuşma
+### GuestNameGate — ad girme kapısı
+
+```typescript
+'use client';
+import { useState, FormEvent } from 'react';
+
+export function GuestNameGate({ onSubmit, loading, error }: {
+  onSubmit: (name: string) => Promise<unknown>;
+  loading: boolean;
+  error: string | null;
+}) {
+  const [name, setName] = useState('');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (name.trim().length < 2 || loading) return;
+    try { await onSubmit(name.trim()); } catch { /* error state'te gösteriliyor */ }
+  };
+  return (
+    <form onSubmit={submit} className="p-4 flex flex-col gap-3">
+      <p className="text-sm text-gray-600">Sohbete başlamak için adınızı girin.</p>
+      <input value={name} onChange={e => setName(e.target.value)} maxLength={80}
+        placeholder="Adınız" className="border rounded px-3 py-2 text-sm" />
+      {error && <span className="text-xs text-red-600">{error}</span>}
+      <button type="submit" disabled={name.trim().length < 2 || loading}
+        className="bg-blue-600 text-white rounded px-3 py-2 text-sm disabled:opacity-50">
+        {loading ? 'Bağlanıyor…' : 'Başla'}
+      </button>
+    </form>
+  );
+}
+```
+
+### ChatView — canlı konuşma (REST history yok, socket buffer)
 
 ```typescript
 'use client';
 
-import { useChatHistory } from './_hooks/useChatHistory';
-import { useChatSocket } from './_hooks/useChatSocket';
-import { useSendMessage } from './_hooks/useSendMessage';
+import { useEffect, useRef } from 'react';
+import { useGuestChatSocket } from './_hooks/useGuestChatSocket';
 import { MessageBubble } from './MessageBubble';
 import { ChatComposer } from './ChatComposer';
-import { useEffect, useRef } from 'react';
 
-export function ChatView({ groupId, visitorId, tenantId }: {
-  groupId: string;
-  visitorId: number;
-  tenantId: string;
-}) {
-  const history = useChatHistory(groupId);
-  const send = useSendMessage(groupId);
+export function ChatView({ token, myName }: { token: string; myName: string | null }) {
+  const { messages, connected, sendMessage } = useGuestChatSocket(token);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Real-time updates
-  useChatSocket({ groupId, tenantId, onMessage: history.appendMessage });
-
-  // Yeni mesaj geldiğinde alta scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [history.messages.length]);
+  }, [messages.length]);
 
   return (
     <div className="flex flex-col h-full">
+      {!connected && <div className="text-xs text-amber-600 px-3 py-1">Bağlanıyor…</div>}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {history.messages.map(msg => (
+        {messages.length === 0 && (
+          <p className="text-xs text-gray-400">Henüz mesaj yok. İlk mesajı siz yazın 👋</p>
+        )}
+        {messages.map(msg => (
           <MessageBubble
             key={msg.id}
             message={msg}
-            isOwn={msg.senderType === 'VISITOR' && msg.visitorId === visitorId}
+            isOwn={msg.senderType === 'GUEST' && msg.senderUsername === myName}
           />
         ))}
         <div ref={bottomRef} />
       </div>
-      <ChatComposer onSubmit={(content) => send.mutateAsync({ content })} />
+      <ChatComposer onSubmit={(content) => { sendMessage(content); return Promise.resolve(); }} />
     </div>
   );
 }
 ```
+
+> `isOwn` heuristiği guest'te display name'e bakar (sessionId client'a dönmüyor).
+> Tek ziyaretçi + destek senaryosunda yeterli; aynı grupta aynı-isimli birden çok
+> guest olursa kusursuz değildir.
 
 ### MessageBubble — polymorphic sender
 
@@ -2207,100 +2254,63 @@ export function ChatComposer({ onSubmit }: { onSubmit: (content: string) => Prom
 }
 ```
 
-### useChatSocket — STOMP subscribe
+### useGuestChatSocket — CONNECT + SUBSCRIBE + SEND (REST yok, buffer client'ta)
 
 ```typescript
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import { getJwt } from '@/lib/auth/getJwt';
 import type { ChatMessage } from '@/types/chat';
 
-export function useChatSocket({
-  groupId,
-  tenantId,
-  onMessage,
-}: {
-  groupId: string;
-  tenantId: string;
-  onMessage: (msg: ChatMessage) => void;
-}) {
-  useEffect(() => {
-    const jwt = getJwt();
-    if (!jwt) return;
+const API = process.env.NEXT_PUBLIC_ELLY_API_URL!;
+const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID!;
+const GROUP_ID = process.env.NEXT_PUBLIC_SUPPORT_GROUP_ID!;
 
+export function useGuestChatSocket(token: string | null) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [connected, setConnected] = useState(false);
+  const clientRef = useRef<Client | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
     const client = new Client({
-      webSocketFactory: () => new SockJS(`${process.env.NEXT_PUBLIC_ELLY_API_URL}/ws`),
-      connectHeaders: { Authorization: `Bearer ${jwt}` },
+      webSocketFactory: () => new SockJS(`${API}/ws`),
+      connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
       onConnect: () => {
-        const topic = `/topic/tenant/${tenantId}/group/${groupId}`;
-        client.subscribe(topic, (frame) => {
+        setConnected(true);
+        client.subscribe(`/topic/tenant/${TENANT_ID}/group/${GROUP_ID}`, (frame) => {
           try {
             const msg: ChatMessage = JSON.parse(frame.body);
-            onMessage(msg);
+            setMessages((prev) => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]));
           } catch (e) {
             console.error('Failed to parse chat message', e);
           }
         });
       },
-      onStompError: (frame) => {
-        console.error('STOMP error', frame.headers, frame.body);
-      },
+      onDisconnect: () => setConnected(false),
+      onStompError: (frame) => console.error('STOMP error', frame.headers, frame.body),
     });
-
     client.activate();
-    return () => {
-      client.deactivate();
-    };
-  }, [groupId, tenantId, onMessage]);
+    clientRef.current = client;
+    return () => { client.deactivate(); clientRef.current = null; };
+  }, [token]);
+
+  const sendMessage = useCallback((content: string) => {
+    const c = clientRef.current;
+    if (!c || !c.connected || !content.trim()) return;
+    c.publish({
+      destination: `/app/tenant-chat/${TENANT_ID}/${GROUP_ID}/send`,
+      body: JSON.stringify({ content: content.trim() }),
+    });
+  }, []);
+
+  return { messages, connected, sendMessage };
 }
-```
-
-### lib/api/tenantChat.ts
-
-```typescript
-import { getJwt } from '@/lib/auth/getJwt';
-
-const API = process.env.NEXT_PUBLIC_ELLY_API_URL!;
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const jwt = getJwt();
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${jwt}`,
-      ...(init?.headers || {}),
-    },
-    cache: 'no-store',
-  });
-  const body = await res.json();
-  if (!body.result) {
-    throw new Error(body.message || `HTTP ${res.status}`);
-  }
-  return body.data as T;
-}
-
-export const tenantChat = {
-  ensureSession: () => request<VisitorIdentity>('/api/v1/tenant-chat/session', { method: 'POST' }),
-  listGroups: () => request<ChatGroup[]>('/api/v1/tenant-chat/groups'),
-  getHistory: (groupId: string, before?: string, limit = 50) => {
-    const params = new URLSearchParams();
-    if (before) params.set('before', before);
-    params.set('limit', limit.toString());
-    return request<ChatMessage[]>(`/api/v1/tenant-chat/groups/${groupId}/messages?${params}`);
-  },
-  sendMessage: (groupId: string, payload: SendMessagePayload) =>
-    request<ChatMessage>(`/api/v1/tenant-chat/groups/${groupId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-};
 ```
 
 ### .env değişkenleri
@@ -2308,41 +2318,323 @@ export const tenantChat = {
 ```
 NEXT_PUBLIC_ELLY_API_URL=https://api.huseyindol.com
 NEXT_PUBLIC_TENANT_ID=tenant1
+NEXT_PUBLIC_SUPPORT_GROUP_ID=<admin panelde açılan visitorAccess=true grup id'si>
 ```
 
-`NEXT_PUBLIC_TENANT_ID` build-time'da hangi tenant olduğunu söyler.
-Eğer site multi-tenant değil de tek tenant'a sabitse bu yeterli.
+`NEXT_PUBLIC_TENANT_ID` hangi tenant olduğunu, `NEXT_PUBLIC_SUPPORT_GROUP_ID` ise
+guest'in yazacağı sabit destek grubunu belirtir (guest grup listeleyemez).
 
 ### Eksik kütüphaneler (kurulması gerekenler)
 
 ```bash
-npm i @stomp/stompjs sockjs-client @tanstack/react-query
+npm i @stomp/stompjs sockjs-client
 npm i -D @types/sockjs-client
 ```
 
-(Eğer projede mevcutsa atla.)
+(React Query guest akışında gerekmez — REST sorgusu yok. Projede mevcutsa atla.)
 
 ### Doğrulama
 
-- Widget görünüyor mu? — Sayfayı aç, sağ altta floating buton.
-- Login yokken widget GİZLİ olmalı.
-- Login'li user widget'a tıklayınca panel açılır, "Yükleniyor" → ardından group listesi.
-- Bir group seçildiğinde ChatView yüklenir; geçmiş mesajlar görünür.
-- Composer'a yazı yaz, gönder → backend'e gider, **optimistic UI gerekmiyor** çünkü
-  WebSocket aynı mesajı geri alır (saniyeden az gecikme).
-- Admin panel tarafından mesaj yazılsa → widget'ta "Destek" rozetiyle anında görünür.
-- WebSocket disconnect (network kapatıldığında) → 5sn'de bir reconnect dener.
-- Permission yok / 403 → widget kapatılır, "Şu an aktif konuşma yok" gösterilir.
+- Widget login OLMADAN görünür (herkese).
+- Tıkla → ad girme kapısı; 2+ karakter ad gir → "Başla" → guest-token alınır.
+- Panel canlı sohbete geçer; "Bağlanıyor…" kaybolur (WS connected).
+- Mesaj yaz → WS SEND → birkaç yüz ms içinde aynı mesaj topic'ten geri gelir (echo);
+  **optimistic ekleme yapma**, echo'yu bekle.
+- Admin panelden (Prompt 7+9) bu gruba yaz → widget'ta "Destek" rozetiyle anında görünür.
+- **Geçmiş yok:** panel kapanıp açılınca (veya reconnect) eski mesajlar GELMEZ — bu
+  beklenen davranış (guest REST history yok). sessionStorage token'ı korur, buffer sıfırlanır.
+- Yanlış/eksik `NEXT_PUBLIC_SUPPORT_GROUP_ID` → SEND'de backend sessizce reddeder
+  (grup visitorAccess değil/yok → `CHAT_GUEST_FORBIDDEN`); mesaj görünmez.
+- Token süresi dolunca STOMP error → `guest.reset()` + yeniden ad girme (veya yeni token).
 - `npm run build` hatasız geçer.
 
 ### UX iyileştirmeleri (opsiyonel, MVP sonrası)
 
-- Yeni mesaj geldiğinde butonun üzerinde kırmızı badge ("3")
+- Yeni mesaj geldiğinde butonun üzerinde kırmızı badge
 - Browser notification (Notification API)
-- Mesaj okundu işareti — POST /tenant-chat/groups/{id}/read ile (henüz endpoint yok, gerekirse backend'e eklenir)
-- Typing indicator — WebSocket typing event'i, mevcut backend destekliyor
-- Dosya yükleme — POST /api/v1/chat/files (multipart) ile (endpoint mevcut ama widget'ta MVP'de yok)
+- Token süresini izleyip otomatik yenileme (expiresIn'den önce sessiz re-token)
+- typing/read guest'te YOK — eklemek istersen backend'de guest-aware hale getirilmeli
+
+### Alternatif: kayıtlı VISITOR (login'li tenant user)
+
+Tenant siten login'li kullanıcılara sahipse, anonim guest yerine kayıtlı VISITOR
+akışı kullanılabilir (bu prompt'un eski sürümü): `POST /api/v1/tenant-chat/session`
+(VisitorIdentity) + `GET /tenant-chat/groups` + `GET/POST /tenant-chat/groups/{id}/messages`,
+WS aynı topic. O yolda history ve grup listesi REST'ten gelir, `senderType=VISITOR`
+olur. İki akış aynı gruplarda birlikte çalışır; admin panel her ikisini de görür.
 ```
+
+---
+
+## Prompt 9 — Chat GUEST sender desteği (Prompt 7 panel delta)
+
+> **Bu bir DELTA prompt'tur.** Prompt 7 (panel Chat) zaten implement edilmiş
+> olmalı. Backend'de chat sender modeli `ADMIN | VISITOR` iken artık üçüncü bir
+> tür eklendi: **GUEST** (anonim website ziyaretçisi). Bu prompt yalnızca
+> panel'in GUEST mesajlarını doğru render etmesi için gereken küçük değişiklikleri
+> kapsar. **Panel yeni bir endpoint ÇAĞIRMAZ** — guest token üretimi/gönderimi
+> tamamen website widget'ının (Prompt 8) işidir. Panel sadece mevcut TC topic'inden
+> (`/topic/tenant/{tenantId}/group/{groupId}`) gelen GUEST mesajlarını tüketir.
+
+### Bağlam — sender modeli neden değişti
+
+Backend'de tek bir `chat_messages` tablosu polimorfik sender taşıyor:
+
+| senderType | Kim | Dolu alanlar | senderUsername kaynağı |
+|------------|-----|--------------|------------------------|
+| `ADMIN`    | Panel kullanıcısı (basedb users) | `senderId` | users.username |
+| `VISITOR`  | Kayıtlı tenant website user'ı | `visitorId` | visitor_identities.display_name |
+| `GUEST`    | **Anonim** website ziyaretçisi (login yok) | `senderId=null`, `visitorId=null` | mesaja denormalize edilmiş display name (backend `senderUsername`'e koyar) |
+
+Panel açısından kritik nokta: **GUEST mesajında hem `senderId` hem `visitorId`
+NULL'dır.** Profil linki / avatar lookup / "kendi mesajım mı" hesabı bu iki alana
+dayanıyorsa GUEST'te güvenle null kabul edilmeli. Görüntülenecek isim her zaman
+hazır gelen `senderUsername` alanındadır (backend zaten doldurur).
+
+### Görev
+
+1. **Type union güncelle** — `types/cms.ts` (veya chat tiplerinin olduğu yer):
+   ```typescript
+   // ÖNCE: export type ChatMessageSenderType = 'ADMIN' | 'VISITOR';
+   export type ChatMessageSenderType = 'ADMIN' | 'VISITOR' | 'GUEST';
+   ```
+   `ChatMessage` interface'i değişmez — `senderId`/`visitorId` zaten `number | null`.
+
+2. **MessageBubble — GUEST dalı ekle** (Prompt 7'deki polymorphic render'a):
+   ```typescript
+   const isAdmin   = msg.senderType === 'ADMIN';
+   const isVisitor = msg.senderType === 'VISITOR';
+   const isGuest   = msg.senderType === 'GUEST';
+   // GUEST'te senderId null → isOwn yalnızca admin için anlamlı
+   const isOwn = isAdmin && msg.senderId === currentUserId;
+
+   return (
+     <div className={isOwn ? 'self-end' : 'self-start'}>
+       <div className="flex items-center gap-2">
+         {/* DİKKAT: düz metin olarak render et — asla dangerouslySetInnerHTML kullanma */}
+         <span className="font-semibold">{msg.senderUsername || 'Misafir'}</span>
+         {isAdmin   && <Badge variant="info">Admin</Badge>}
+         {isVisitor && <Badge variant="muted">Ziyaretçi</Badge>}
+         {isGuest   && <Badge variant="warning">Misafir</Badge>}
+         <time>{formatRelative(msg.createdAt)}</time>
+       </div>
+       <div className="bubble">{msg.deleted ? '[silindi]' : msg.content}</div>
+       {msg.editedAt && <span className="text-xs muted">(düzenlendi)</span>}
+     </div>
+   );
+   ```
+   - GUEST için **avatar/profil linki üretme** (userId yok). Avatar gerekiyorsa
+     `senderUsername`'in baş harfinden initial-avatar üret.
+   - Rozet metnini VISITOR'dan ayrı tut ("Misafir" vs "Ziyaretçi") ki moderatör
+     anonim guest ile kayıtlı user'ı ayırt edebilsin.
+
+3. **XSS — düz metin garantisi (önemli):** `senderUsername` ve `content` alanlarını
+   **her zaman text node** olarak bas. Backend bunları zaten sunucu tarafında
+   sanitize ediyor (HTML strip), ama panel `dangerouslySetInnerHTML` /
+   `v-html` benzeri bir yol kullanırsa stored-XSS tekrar açılır. JSX `{value}`
+   default escape yeterli — özellikle GUEST display name'i kullanıcı girdisidir.
+
+4. **Admin'in GUEST'e yanıtı — değişiklik YOK.** Admin, guest'in bulunduğu TC
+   grubuna her zamanki gibi `POST /api/v1/chat/groups/{groupId}/messages`
+   (`X-Tenant-Id: group.tenantId`) ile yazar; mesaj `senderType=ADMIN` olur.
+   Guest tarafı WebSocket ile anlık alır. Composer'da ekstra iş yok.
+
+5. **Typing/Read göstergesi — beklenen davranış:** Guest oturumları typing ve
+   read event'i **göndermez** (backend guest için no-op yapıyor). Dolayısıyla
+   panelde guest için "yazıyor…" veya "okundu" görünmemesi normaldir — bunu hata
+   sanıp polling/uyarı ekleme.
+
+### Kısıtlar
+- Yeni endpoint, yeni hook, yeni sayfa YOK. Sadece tip + render delta.
+- `guest-token` endpoint'i panelden ASLA çağrılmaz (o website widget'ın işi).
+- Mevcut ADMIN/VISITOR davranışı bozulmamalı (regresyon yok).
+
+### Doğrulama
+- [ ] `senderType: 'GUEST'` gelen bir mesaj çökmeden render oluyor (senderId/visitorId null iken)
+- [ ] GUEST mesajında "Misafir" rozeti, VISITOR'da "Ziyaretçi", ADMIN'de "Admin" görünüyor
+- [ ] `senderUsername` içinde `<b>` / `<script>` olsa bile ham HTML çalışmıyor (düz metin)
+- [ ] Admin, guest'in olduğu TC grubuna yazıp guest'in anlık aldığını görebiliyor
+- [ ] ADMIN/VISITOR akışlarında regresyon yok
+
+> **Not (ayrı proje):** Website chat widget'ı (Prompt 8) artık anonim GUEST
+> akışını anlatır (`POST /api/v1/auth/guest-token` → STOMP CONNECT `Bearer {guestToken}`
+> → SEND `/app/tenant-chat/{tenantId}/{groupId}/send`). Bu Prompt 9 ise yalnızca
+> **panel** tarafında GUEST mesajlarının render'ı içindir.
+
+---
+
+## Prompt 10 — 2FA / MFA (panel: hesap güvenliği + login 2. adım)
+
+> **Bu prompt'u admin panel projesinde çalıştır.** İki parça: (A) Ayarlar →
+> Hesap Güvenliği'nde 2FA aç/kapat, (B) login akışına 2FA doğrulama adımı.
+
+### Backend ön koşul
+
+**Mevcut (hazır) endpoint'ler:**
+
+| Method | Path | Auth | Body | Yanıt (data) |
+|---|---|---|---|---|
+| GET | `/api/v1/auth/mfa/status` | JWT | — | `{ mfaEnabled: boolean }` |
+| GET | `/api/v1/auth/mfa/setup` | JWT | — | `{ secret, qrUri, issuer }` |
+| POST | `/api/v1/auth/mfa/setup/verify` | JWT | `{ code }` (6 hane) | `"2FA başarıyla etkinleştirildi."` |
+| POST | `/api/v1/auth/mfa/verify` | **yok** (mfaToken yeterli) | `{ mfaToken, code }` | tam `DtoAuthResponse` |
+| POST | `/api/v1/auth/mfa/disable` | JWT | `{ password }` | `"2FA başarıyla devre dışı bırakıldı."` |
+| POST | `/api/v1/auth/login` | yok | `{ username, password }` | `DtoAuthResponse` — 2FA açıksa `mfaRequired:true` + `mfaToken`, `token:null` |
+
+Tüm yanıtlar `RootEntityResponse` wrapper'lı: `{ result, message, data }`.
+
+**Backend tarafı tamamlandı** (bu prompt yazılırken eklendi — panel workaround'a gerek yok):
+
+- **`GET /api/v1/auth/mfa/status` → `{ mfaEnabled: boolean }`** eklendi; panel mevcut
+  2FA durumunu buradan okur.
+- **`/api/v1/auth/mfa/verify` artık `/login` ile aynı HttpOnly cookie'leri set ediyor**
+  (access/refresh/userCode/expiredDate) — MFA ile giriş, normal login ile birebir aynı
+  oturumu kurar. (login/refresh/mfa-verify ortak `AuthCookieWriter` üzerinden — tek kaynak.)
+
+### Tipler
+
+```typescript
+export interface MfaSetupResponse {
+  secret: string;   // Base32 — manuel giriş için göster
+  qrUri: string;    // otpauth://totp/... — QR olarak render et
+  issuer: string;
+}
+
+export interface MfaStatus { mfaEnabled: boolean; }   // GET /api/v1/auth/mfa/status
+```
+
+`DtoAuthResponse` tipine 2FA alanları eklendi → Prompt 1'deki `AuthResponse`'a ekle:
+`mfaRequired?: boolean; mfaToken?: string;` (`token` 2FA challenge'da `null` gelebilir).
+
+### lib/api/mfa.ts
+
+```typescript
+import { http } from '@/lib/api/http';   // Prompt 1'deki wrapper (RootEntityResponse unwrap)
+import type { AuthResponse } from '@/types/cms';
+
+export const mfaApi = {
+  status:      () => http.get<MfaStatus>('/api/v1/auth/mfa/status'),           // 2FA açık mı?
+  setup:       () => http.get<MfaSetupResponse>('/api/v1/auth/mfa/setup'),
+  verifySetup: (code: string) => http.post<string>('/api/v1/auth/mfa/setup/verify', { code }),
+  disable:     (password: string) => http.post<string>('/api/v1/auth/mfa/disable', { password }),
+  // login 2. adım — JWT YOK, sadece mfaToken
+  verifyLogin: (mfaToken: string, code: string) =>
+    http.post<AuthResponse>('/api/v1/auth/mfa/verify', { mfaToken, code }),
+};
+```
+
+### A) Hesap Güvenliği — 2FA aç/kapat
+
+Konum: Ayarlar → Güvenlik (örn. `app/(panel)/settings/security/page.tsx`).
+
+Durum (`mfa/status`):
+```typescript
+export function useMfaStatus() {
+  return useQuery({ queryKey: ['mfa', 'status'], queryFn: () => mfaApi.status() });
+}
+```
+
+**Enable akışı** (MfaSetupDialog):
+1. `GET /mfa/setup` → `{ secret, qrUri }`
+2. QR'ı `qrUri`'den render et + `secret`'ı kopyalanabilir göster (manuel giriş)
+3. 6 haneli Authenticator kodu → `POST /mfa/setup/verify { code }`
+4. Başarı → dialog kapanır, `queryClient.invalidateQueries(['mfa','status'])`
+
+```typescript
+'use client';
+import { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import { mfaApi } from '@/lib/api/mfa';
+
+export function MfaSetupDialog({ onDone }: { onDone: () => void }) {
+  const [data, setData] = useState<MfaSetupResponse | null>(null);
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const begin = async () => {
+    setBusy(true); setError(null);
+    try { setData(await mfaApi.setup()); }
+    catch (e: any) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+  const confirm = async () => {
+    if (!/^\d{6}$/.test(code)) { setError('6 haneli kod girin'); return; }
+    setBusy(true); setError(null);
+    try { await mfaApi.verifySetup(code); onDone(); }
+    catch (e: any) { setError(e.message || 'Kod doğrulanamadı'); }
+    finally { setBusy(false); }
+  };
+
+  if (!data) return <button onClick={begin} disabled={busy}>2FA'yı Etkinleştir</button>;
+  return (
+    <div className="space-y-3">
+      <QRCodeSVG value={data.qrUri} size={180} />
+      <p className="text-xs">Authenticator'a ekleyin. Manuel anahtar: <code>{data.secret}</code></p>
+      <input value={code} inputMode="numeric" maxLength={6} placeholder="6 haneli kod"
+        onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        className="border rounded px-3 py-2" />
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button onClick={confirm} disabled={busy || code.length !== 6}>Doğrula ve Etkinleştir</button>
+    </div>
+  );
+}
+```
+
+**Disable akışı** (MfaDisableDialog): şifre iste → `POST /mfa/disable { password }` →
+başarı → invalidate. Şifre alanı `type="password"`, `autoComplete="current-password"`.
+
+### B) Login 2. adım — MFA challenge
+
+Mevcut login handler'ını (Prompt 1 auth) genişlet:
+
+```typescript
+// login submit içinde
+const res = await authApi.login({ username, password });   // POST /api/v1/auth/login
+if (res.mfaRequired && res.mfaToken) {
+  setMfaToken(res.mfaToken);   // SADECE component state (5 dk geçerli) — persist ETME
+  setStep('mfa');              // 6 haneli kod ekranına geç
+  return;
+}
+// normal akış: cookie'ler backend tarafından set edildi → dashboard'a yönlendir
+```
+
+MFA kod ekranı:
+```typescript
+const onVerify = async () => {
+  if (!/^\d{6}$/.test(code)) return setError('6 haneli kod girin');
+  try {
+    await mfaApi.verifyLogin(mfaToken, code);   // POST /mfa/verify — backend cookie'leri set eder
+    // Oturum cookie'leri (access/refresh) login ile aynı şekilde kuruldu → yönlendir
+    router.push('/dashboard');
+  } catch (e: any) {
+    setError(e.message || 'Kod geçersiz veya süresi doldu');
+  }
+};
+```
+
+`mfaToken` 5 dk geçerli; süresi dolarsa kullanıcı baştan login olur. `mfaToken`'ı
+localStorage/cookie'ye YAZMA — kısa ömürlü, sadece bu adım için bellekte tut.
+
+### Doğrulama
+- Güvenlik sayfası `mfa/status` ile mevcut 2FA durumunu gösterir; enable/disable aksiyonları çalışır.
+- Enable: QR çıkar, Authenticator'a ekle, 6 haneli kod → "etkinleştirildi". Yanlış kodu reddeder.
+- 2FA açık kullanıcı login → `mfaRequired:true` → kod ekranı → `mfa/verify` → giriş tamam.
+- Yanlış/süresi dolmuş kod → hata, login tamamlanmaz.
+- Disable: şifre ile kapatılır; sonraki login'de kod sorulmaz.
+- 2FA kapalı kullanıcı login → `mfaRequired` yok → direkt giriş (regresyon yok).
+- `npm run build` hatasız.
+
+### Kütüphaneler
+```bash
+npm i qrcode.react      # QR render (veya mevcut bir QR bileşeni)
+```
+
+### Notlar
+- Kod alanı yalnızca 6 rakam (`inputMode="numeric"`, otomatik trim).
+- `secret`'ı loglama/analytics'e gönderme; sadece ekranda göster, persist etme.
+- `/api/v1/auth/mfa/*` endpoint'leri `loginSource=admin|tenant` farketmez; JWT'li
+  kullanıcı kendi hesabına 2FA kurar (tenant context JWT'den gelir).
 
 ---
 

@@ -1318,7 +1318,7 @@ CMS Response body alanları:
 ## Bağlam — CMS Endpoint'leri
 
 REST (auth: admin JWT):
-  GET    /api/v1/chat/groups                          → kullanıcının görebildiği group'lar
+  GET    /api/v1/chat/groups                          → SEÇİLİ KAPSAMIN (X-Tenant-Id) görünür group'ları
   POST   /api/v1/chat/groups                          → yeni group (body: name, description,
                                                          memberIds[], tenantId?, visitorAccess?)
   GET    /api/v1/chat/groups/{groupId}                → group detay
@@ -1335,9 +1335,21 @@ REST (auth: admin JWT):
   DELETE /api/v1/chat/messages/{messageId}            → sil (soft delete)
   POST   /api/v1/chat/files (multipart)               → dosya yükle
 
-**X-Tenant-Id header (kritik):**
-  TC group'larına yazarken/okurken her istekte X-Tenant-Id: {group.tenantId} ekle.
-  AC group'larında bu header HİÇ gönderilmez (backend AC için basedb kullanır).
+**X-Tenant-Id header (kritik) — KAPSAM (scope) modeli:**
+  TÜM `/api/v1/chat/*` istekleri X-Tenant-Id'ye göre kapsamlanır:
+  - header YOK → basedb (AC: admin-admin chat)
+  - X-Tenant-Id: {tenantId} → o tenant DB'si (TC: website/ziyaretçi grupları)
+
+  Bu yüzden **grup LİSTESİ de kapsamlıdır** — `GET /api/v1/chat/groups`:
+  - header yok → AC grupları
+  - X-Tenant-Id: tenant1 → tenant1 TC grupları
+  ⚠️ Tek çağrı TÜM tenant'ları birden DÖNDÜRMEZ (her tenant ayrı DB; backend
+  X-Tenant-Id modeline geçti — cross-tenant aggregate YOK).
+
+  → Panel'de bir **KAPSAM SEÇİCİ** olmalı: `AC | tenant1 | tenant2 | …`. Seçilen
+    kapsam X-Tenant-Id'yi belirler (AC'de header boş); liste / history / send / üye
+    işlemleri hepsi o kapsamla gider. TC'de X-Tenant-Id: {group.tenantId} (= seçili
+    kapsam), AC'de header HİÇ gönderilmez.
 
 **Erişim kuralları (backend — panel buna göre davranmalı):**
   - **Okuma** (liste, history, grup detay): üye VEYA `roleLevel >= visibilityLevel`

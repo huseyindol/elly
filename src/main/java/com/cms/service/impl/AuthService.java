@@ -575,14 +575,29 @@ public class AuthService implements IAuthService {
     if (displayName.isBlank()) {
       displayName = "guest";
     }
-    String sessionId = UUID.randomUUID().toString();
+    // sessionId: client'in kalici id'si (localStorage) gecerli UUID ise kullanilir, degilse uretilir.
+    // Ayni tarayicidan donen guest ayni id'yi gonderir -> eski mesajlari "kendi" olarak eslesir.
+    String sessionId = normalizeClientId(request.getClientId());
     String token = jwtUtil.generateGuestToken(displayName, sessionId, tenantId);
     return DtoGuestTokenResponse.builder()
         .token(token)
         .expiresIn(jwtUtil.getGuestExpirationSeconds())
         .displayName(displayName)
         .tenantId(tenantId)
+        .sessionId(sessionId)
         .build();
+  }
+
+  /** Client'in gonderdigi kalici id'yi dogrular: gecerli UUID ise canonical formda dondurur, degilse yeni uretir. */
+  private String normalizeClientId(String clientId) {
+    if (clientId != null && !clientId.isBlank()) {
+      try {
+        return UUID.fromString(clientId.trim()).toString();
+      } catch (IllegalArgumentException ignored) {
+        // gecersiz format -> yeni uret
+      }
+    }
+    return UUID.randomUUID().toString();
   }
 
   /**

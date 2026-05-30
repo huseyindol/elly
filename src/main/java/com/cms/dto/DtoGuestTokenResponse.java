@@ -21,4 +21,6 @@ public class DtoGuestTokenResponse {
   private long expiresIn;
   private String displayName;
   private String tenantId;
+  /** Guest oturum kimliği — frontend "kendi mesajım" tespiti için saklar (msg.sessionId ile karşılaştırır). */
+  private String sessionId;
 }

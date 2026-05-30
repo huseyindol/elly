@@ -19,6 +19,10 @@ public class DtoChatMessage {
   private ChatMessageSenderType senderType;
   /** Frontend display için zenginleştirilmiş alan (admin'in username'i veya visitor display_name). */
   private String senderUsername;
+  /** GUEST gönderdiyse guest oturum kimliği (session_id) — frontend "kendi mesajım" eşleştirmesi için. */
+  private UUID sessionId;
+  /** GUEST gönderdiyse ekran adı (denormalize); ADMIN/VISITOR'da null. */
+  private String senderDisplayName;
   private String content;
   private ChatMessageType contentType;
   private String fileUrl;

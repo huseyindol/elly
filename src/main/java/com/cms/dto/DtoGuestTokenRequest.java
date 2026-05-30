@@ -23,4 +23,12 @@ public class DtoGuestTokenRequest {
    * gönderilmelidir.
    */
   private String tenantId;
+
+  /**
+   * Opsiyonel: cihaz bazlı kalıcı guest kimliği (UUID). Frontend localStorage'da tutar ve
+   * her token isteğinde gönderir; backend bunu sessionId olarak kullanır (geçerli UUID
+   * değilse yenisi üretilir). Böylece aynı tarayıcıdan dönen guest'in eski mesajları "kendi"
+   * olarak eşleşir. Kimlik doğrulama DEĞİL — yalnızca sahiplik işareti (displayName gibi client'tan gelir).
+   */
+  private String clientId;
 }

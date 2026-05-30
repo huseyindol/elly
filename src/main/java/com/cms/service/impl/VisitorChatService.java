@@ -93,12 +93,12 @@ public class VisitorChatService implements IVisitorChatService {
     }
 
     int safeLimit = Math.min(Math.max(limit, 1), 100);
-    List<ChatMessage> msgs = (beforeDate == null)
+    // Sorgu createdAt DESC (en yeni N / cursor'dan onceki N icin dogru); goruntu ASC
+    // olmali (eskiden yeniye) -> sayfayi ters cevir, sonra mapper ile zenginlestir.
+    List<ChatMessage> msgs = new java.util.ArrayList<>((beforeDate == null)
         ? messageRepository.findByGroupId(group.getId(), PageRequest.of(0, safeLimit))
-        : messageRepository.findByGroupIdBefore(group.getId(), beforeDate, PageRequest.of(0, safeLimit));
-    // Reuse ChatMessageService's toDto by going through the public save flow? Hayır,
-    // history'de yeni mesaj yaratmayalım. Burada direkt mapper kullanır ve display
-    // bilgisini chatMessageService.lookupAdminUsername üzerinden zenginleştiririz.
+        : messageRepository.findByGroupIdBefore(group.getId(), beforeDate, PageRequest.of(0, safeLimit)));
+    java.util.Collections.reverse(msgs);
     return msgs.stream().map(this::toMessageDto).toList();
   }
 

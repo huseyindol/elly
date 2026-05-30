@@ -132,9 +132,12 @@ public class ChatMessageService implements IChatMessageService {
     }
 
     int safeLimit = Math.min(limit, 100);
-    List<ChatMessage> msgs = (beforeDate == null)
+    // Sorgu createdAt DESC (en yeni N / cursor'dan onceki N'i almak icin dogru).
+    // Goruntu ASC olmali (eskiden yeniye, ustten alta) -> sayfayi ters cevir.
+    List<ChatMessage> msgs = new java.util.ArrayList<>((beforeDate == null)
         ? messageRepository.findByGroupId(groupId, PageRequest.of(0, safeLimit))
-        : messageRepository.findByGroupIdBefore(groupId, beforeDate, PageRequest.of(0, safeLimit));
+        : messageRepository.findByGroupIdBefore(groupId, beforeDate, PageRequest.of(0, safeLimit)));
+    java.util.Collections.reverse(msgs);
     return msgs
         .stream()
         .map(this::toDto)

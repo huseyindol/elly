@@ -1,7 +1,7 @@
 # ============================================
 # DEPLOYMENT - Spring Boot Application (Base Pod'lar)
 # ============================================
-# Multi-tenant, stateless (JWT), her zaman 2 replika çalışır.
+# Multi-tenant, stateless (JWT), 4GB VM'de sabit 1 replika (burst HPA ile yük paylaşımı).
 # Tek VM (K3s) üzerinde çalışır.
 #
 # envFrom ile tüm env değişkenleri ConfigMap/Secret'tan otomatik çekilir.
@@ -15,7 +15,7 @@ metadata:
     app: elly-cms
     component: backend
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:

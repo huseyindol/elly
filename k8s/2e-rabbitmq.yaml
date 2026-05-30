@@ -1,6 +1,28 @@
 # ============================================
+# RabbitMQ — ConfigMap (rabbitmq.conf)
+# ============================================
+# RabbitMQ 3.13+ deprecated ENV'leri reddediyor (RABBITMQ_VM_MEMORY_HIGH_WATERMARK vb.)
+# Bellek/disk limitleri conf dosyasi ile verilir.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: elly
+  labels:
+    app: rabbitmq
+    component: messaging
+data:
+  rabbitmq.conf: |
+    # Container limit 768Mi — Erlang VM en fazla ~%40 kullanir (OOM onleme)
+    vm_memory_high_watermark.relative = 0.4
+    disk_free_limit.absolute = 200MB
+
+---
+# ============================================
 # RabbitMQ StatefulSet
 # ============================================
+# 4GB VM: management plugin + Erlang VM icin 512Mi limit yetersiz kaliyordu
+# (OOM / readiness probe timeout → restart dongusu).
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -43,27 +65,42 @@ spec:
         resources:
           requests:
             cpu: "100m"
-            memory: "128Mi"
+            memory: "256Mi"
           limits:
             cpu: "500m"
-            memory: "512Mi"
+            memory: "768Mi"
+        startupProbe:
+          exec:
+            command: ["rabbitmq-diagnostics", "-q", "ping"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 30
         livenessProbe:
           exec:
-            command: ["rabbitmq-diagnostics", "ping"]
+            command: ["rabbitmq-diagnostics", "-q", "ping"]
           initialDelaySeconds: 60
           periodSeconds: 30
-          timeoutSeconds: 15
+          timeoutSeconds: 10
           failureThreshold: 5
         readinessProbe:
           exec:
-            command: ["rabbitmq-diagnostics", "check_port_connectivity"]
-          initialDelaySeconds: 40
+            command: ["rabbitmq-diagnostics", "-q", "ping"]
+          initialDelaySeconds: 20
           periodSeconds: 15
-          timeoutSeconds: 15
-          failureThreshold: 5
+          timeoutSeconds: 10
+          failureThreshold: 6
         volumeMounts:
         - name: rabbitmq-data
           mountPath: /var/lib/rabbitmq
+        - name: rabbitmq-config
+          mountPath: /etc/rabbitmq/rabbitmq.conf
+          subPath: rabbitmq.conf
+          readOnly: true
+      volumes:
+      - name: rabbitmq-config
+        configMap:
+          name: rabbitmq-config
   volumeClaimTemplates:
   - metadata:
       name: rabbitmq-data

@@ -115,7 +115,7 @@ public class ChatWebSocketController {
       Long userId = resolveUserId(headerAccessor);
       String username = resolveUsername(headerAccessor);
       typingService.setTyping(groupId, userId);
-      DtoChatTyping event = new DtoChatTyping(groupId, userId, username, true);
+      DtoChatTyping event = new DtoChatTyping(groupId, userId, username, true, null);
       messagingTemplate.convertAndSend(ChatTopics.typingTopic(null, groupId), event);
     } finally {
       TenantContext.clear();
@@ -126,17 +126,20 @@ public class ChatWebSocketController {
   public void typingTenant(@DestinationVariable String tenantId,
       @DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
-    // Guest oturumlarının userId'si yok → typing takip edilmez (no-op). Aksi halde
-    // resolveUserId UnauthorizedException fırlatırdı. Send akışı guest-aware'dir.
-    if (isGuestSession(headerAccessor)) {
-      return;
-    }
     TenantContext.setTenantId(tenantId);
     try {
-      Long userId = resolveUserId(headerAccessor);
-      String username = resolveUsername(headerAccessor);
-      typingService.setTyping(groupId, userId);
-      DtoChatTyping event = new DtoChatTyping(groupId, userId, username, true);
+      DtoChatTyping event;
+      if (isGuestSession(headerAccessor)) {
+        // Anonim guest — userId yok; sessionId + displayName ile yayınla (alıcı kendi typing'ini ayırır)
+        String sessionId = resolveSessionId(headerAccessor);
+        String displayName = resolveUsername(headerAccessor);
+        event = new DtoChatTyping(groupId, null, displayName, true, sessionId);
+      } else {
+        Long userId = resolveUserId(headerAccessor);
+        String username = resolveUsername(headerAccessor);
+        typingService.setTyping(groupId, userId);
+        event = new DtoChatTyping(groupId, userId, username, true, null);
+      }
       messagingTemplate.convertAndSend(ChatTopics.typingTopic(tenantId, groupId), event);
     } finally {
       TenantContext.clear();

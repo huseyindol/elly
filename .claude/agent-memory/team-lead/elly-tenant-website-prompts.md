@@ -16,7 +16,10 @@
   Backend `PublicApiFilter` bu yolu yakalar → tenantId'yi path'ten alıp doğru tenant DB'sine
   yönlendirir, anonim erişim verir, sonra `/api/v1/...`'e rewrite eder. **Yeni public çağrı
   eklerken hep bu prefix kullanılır** (login de böyle: `/api/v1/public/{tenantId}/auth/login`).
-- **WebSocket:** `${API}/ws` (SockJS + STOMP) — bu `/public` prefix'ine tabi DEĞİL (ayrı kanal).
+- **WebSocket:** API **kökündeki** `/ws` (SockJS + STOMP) — `/public` prefix'ine tabi DEĞİL.
+  ⚠️ WS host **çıplak host** olmalı (`https://api.huseyindol.com`); REST base'i (`.../api/v1/public`)
+  KULLANMA. Yanlışsa SockJS `/api/v1/public/ws/info`'ya gider → "Unknown tenant: ws" (400) → WS
+  bağlanamaz → input pasif kalır. Güvenli yol: `new URL(NEXT_PUBLIC_ELLY_API_URL).origin`.
 - **Yanıt zarfı:** Tüm REST yanıtları `{ result, message, data }`. `data`'yı unwrap et.
 
 ---
@@ -231,7 +234,10 @@ import SockJS from 'sockjs-client';
 import { publicApi } from '@/lib/api/publicApi';
 import type { ChatMessage } from '@/types/chat';
 
-const API = process.env.NEXT_PUBLIC_ELLY_API_URL!;
+// WS host = API origin (scheme+host). NEXT_PUBLIC_ELLY_API_URL'i ÇIPLAK host gir; kazara
+// REST base'i (.../api/v1/public) girilse bile origin'e indiriyoruz — aksi halde SockJS
+// /api/v1/public/ws/info'ya gider → PublicApiFilter "Unknown tenant: ws" (400) → WS bağlanamaz.
+const WS_HOST = new URL(process.env.NEXT_PUBLIC_ELLY_API_URL ?? 'https://api.huseyindol.com').origin;
 const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID!;
 
 export function useGuestChat(token: string, groupId: string) {
@@ -254,7 +260,7 @@ export function useGuestChat(token: string, groupId: string) {
   useEffect(() => {
     if (!token) return;
     const client = new Client({
-      webSocketFactory: () => new SockJS(`${API}/ws`),
+      webSocketFactory: () => new SockJS(`${WS_HOST}/ws`),
       connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,
@@ -494,7 +500,7 @@ export function ChatComposer({ onSubmit }: { onSubmit: (content: string) => Prom
 ### .env
 
 ```
-NEXT_PUBLIC_ELLY_API_URL=https://api.huseyindol.com
+NEXT_PUBLIC_ELLY_API_URL=https://api.huseyindol.com   # ÇIPLAK host (WS host'u) — /api/v1/public EKLEME
 NEXT_PUBLIC_TENANT_ID=tenant1
 ```
 (Sabit grup id'sine gerek YOK — grup listesi runtime'da çekilir.)

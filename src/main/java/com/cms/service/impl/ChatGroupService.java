@@ -26,7 +26,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -108,15 +107,13 @@ public class ChatGroupService implements IChatGroupService {
   @Override
   public List<DtoChatGroup> getMyGroups(Long userId) {
     int roleLevel = currentUserRoleLevel();
-    return tenantRouter.mapAllTenants(() ->
-            groupRepository.findGroupsByUserIdAndRole(userId, roleLevel)
-                .stream()
-                .map(chatMapper::toGroupDto)
-                .toList())
+    // X-Tenant-Id (TenantContext) modeli: JwtTenantFilter chat'i X-Tenant-Id'ye gore
+    // yonlendirir — header yoksa basedb (AC), header varsa o tenant (TC). Burada yalnizca
+    // MEVCUT context'in gruplari dondurulur. Cross-DB aggregate (mapAllTenants) YOK; bu hem
+    // OSIV ile uyumludur hem de filter/prompt/panel ile ayni X-Tenant-Id modeline oturur.
+    return groupRepository.findGroupsByUserIdAndRole(userId, roleLevel)
         .stream()
-        .collect(Collectors.toMap(DtoChatGroup::getId, g -> g, (a, b) -> a, LinkedHashMap::new))
-        .values()
-        .stream()
+        .map(chatMapper::toGroupDto)
         .sorted(Comparator.comparing(DtoChatGroup::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
         .toList();
   }

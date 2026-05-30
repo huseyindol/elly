@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -69,26 +68,6 @@ public class ChatGroupTenantRouter {
     } else {
       TenantContext.setTenantId(tenantKey);
     }
-  }
-
-  /** Tüm tenant DB'lerinde (basedb dahil) sırayla işlem çalıştırır. */
-  public <T> List<T> mapAllTenants(TenantScopedCallback<T> callback) {
-    String original = TenantContext.getTenantId();
-    List<T> results = new ArrayList<>();
-    try {
-      for (String tenantKey : tenantScanOrder()) {
-        setTenantContext(tenantKey);
-        results.addAll(callback.run());
-      }
-      return results;
-    } finally {
-      TenantContext.setTenantId(original);
-    }
-  }
-
-  @FunctionalInterface
-  public interface TenantScopedCallback<T> {
-    List<T> run();
   }
 
   private List<String> tenantScanOrder() {

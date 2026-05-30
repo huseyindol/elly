@@ -29,6 +29,17 @@ public class ChatGroupTenantRouter {
   private String defaultTenant;
 
   public Optional<ChatGroup> findGroup(UUID groupId) {
+    // Model A: grup once MEVCUT TenantContext'te aranir (REST'te X-Tenant-Id header'i,
+    // WS'te /app/tenant-chat/{tenantId}/... destination'i context'i dogru set eder).
+    // OSIV tek request-bound baglanti tuttugu icin asagidaki cross-tenant tarama TC
+    // gruplari icin calismiyordu (baglanti ilk iterasyonda basedb'ye pinlenir, sonraki
+    // context switch'leri etkisiz kalir) -> "Chat group not found". Mevcut context'te
+    // bulununca taramaya hic gerek kalmaz.
+    Optional<ChatGroup> inCurrentContext = groupRepository.findById(groupId);
+    if (inCurrentContext.isPresent()) {
+      return inCurrentContext;
+    }
+    // Fallback: context'in set edilmedigi nadir durumlar icin tarama (OSIV altinda sinirli).
     String original = TenantContext.getTenantId();
     try {
       for (String tenantKey : tenantScanOrder()) {

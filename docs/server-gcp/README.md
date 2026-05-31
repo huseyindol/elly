@@ -97,6 +97,12 @@
 3. Autoscaling kararı: ya burst+HPA'yı apply et **ama önce chat için sticky+broker**, ya da bilinçli tek-pod'da kal.
 4. (Opsiyonel) zipkin/redisinsight: apply et ya da monitoring'den çıkar.
 5. rabbitmq restart sebebini incele (OOM ise memory limit artır).
+6. **Off-site backup (GCS)** — yedekler şu an aynı VM diskinde (`local-path` PVC); VM/disk ölürse
+   DB'lerle birlikte gider. DR için CronJob'a `gsutil cp /backups/*.sql.gz gs://elly-db-backups/`
+   ekle (servis hesabı key'i secret olarak + bucket lifecycle ile retention). Zaten GCP'deyiz,
+   ~5GB ücretsiz katman → pratikte ~0 maliyet.
+   **Öncelik: orta** (acil değil; local backup yanlış-silme/bozuk-migration'a karşı zaten korur,
+   GCS yalnızca "VM komple ölürse" senaryosu için).
 
 ## 7. Doğrulama komutları (canlıda çalıştır, bu notu güncelle)
 ```bash
@@ -140,6 +146,30 @@ bir bağımlılığın (rabbitmq DNS) boot'ta çökertmesine izin verme.
 
 > Yan gözlem: `cm-acme-http-solver-*` pod'u saatlerce duruyorsa TLS sertifika (Let's Encrypt
 > HTTP-01) issuance'ı takılmış olabilir — acil değil, ingress/DNS ile ayrıca bakılır.
+
+---
+
+## 9. Olay/değişiklik kaydı — 2026-05-31: backup sessiz başarısızlık + basedb eklendi
+
+**Belirti:** CronJob "Completed" görünüyordu ama tenant2 yedekleri **20 byte (boş)**; basedb hiç
+yedeklenmiyordu.
+
+**Kök sebep:** Script tek `PGPASSWORD` (tenant1'inki) ile üç DB'yi de dumpluyordu. Her DB'nin şifresi
+**FARKLI** → tenant2/basedb auth fail. Ama `pg_dump | gzip` pipe'ında gzip boş girdiyi başarıyla
+sıkıştırdığı için pipeline exit 0 → `set -e` yakalamıyor; 20 byte'lık geçerli-ama-boş `.sql.gz`
+üretiliyor, hata sessizce yutuluyordu. Sonuç: **aylardır yalnızca tenant1 yedekleniyordu.**
+
+**Çözüm (commit `924e5d2`, `k8s/7-backup-cronjob.yaml`):**
+- Her pg_dump kendi `postgres-<db>-secret`'indeki `POSTGRES_USER`/`POSTGRES_PASSWORD` ile bağlanır.
+- basedb yedeğe eklendi (admin user/rol/izin, AC chat, mail_accounts, 2FA secret'ları).
+- pg_dump önce temp dosyaya yazılır; **sadece başarılıysa** gzip'lenir → auth hatasında boş dosya YOK.
+- Herhangi bir DB fail → `exit 1` → job **Error**. Yani **Completed = üçü de başarılı** garantisi.
+
+**Doğrulandı (canlı, 2026-05-31 manuel job):** basedb 14.5K, tenant1 22.8K, tenant2 13.0K — üçü dolu.
+Eski 20 byte'lık boş dosyalar 3 günde retention ile silinir.
+
+**Ders:** Pipe'lı (`cmd | gzip`) backup'ta `set -e`, ilk komutun hatasını YUTAR (pipefail yoksa).
+Çok-DB/çok-kimlik yedekte her hedefin kendi credential'ını kullan; başarıyı **dosya boyutuyla** doğrula.
 
 ---
 _Not: Bu denetim repo + `kubectl get pods` çıktılarına dayanır. §7 komutlarıyla canlıyı teyit et._

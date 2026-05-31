@@ -1,7 +1,7 @@
 # ============================================
 # CRONJOB - PostgreSQL Otomatik Backup
 # ============================================
-# Her gece 03:00'da (Europe/Istanbul) her iki tenant DB'sini yedekler.
+# Her gece 03:00'da (Europe/Istanbul) basedb + her iki tenant DB'sini yedekler.
 # Backup'lar gzip ile sıkıştırılır.
 # 3 günden eski backup'lar otomatik silinir.
 #
@@ -60,8 +60,21 @@ spec:
 
                   DATE=$(date +%Y-%m-%d_%H%M)
 
+                  # --- BaseDB Backup (admin user/rol/izin, AC chat, mail_accounts, 2FA) ---
+                  echo "[1/5] BaseDB backup alınıyor..."
+                  pg_dump \
+                    -h postgres-basedb \
+                    -U "$TENANT1_DB_USER" \
+                    -d "$BASEDB_NAME" \
+                    --no-owner \
+                    --no-privileges \
+                    | gzip > /backups/basedb-${DATE}.sql.gz
+
+                  BASEDB_SIZE=$(du -h /backups/basedb-${DATE}.sql.gz | cut -f1)
+                  echo "    ✅ BaseDB tamamlandı: basedb-${DATE}.sql.gz ($BASEDB_SIZE)"
+
                   # --- Tenant 1 Backup ---
-                  echo "[1/4] Tenant 1 backup alınıyor..."
+                  echo "[2/5] Tenant 1 backup alınıyor..."
                   pg_dump \
                     -h postgres-tenant1 \
                     -U "$TENANT1_DB_USER" \
@@ -74,7 +87,7 @@ spec:
                   echo "    ✅ Tenant 1 tamamlandı: tenant1-${DATE}.sql.gz ($TENANT1_SIZE)"
 
                   # --- Tenant 2 Backup ---
-                  echo "[2/4] Tenant 2 backup alınıyor..."
+                  echo "[3/5] Tenant 2 backup alınıyor..."
                   pg_dump \
                     -h postgres-tenant2 \
                     -U "$TENANT2_DB_USER" \
@@ -87,12 +100,12 @@ spec:
                   echo "    ✅ Tenant 2 tamamlandı: tenant2-${DATE}.sql.gz ($TENANT2_SIZE)"
 
                   # --- 3 Günden Eski Backup'ları Sil ---
-                  echo "[3/4] 3 günden eski backup'lar siliniyor..."
+                  echo "[4/5] 3 günden eski backup'lar siliniyor..."
                   DELETED=$(find /backups/ -name "*.sql.gz" -mtime +3 -print -delete | wc -l)
                   echo "    🗑️  $DELETED eski backup silindi"
 
                   # --- Durum Raporu ---
-                  echo "[4/4] Mevcut backup'lar:"
+                  echo "[5/5] Mevcut backup'lar:"
                   ls -lh /backups/*.sql.gz 2>/dev/null || echo "    Backup bulunamadı!"
                   TOTAL_SIZE=$(du -sh /backups/ | cut -f1)
                   echo ""
@@ -127,6 +140,11 @@ spec:
                     configMapKeyRef:
                       name: elly-config
                       key: TENANT2_DB_NAME
+                - name: BASEDB_NAME
+                  valueFrom:
+                    configMapKeyRef:
+                      name: elly-config
+                      key: BASEDB_NAME
               resources:
                 requests:
                   cpu: "50m"

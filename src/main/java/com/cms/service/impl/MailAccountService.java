@@ -12,12 +12,14 @@ import com.cms.config.TenantMailSenderFactory;
 import com.cms.dto.DtoMailAccountRequest;
 import com.cms.dto.DtoMailAccountResponse;
 import com.cms.entity.MailAccount;
+import com.cms.enums.NotificationType;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.exception.ValidationException;
 import com.cms.mapper.MailAccountMapper;
 import com.cms.repository.MailAccountRepository;
 import com.cms.service.IMailAccountService;
+import com.cms.service.INotificationService;
 import com.cms.util.AesEncryptor;
 
 import jakarta.mail.MessagingException;
@@ -44,6 +46,7 @@ public class MailAccountService implements IMailAccountService {
   private final MailAccountMapper mapper;
   private final TenantMailSenderFactory mailSenderFactory;
   private final AesEncryptor aesEncryptor;
+  private final INotificationService notificationService;
 
   @Override
   @Transactional
@@ -154,8 +157,26 @@ public class MailAccountService implements IMailAccountService {
     } catch (MessagingException e) {
       log.error("SMTP baglantisi basarisiz: hesap='{}', hata='{}'",
           account.getName(), e.getMessage());
+      triggerMailVerifyFailedNotification(account);
       throw new BadRequestException(
           "SMTP baglantisi basarisiz: " + e.getMessage());
+    }
+  }
+
+  private void triggerMailVerifyFailedNotification(MailAccount account) {
+    try {
+      java.util.Map<String, Object> metadata = new java.util.HashMap<>();
+      metadata.put("mailAccountId", account.getId());
+      notificationService.notifyAdminPlusUsers(
+          NotificationType.MAIL_VERIFY_FAILED,
+          "SMTP dogrulamasi basarisiz",
+          account.getName() + " hesabi icin SMTP baglantisi kurulamadi",
+          "/mail-accounts",
+          account.getTenantId(),
+          metadata);
+    } catch (Exception ex) {
+      log.error("MAIL_VERIFY_FAILED bildirimi tetiklenemedi: mailAccountId={}, hata={}",
+          account.getId(), ex.getMessage(), ex);
     }
   }
 

@@ -18,8 +18,10 @@ import com.cms.dto.EmailMessage;
 import com.cms.entity.EmailLog;
 import com.cms.entity.MailAccount;
 import com.cms.enums.EmailStatus;
+import com.cms.enums.NotificationType;
 import com.cms.repository.EmailLogRepository;
 import com.cms.service.IEmailQueueService;
+import com.cms.service.INotificationService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -38,6 +40,7 @@ public class EmailQueueService implements IEmailQueueService {
   private final EmailTemplateRenderer templateRenderer;
   private final ObjectMapper objectMapper;
   private final RabbitTemplate rabbitTemplate;
+  private final INotificationService notificationService;
 
   private static final int MAX_RETRY_COUNT = 3;
 
@@ -114,6 +117,7 @@ public class EmailQueueService implements IEmailQueueService {
           emailLog.setStatus(EmailStatus.FAILED);
           log.error("Mail FAILED durumuna alindi: logId={}, retryCount={}",
               emailLogId, emailLog.getRetryCount());
+          triggerEmailFailedNotification(emailLogId, message.getTenantId());
         } else {
           log.info("Mail yeniden kuyruga aliniyor: logId={}, deneme={}/{}",
               emailLogId, emailLog.getRetryCount(), MAX_RETRY_COUNT);
@@ -127,6 +131,22 @@ public class EmailQueueService implements IEmailQueueService {
       }
     } finally {
       TenantContext.clear();
+    }
+  }
+
+  private void triggerEmailFailedNotification(Long emailLogId, String tenantId) {
+    try {
+      Map<String, Object> metadata = new HashMap<>();
+      metadata.put("emailLogId", emailLogId);
+      notificationService.notifyAdminPlusUsers(
+          NotificationType.EMAIL_FAILED,
+          "E-posta gonderimi basarisiz",
+          "E-posta log #" + emailLogId + " FAILED durumuna alindi",
+          "/email-logs",
+          tenantId,
+          metadata);
+    } catch (Exception ex) {
+      log.error("EMAIL_FAILED bildirimi tetiklenemedi: logId={}, hata={}", emailLogId, ex.getMessage(), ex);
     }
   }
 

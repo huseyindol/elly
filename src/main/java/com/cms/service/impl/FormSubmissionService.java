@@ -23,9 +23,12 @@ import com.cms.exception.FormValidationException;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.exception.ValidationException;
 import com.cms.repository.FormSubmissionRepository;
+import com.cms.config.TenantContext;
+import com.cms.enums.NotificationType;
 import com.cms.service.IEmailService;
 import com.cms.service.IFormDefinitionService;
 import com.cms.service.IFormSubmissionService;
+import com.cms.service.INotificationService;
 import com.cms.service.form.ConditionEvaluator;
 import com.cms.service.form.FieldValidator;
 
@@ -57,6 +60,7 @@ public class FormSubmissionService implements IFormSubmissionService {
   private final ConditionEvaluator conditionEvaluator;
   private final List<FieldValidator> fieldValidators;
   private final IEmailService emailService;
+  private final INotificationService notificationService;
 
   @Override
   @Transactional
@@ -110,6 +114,8 @@ public class FormSubmissionService implements IFormSubmissionService {
       triggerNotification(formDefinition, saved);
     }
 
+    triggerInAppNotification(formDefinition, saved);
+
     return saved;
   }
 
@@ -129,6 +135,29 @@ public class FormSubmissionService implements IFormSubmissionService {
     }
     if (formDefinition.getRecipientEmail() == null || formDefinition.getRecipientEmail().isBlank()) {
       throw new ValidationException("recipientEmail bos olamaz");
+    }
+  }
+
+  private void triggerInAppNotification(FormDefinition formDefinition, FormSubmission submission) {
+    try {
+      String tenantId = TenantContext.getTenantId();
+      Map<String, Object> metadata = new LinkedHashMap<>();
+      metadata.put("formId", formDefinition.getId());
+      metadata.put("submissionId", submission.getId());
+      if (tenantId != null) {
+        metadata.put("tenantId", tenantId);
+      }
+
+      notificationService.notifyAdminPlusUsers(
+          NotificationType.FORM_SUBMISSION,
+          "Yeni form gonderimi",
+          formDefinition.getTitle() + " formuna yeni gonderim",
+          "/forms/" + formDefinition.getId() + "/submissions",
+          tenantId,
+          metadata);
+    } catch (Exception ex) {
+      log.error("Form in-app bildirimi tetiklenemedi: formId={}, submissionId={}, hata={}",
+          formDefinition.getId(), submission.getId(), ex.getMessage(), ex);
     }
   }
 

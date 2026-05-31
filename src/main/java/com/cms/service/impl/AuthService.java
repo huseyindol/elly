@@ -46,12 +46,14 @@ import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
 import com.cms.exception.ForbiddenException;
 import com.cms.exception.UnauthorizedException;
+import com.cms.enums.NotificationType;
 import com.cms.repository.MailAccountRepository;
 import com.cms.repository.RefreshTokenRepository;
 import com.cms.repository.RoleRepository;
 import com.cms.repository.UserRepository;
 import com.cms.service.IAuthService;
 import com.cms.service.IEmailService;
+import com.cms.service.INotificationService;
 import com.cms.util.JwtUtil;
 import com.cms.util.UserUtil;
 import com.cms.config.TenantContext;
@@ -72,6 +74,7 @@ public class AuthService implements IAuthService {
   private final RoleRepository roleRepository;
   private final MailAccountRepository mailAccountRepository;
   private final IEmailService emailService;
+  private final INotificationService notificationService;
   private final TotpService totpService;
   private final AesEncryptor aesEncryptor;
 
@@ -142,6 +145,8 @@ public class AuthService implements IAuthService {
 
       User savedUser = userRepository.save(user);
 
+      triggerUserRegisteredNotification(savedUser, tenantId);
+
       // Doğrulama e-postası gönder (hata olursa kayıt yine tamamlanır)
       sendVerificationEmail(savedUser, tenantId, verificationToken);
 
@@ -190,6 +195,24 @@ public class AuthService implements IAuthService {
       log.info("E-posta doğrulandı: {} (tenant: {})", user.getEmail(), tenantId);
     } finally {
       TenantContext.setTenantId(originalTenant);
+    }
+  }
+
+  private void triggerUserRegisteredNotification(User user, String tenantId) {
+    try {
+      Map<String, Object> metadata = new java.util.HashMap<>();
+      metadata.put("userId", user.getId());
+      metadata.put("username", user.getUsername());
+      notificationService.notifySuperAdminAndAdminUsers(
+          NotificationType.USER_REGISTERED,
+          "Yeni kullanici kaydi",
+          user.getUsername() + " (" + user.getEmail() + ") kayit oldu",
+          "/users",
+          tenantId,
+          metadata);
+    } catch (Exception ex) {
+      log.error("USER_REGISTERED bildirimi tetiklenemedi: userId={}, hata={}",
+          user.getId(), ex.getMessage(), ex);
     }
   }
 

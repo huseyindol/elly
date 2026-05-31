@@ -84,9 +84,9 @@ public class JwtTenantFilter extends OncePerRequestFilter {
       return normalized;
     }
 
-    // 2) Chat REST: X-Tenant-Id yoksa AC (basedb). TC için header zorunlu.
-    if (path.startsWith("/api/v1/chat/")) {
-      log.debug("Chat path without X-Tenant-Id, forcing basedb: {}", path);
+    // 2) Chat + Notifications REST: X-Tenant-Id yoksa basedb.
+    if (path.startsWith("/api/v1/chat/") || path.startsWith("/api/v1/notifications")) {
+      log.debug("Basedb-only path without X-Tenant-Id, forcing basedb: {}", path);
       return null;
     }
 

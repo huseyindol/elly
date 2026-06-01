@@ -309,6 +309,10 @@ public class ChatGroupService implements IChatGroupService {
     if (memberRepository.existsByIdGroupIdAndIdUserId(groupId, userId)) {
       return true;
     }
+    // Herkese açık TC grubu (tenantId + visitorAccess): tüm admin rolleri görebilir.
+    if (isPublicTenantGroup(group)) {
+      return true;
+    }
     int roleLevel = currentUserRoleLevel();
     if (group.getType() == ChatGroupType.DM) {
       return roleLevel >= 4;
@@ -320,11 +324,26 @@ public class ChatGroupService implements IChatGroupService {
     if (memberRepository.existsByIdGroupIdAndIdUserId(groupId, userId)) {
       return true;
     }
+    // Herkese açık TC grubu (tenantId + visitorAccess): tüm admin rolleri yazabilir.
+    if (isPublicTenantGroup(group)) {
+      return true;
+    }
     int roleLevel = currentUserRoleLevel();
     if (group.getType() == ChatGroupType.DM) {
       return roleLevel >= 4;
     }
     return roleLevel > group.getVisibilityLevel();
+  }
+
+  /**
+   * Herkese açık tenant chat (TC) grubu mu? tenantId dolu + visitorAccess=true.
+   * Bu gruplarda görünürlük/üyelik kuralı atlanır; tüm admin rolleri (ADMIN/EDITOR/VIEWER)
+   * görür ve yazar (kullanıcı tercihi: yalnızca herkese açık TC grupları).
+   */
+  private boolean isPublicTenantGroup(ChatGroup group) {
+    return group.getTenantId() != null
+        && !group.getTenantId().isBlank()
+        && group.isVisitorAccess();
   }
 
   /**

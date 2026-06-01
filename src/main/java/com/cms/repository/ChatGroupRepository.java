@@ -15,6 +15,7 @@ public interface ChatGroupRepository extends JpaRepository<ChatGroup, UUID> {
   @Query("""
       SELECT g FROM ChatGroup g
       WHERE g.visibilityLevel <= :roleLevel
+         OR (g.tenantId IS NOT NULL AND g.visitorAccess = true)
          OR EXISTS (
              SELECT 1 FROM ChatGroupMember m
              WHERE m.id.groupId = g.id AND m.id.userId = :userId

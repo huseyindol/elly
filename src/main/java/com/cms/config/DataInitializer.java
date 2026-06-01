@@ -115,14 +115,16 @@ public class DataInitializer implements CommandLineRunner {
     // SUPER_ADMIN — tüm izinler
     syncRole("SUPER_ADMIN", "Tam yetki - tüm servislere erişim", allPermSet);
 
-    // ADMIN — tüm izinler ama users:manage ve roles:* hariç
+    // ADMIN — tüm izinler ama roles:* hariç. Users alanında TAM yetki
+    // (users:read/update/manage). users:manage rol atamayı da açar ama assignRolesToUser
+    // hiyerarşi guard'ı sayesinde ADMIN kendi seviyesinden (3) yüksek rol (SUPER_ADMIN=4) atayamaz.
     Set<Permission> adminPerms = new HashSet<>();
     for (Permission p : allPermissions) {
-      if (!p.getName().startsWith("roles:") && !p.getName().equals("users:manage")) {
+      if (!p.getName().startsWith("roles:")) {
         adminPerms.add(p);
       }
     }
-    syncRole("ADMIN", "Panel yönetimi - içerik ve ayarlar", adminPerms);
+    syncRole("ADMIN", "Panel yönetimi, kullanıcı yönetimi ve ayarlar", adminPerms);
 
     // EDITOR — içerik modülleri + mail/emails/email_templates/rabbit (tam)
     //           + cache/tenants (sadece read) + users (read+update)

@@ -62,7 +62,7 @@ public class UserController extends BaseController implements IUserController {
     return ok(userService.getMyPermissions(username));
   }
 
-  // =============== Admin (SUPER_ADMIN only) ===============
+  // =============== Admin (users:manage gerektirir — SUPER_ADMIN + ADMIN) ===============
 
   @Override
   @GetMapping

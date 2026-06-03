@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -22,9 +23,12 @@ import lombok.extern.slf4j.Slf4j;
  * DataInitializer'dan (@Order(1)) sonra çalışır (@Order(2)).
  * Bu sayede v3'ten v4'e zero-downtime geçiş sağlanır: DB'de template yokken
  * classpath fallback devreye girer, seed sonrası DB'den okunur.
+ *
+ * <p>Kapalı varsayılan: {@code app.startup.email-template-seed=false}.
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "app.startup.email-template-seed", havingValue = "true")
 @RequiredArgsConstructor
 @Order(2)
 public class EmailTemplateBootstrapRunner implements ApplicationRunner {

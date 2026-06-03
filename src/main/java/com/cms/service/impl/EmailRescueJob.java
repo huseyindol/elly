@@ -32,11 +32,10 @@ public class EmailRescueJob {
   private static final long FIVE_MINUTES_MS = 5 * 60 * 1000L;
 
   /**
-   * 5 dakikada bir çalışır.
-   * Her tenant için ayrı ayrı: PENDING durumda olan ve 5 dakikadan eski
-   * mailleri bulur ve tekrar RabbitMQ kuyruğuna gönderir.
+   * PENDING ve 5 dakikadan eski mailleri kuyruga alir.
+   * {@code initialDelay} ile ilk calisma startup'tan sonra — acilista email_logs SELECT yok.
    */
-  @Scheduled(fixedRate = 300000)
+  @Scheduled(fixedRate = 300000, initialDelay = 300000)
   public void rescueStuckEmails() {
     for (String tenantId : tenantDataSourceProperties.getDatasources().keySet()) {
       TenantContext.setTenantId(tenantId);

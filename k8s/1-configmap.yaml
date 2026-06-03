@@ -62,7 +62,8 @@ data:
   # sifrelenmis halde DB'de durur, run-time'da decrypt edilir. ConfigMap'te
   # non-sensitive mail ayari yoktur; default/fallback kullanilmaz.
 
-  # --- Zipkin Tracing ---
+  # --- Zipkin Tracing (zipkin pod yoksa false birak) ---
+  MANAGEMENT_TRACING_ENABLED: "false"
   ZIPKIN_URL: "http://zipkin:9411"
 
   # --- Logging ---

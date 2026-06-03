@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,8 +27,11 @@ import org.springframework.beans.factory.annotation.Value;
  * Uygulama başladığında varsayılan roller, izinler ve
  * mevcut kullanıcılara SUPER_ADMIN rolü atar.
  * Sadece veritabanında ilgili veriler yoksa oluşturur (idempotent).
+ *
+ * <p>Kapalı varsayılan: {@code app.startup.rbac-seed=false}. DB hazırsa startup'ta çalışmaz.
  */
 @Component
+@ConditionalOnProperty(name = "app.startup.rbac-seed", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 @Order(1)

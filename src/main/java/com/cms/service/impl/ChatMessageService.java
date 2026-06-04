@@ -20,6 +20,7 @@ import com.cms.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,12 @@ public class ChatMessageService implements IChatMessageService {
   private final ChatGroupService groupService;
   private final UserRepository userRepository;
   private final ChatMapper chatMapper;
+  /**
+   * Kendi proxy'si — lookupAdminUsername'in {@code REQUIRES_NEW}'i self-invocation'da
+   * etkisiz kalmasın diye Spring proxy üzerinden çağrılır. Aksi halde OSIV'in tenant DB'ye
+   * pinlediği bağlantı kullanılır ve admin username yanlış DB'den (tenant) okunur.
+   */
+  private final ObjectProvider<ChatMessageService> selfProvider;
 
   @Value("${chat.message.max-length:4000}")
   private int maxMessageLength;
@@ -216,8 +223,9 @@ public class ChatMessageService implements IChatMessageService {
       visitorIdentityRepository.findById(msg.getVisitorId())
           .ifPresent(v -> dto.setSenderUsername(v.getDisplayName()));
     } else if (msg.getSenderId() != null) {
-      // Admin sender — basedb'den çek (TC group'unda TenantContext tenant'a set olabilir)
-      String adminUsername = lookupAdminUsername(msg.getSenderId());
+      // Admin sender — basedb'den çek (TC group'unda TenantContext tenant'a set olabilir).
+      // Self-proxy ÜZERİNDEN çağrı: REQUIRES_NEW etkili olsun, OSIV tenant pin'i bypass edilsin.
+      String adminUsername = selfProvider.getObject().lookupAdminUsername(msg.getSenderId());
       dto.setSenderUsername(adminUsername);
     }
     return dto;

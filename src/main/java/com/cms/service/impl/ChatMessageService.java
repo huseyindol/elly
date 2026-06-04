@@ -57,13 +57,16 @@ public class ChatMessageService implements IChatMessageService {
 
   @Override
   @Transactional
-  public DtoChatMessage saveMessage(UUID groupId, Long senderId, DtoChatMessageSend dto) {
+  public DtoChatMessage saveMessage(UUID groupId, Long senderId, String senderUsername, DtoChatMessageSend dto) {
     groupService.checkWriteAccess(groupId, senderId);
 
     ChatMessage msg = buildBaseMessage(groupId, dto);
     msg.setSenderType(ChatMessageSenderType.ADMIN);
     msg.setSenderId(senderId);
     msg.setVisitorId(null);
+    // Admin gönderen adı YAZARKEN (bellekteki principal'dan) denormalize edilir → okumada
+    // cross-DB lookup (OSIV ile tenant'a pinlenir, yanlış DB'den okur) gerekmez.
+    msg.setSenderDisplayName(senderUsername);
     msg = messageRepository.save(msg);
 
     return toDto(msg);
@@ -223,9 +226,11 @@ public class ChatMessageService implements IChatMessageService {
       visitorIdentityRepository.findById(msg.getVisitorId())
           .ifPresent(v -> dto.setSenderUsername(v.getDisplayName()));
     } else if (msg.getSenderId() != null) {
-      // Admin sender — basedb'den çek (TC group'unda TenantContext tenant'a set olabilir).
-      // Self-proxy ÜZERİNDEN çağrı: REQUIRES_NEW etkili olsun, OSIV tenant pin'i bypass edilsin.
-      String adminUsername = selfProvider.getObject().lookupAdminUsername(msg.getSenderId());
+      // Admin sender: yazarken denormalize edilen isim (DB lookup yok → OSIV sorunu yok).
+      // Eski mesajlarda (sender_display_name boş) basedb lookup'a fallback.
+      String adminUsername = msg.getSenderDisplayName() != null
+          ? msg.getSenderDisplayName()
+          : selfProvider.getObject().lookupAdminUsername(msg.getSenderId());
       dto.setSenderUsername(adminUsername);
     }
     return dto;

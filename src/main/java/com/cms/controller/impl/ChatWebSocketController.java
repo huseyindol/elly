@@ -49,6 +49,7 @@ public class ChatWebSocketController {
       @Payload DtoChatMessageSend payload,
       SimpMessageHeaderAccessor headerAccessor) {
     Long userId = resolveUserId(headerAccessor);
+    String username = resolveUsername(headerAccessor);
     rateLimitService.checkRateLimit(userId);
     String sessionTenant = resolveOptionalSessionTenant(headerAccessor);
 
@@ -57,7 +58,7 @@ public class ChatWebSocketController {
     try {
       DtoChatMessage saved;
       try {
-        saved = messageService.saveMessage(groupId, userId, payload);
+        saved = messageService.saveMessage(groupId, userId, username, payload);
       } catch (ForbiddenException e) {
         // Eski AC grupları JWT tenantId varken yanlışlıkla tenant DB'ye yazılmış olabilir
         if (sessionTenant == null || sessionTenant.isBlank()) {
@@ -66,7 +67,7 @@ public class ChatWebSocketController {
         log.debug("AC send denied on basedb for group {}, retrying tenant {}", groupId, sessionTenant);
         TenantContext.setTenantId(sessionTenant);
         activeTenant = sessionTenant;
-        saved = messageService.saveMessage(groupId, userId, payload);
+        saved = messageService.saveMessage(groupId, userId, username, payload);
       }
       messagingTemplate.convertAndSend(ChatTopics.messageTopic(activeTenant, groupId), saved);
       log.debug("AC message sent to group {} by user {} (tenant={})", groupId, userId, activeTenant);
@@ -97,8 +98,9 @@ public class ChatWebSocketController {
         log.debug("TC guest message sent to tenant={} group={} session={}", tenantId, groupId, sessionId);
       } else {
         Long userId = resolveUserId(headerAccessor);
+        String username = resolveUsername(headerAccessor);
         rateLimitService.checkRateLimit(userId);
-        saved = messageService.saveMessage(groupId, userId, payload);
+        saved = messageService.saveMessage(groupId, userId, username, payload);
         log.debug("TC message sent to tenant={} group={} by user={}", tenantId, groupId, userId);
       }
       messagingTemplate.convertAndSend(ChatTopics.messageTopic(tenantId, groupId), saved);

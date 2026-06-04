@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface IChatMessageService {
 
-  DtoChatMessage saveMessage(UUID groupId, Long senderId, DtoChatMessageSend dto);
+  DtoChatMessage saveMessage(UUID groupId, Long senderId, String senderUsername, DtoChatMessageSend dto);
 
   /** Kayıtlı tenant user (VISITOR) mesajı. */
   DtoChatMessage saveVisitorMessage(UUID groupId, Long visitorId, DtoChatMessageSend dto);

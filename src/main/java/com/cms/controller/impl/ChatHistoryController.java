@@ -58,7 +58,7 @@ public class ChatHistoryController implements IChatHistoryController {
     Long userId = getCurrentUserId();
     rateLimitService.checkRateLimit(userId);
 
-    DtoChatMessage saved = messageService.saveMessage(groupId, userId, payload);
+    DtoChatMessage saved = messageService.saveMessage(groupId, userId, getCurrentUsername(), payload);
 
     // Topic'i belirlemek için group'u oku (aynı DB context'te)
     ChatGroup group = chatGroupRepository.findById(groupId)
@@ -116,5 +116,15 @@ public class ChatHistoryController implements IChatHistoryController {
       return principal.getUserId();
     }
     throw new UnauthorizedException("Cannot resolve user identity");
+  }
+
+  /** Gönderen adı — mesaja senderDisplayName olarak denormalize edilir (DB lookup'sız). */
+  private String getCurrentUsername() {
+    var auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth != null
+        && auth.getPrincipal() instanceof JwtAuthenticationFilter.CachedUserPrincipal principal) {
+      return principal.getUsername();
+    }
+    return null;
   }
 }

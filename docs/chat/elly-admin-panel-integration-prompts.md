@@ -2794,8 +2794,9 @@ npm i qrcode.react      # QR render (veya mevcut bir QR bileşeni)
 > sohbetinde guest/visitor'ı **banlayabilir / ban kaldırabilir**; banlı kişi sohbeti
 > **görür ama yazamaz** (gönderim backend'de `CHAT_BANNED` ile reddedilir).
 >
-> **Panel + tenant/widget frontend prompt'ları ayrı dosyada:**
-> [`docs/chat/chat-ban-feature-prompt.md`](./chat-ban-feature-prompt.md)
+> **Frontend prompt'ları (her proje ayrı dosya):**
+> - Panel: [`docs/chat/chat-ban-panel-prompt.md`](./chat-ban-panel-prompt.md)
+> - Tenant/widget: [`docs/chat/chat-ban-tenant-prompt.md`](./chat-ban-tenant-prompt.md)
 >
 > Özet sözleşme:
 > - REST (X-Tenant-Id): `POST/DELETE /api/v1/chat/groups/{id}/bans` (chat:manage),

@@ -2,6 +2,8 @@ package com.cms.controller;
 
 import com.cms.dto.DtoChatGroup;
 import com.cms.dto.DtoChatGroupAccess;
+import com.cms.dto.DtoChatBan;
+import com.cms.dto.DtoChatBanRequest;
 import com.cms.dto.DtoChatGroupCreate;
 import com.cms.dto.DtoChatMember;
 import com.cms.entity.RootEntityResponse;
@@ -41,4 +43,13 @@ public interface IChatGroupController {
 
   @Operation(summary = "Grubu sil")
   ResponseEntity<Void> deleteGroup(UUID groupId);
+
+  @Operation(summary = "TC: guest/visitor banla (yazma engeli — okuma serbest)")
+  ResponseEntity<RootEntityResponse<DtoChatBan>> banUser(UUID groupId, DtoChatBanRequest request);
+
+  @Operation(summary = "TC: ban kaldır (sessionId VEYA visitorId)")
+  ResponseEntity<Void> unbanUser(UUID groupId, UUID sessionId, Long visitorId);
+
+  @Operation(summary = "TC: gruptaki aktif ban listesi")
+  ResponseEntity<RootEntityResponse<List<DtoChatBan>>> listBans(UUID groupId);
 }

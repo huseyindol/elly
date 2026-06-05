@@ -13,6 +13,7 @@ import com.cms.repository.ChatMessageEditRepository;
 import com.cms.repository.ChatMessageReadRepository;
 import com.cms.repository.ChatMessageRepository;
 import com.cms.repository.VisitorIdentityRepository;
+import com.cms.service.IChatBanService;
 import com.cms.service.IChatMessageService;
 import com.cms.exception.ForbiddenException;
 import com.cms.exception.ResourceNotFoundException;
@@ -48,6 +49,7 @@ public class ChatMessageService implements IChatMessageService {
    * pinlediği bağlantı kullanılır ve admin username yanlış DB'den (tenant) okunur.
    */
   private final ObjectProvider<ChatMessageService> selfProvider;
+  private final IChatBanService chatBanService;
 
   @Value("${chat.message.max-length:4000}")
   private int maxMessageLength;
@@ -82,6 +84,9 @@ public class ChatMessageService implements IChatMessageService {
     if (!visitorIdentityRepository.existsById(visitorId)) {
       throw new ResourceNotFoundException("VisitorIdentity not found: " + visitorId);
     }
+    if (chatBanService.isVisitorBanned(groupId, visitorId)) {
+      throw new ForbiddenException("Bu sohbette yazma yetkiniz kaldırıldı", "CHAT_BANNED");
+    }
 
     ChatMessage msg = buildBaseMessage(groupId, dto);
     msg.setSenderType(ChatMessageSenderType.VISITOR);
@@ -102,12 +107,16 @@ public class ChatMessageService implements IChatMessageService {
   public DtoChatMessage saveGuestMessage(UUID groupId, String sessionId, String displayName,
       DtoChatMessageSend dto) {
     groupService.checkGuestWriteAccess(groupId);
+    UUID sid = UUID.fromString(sessionId);
+    if (chatBanService.isGuestBanned(groupId, sid)) {
+      throw new ForbiddenException("Bu sohbette yazma yetkiniz kaldırıldı", "CHAT_BANNED");
+    }
 
     ChatMessage msg = buildBaseMessage(groupId, dto);
     msg.setSenderType(ChatMessageSenderType.GUEST);
     msg.setSenderId(null);
     msg.setVisitorId(null);
-    msg.setSessionId(UUID.fromString(sessionId));
+    msg.setSessionId(sid);
     msg.setSenderDisplayName(displayName);
     msg = messageRepository.save(msg);
 

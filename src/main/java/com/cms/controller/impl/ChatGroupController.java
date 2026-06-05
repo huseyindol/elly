@@ -1,11 +1,14 @@
 package com.cms.controller.impl;
 
 import com.cms.controller.IChatGroupController;
+import com.cms.dto.DtoChatBan;
+import com.cms.dto.DtoChatBanRequest;
 import com.cms.dto.DtoChatGroup;
 import com.cms.dto.DtoChatGroupAccess;
 import com.cms.dto.DtoChatGroupCreate;
 import com.cms.dto.DtoChatMember;
 import com.cms.dto.DtoChatMembershipEvent;
+import com.cms.service.IChatBanService;
 import com.cms.service.IChatGroupService;
 import com.cms.service.ChatMembershipNotifier;
 import com.cms.entity.RootEntityResponse;
@@ -27,6 +30,7 @@ import java.util.UUID;
 public class ChatGroupController implements IChatGroupController {
 
   private final IChatGroupService groupService;
+  private final IChatBanService banService;
   private final ChatMembershipNotifier membershipNotifier;
   private final SimpMessagingTemplate messagingTemplate;
 
@@ -120,6 +124,35 @@ public class ChatGroupController implements IChatGroupController {
     return ResponseEntity.noContent().build();
   }
 
+  // =============== TC Ban (yazma engeli — okuma serbest; EDITOR+ = chat:manage) ===============
+
+  @Override
+  @PostMapping("/groups/{groupId}/bans")
+  @PreAuthorize("hasAuthority('chat:manage')")
+  public ResponseEntity<RootEntityResponse<DtoChatBan>> banUser(
+      @PathVariable UUID groupId, @RequestBody DtoChatBanRequest request) {
+    DtoChatBan ban = banService.ban(groupId, request, getCurrentUserId(), getCurrentUsername());
+    return ResponseEntity.status(HttpStatus.CREATED).body(RootEntityResponse.ok(ban));
+  }
+
+  @Override
+  @DeleteMapping("/groups/{groupId}/bans")
+  @PreAuthorize("hasAuthority('chat:manage')")
+  public ResponseEntity<Void> unbanUser(
+      @PathVariable UUID groupId,
+      @RequestParam(required = false) UUID sessionId,
+      @RequestParam(required = false) Long visitorId) {
+    banService.unban(groupId, sessionId, visitorId, getCurrentUserId());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  @GetMapping("/groups/{groupId}/bans")
+  @PreAuthorize("hasAuthority('chat:read')")
+  public ResponseEntity<RootEntityResponse<List<DtoChatBan>>> listBans(@PathVariable UUID groupId) {
+    return ResponseEntity.ok(RootEntityResponse.ok(banService.listBans(groupId)));
+  }
+
   private Long getCurrentUserId() {
     var auth = SecurityContextHolder.getContext().getAuthentication();
     if (auth == null || auth.getPrincipal() == null) {
@@ -129,5 +162,15 @@ public class ChatGroupController implements IChatGroupController {
       return principal.getUserId();
     }
     throw new UnauthorizedException("Cannot resolve user identity");
+  }
+
+  /** Ban kaydında banlayan admin adını denormalize etmek için (bellekteki principal). */
+  private String getCurrentUsername() {
+    var auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth != null
+        && auth.getPrincipal() instanceof com.cms.config.JwtAuthenticationFilter.CachedUserPrincipal principal) {
+      return principal.getUsername();
+    }
+    return null;
   }
 }

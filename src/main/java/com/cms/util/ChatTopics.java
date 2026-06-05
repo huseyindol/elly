@@ -48,6 +48,11 @@ public final class ChatTopics {
     return messageTopic(tenantId, groupId) + "/read";
   }
 
+  /** Ban/unban olayları (TC). Guest kendi sessionId'siyle eşleşince input'unu kilitler. */
+  public static String banTopic(String tenantId, UUID groupId) {
+    return messageTopic(tenantId, groupId) + "/bans";
+  }
+
   /** Kullanıcı gruba davet edildiğinde kişisel topic (legacy — plain DtoChatGroup). */
   public static String userGroupJoinedTopic(Long userId) {
     return "/topic/user/" + userId + "/groups/joined";

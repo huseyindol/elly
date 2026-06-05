@@ -2788,6 +2788,24 @@ npm i qrcode.react      # QR render (veya mevcut bir QR bileşeni)
 
 ---
 
+## Prompt 11 — Chat Ban (TC yazma engeli) → AYRI DOSYA
+
+> Backend HAZIR (commit `c1837a9`). SUPER_ADMIN/ADMIN/EDITOR (`chat:manage`) bir TC
+> sohbetinde guest/visitor'ı **banlayabilir / ban kaldırabilir**; banlı kişi sohbeti
+> **görür ama yazamaz** (gönderim backend'de `CHAT_BANNED` ile reddedilir).
+>
+> **Panel + tenant/widget frontend prompt'ları ayrı dosyada:**
+> [`docs/chat/chat-ban-feature-prompt.md`](./chat-ban-feature-prompt.md)
+>
+> Özet sözleşme:
+> - REST (X-Tenant-Id): `POST/DELETE /api/v1/chat/groups/{id}/bans` (chat:manage),
+>   `GET .../bans` (chat:read). Body `{ sessionId? | visitorId?, reason? }`.
+> - WS: `/topic/tenant/{tid}/group/{gid}/bans` → `{ action: BANNED|UNBANNED, sessionId, visitorId, byUsername }`.
+> - Panel: mesajda ban/unban menüsü + "banlı" rozeti. Tenant/widget: kendi sessionId'in
+>   banlanınca composer kilitlenir.
+
+---
+
 ## Prompt'ları Kullanırken İpuçları
 
 1. **Prompt 0'ı mutlaka ilk çalıştır** — agent'ın stack'i bilmeden yazdığı

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.cms.config.TenantContext;
 import com.cms.exception.BadRequestException;
 import com.cms.service.IFileService;
 
@@ -22,6 +23,29 @@ public class FileService implements IFileService {
   private String uploadDirectory;
   @Value("${file.upload.directory.files:uploads/assets}")
   private String uploadDirectoryFiles;
+  @Value("${app.tenants.default-tenant:basedb}")
+  private String defaultTenant;
+
+  /** Served + PVC kökü (WebConfig: /assets/** → file:assets/). Tenant izolasyonu bunun altında. */
+  private static final String ASSETS_ROOT = "assets";
+  private static final String TENANT_DIR = "t";
+
+  /** Geçerli tenant'ı path-safe segment'e çevirir (null → basedb). Path traversal koruması. */
+  private String currentTenant() {
+    String t = TenantContext.getTenantId();
+    if (t == null || t.isBlank()) {
+      t = defaultTenant;
+    }
+    return t.replaceAll("[^a-zA-Z0-9_-]", "_");
+  }
+
+  /** Subfolder güvenliği: ".." temizliği + baş/son slash. */
+  private String safeSub(String subfolder) {
+    if (subfolder == null) {
+      return "";
+    }
+    return subfolder.replace("\\", "/").replaceAll("\\.\\.", "").replaceAll("^/+|/+$", "");
+  }
 
   @Override
   @Transactional
@@ -35,30 +59,29 @@ public class FileService implements IFileService {
     }
 
     try {
-      // Klasör yolu oluştur
-      Path uploadPath = Paths.get(uploadDirectory, subfolder != null ? subfolder : "");
-
-      // Klasör yoksa oluştur
+      // Tenant izolasyonu: assets/t/{tenant}/images/{subfolder}
+      String tenant = currentTenant();
+      String sub = safeSub(subfolder);
+      Path uploadPath = Paths.get(ASSETS_ROOT, TENANT_DIR, tenant, "images");
+      if (!sub.isEmpty()) {
+        uploadPath = uploadPath.resolve(sub);
+      }
       if (!Files.exists(uploadPath)) {
         Files.createDirectories(uploadPath);
       }
 
-      // Benzersiz dosya adı oluştur
-      String originalFilename = file.getOriginalFilename();
-      String extension = getFileExtension(originalFilename);
-      String filename = UUID.randomUUID().toString() + extension;
+      String extension = getFileExtension(file.getOriginalFilename());
+      String filename = UUID.randomUUID().toString() + (extension != null ? extension : "");
 
-      // Dosyayı kaydet
       Path filePath = uploadPath.resolve(filename);
       Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-      // DB'de saklanacak yol: assets/images/{subfolder}/{filename}
-      String dbPath = "assets/images";
-      if (subfolder != null && !subfolder.isEmpty()) {
-        dbPath += "/" + subfolder;
+      // DB yolu = served root'a göre relative (= FS yolu)
+      String dbPath = ASSETS_ROOT + "/" + TENANT_DIR + "/" + tenant + "/images";
+      if (!sub.isEmpty()) {
+        dbPath += "/" + sub;
       }
       dbPath += "/" + filename;
-
       return dbPath;
     } catch (IOException e) {
       throw new BadRequestException("Failed to save image file", e);
@@ -93,28 +116,26 @@ public class FileService implements IFileService {
     }
 
     try {
-      // Klasör yolu oluştur
-      Path uploadPath = Paths.get(uploadDirectoryFiles, subfolder != null ? subfolder : "");
-
-      // Klasör yoksa oluştur
+      // Tenant izolasyonu: assets/t/{tenant}/files/{subfolder}
+      String tenant = currentTenant();
+      String sub = safeSub(subfolder);
+      Path uploadPath = Paths.get(ASSETS_ROOT, TENANT_DIR, tenant, "files");
+      if (!sub.isEmpty()) {
+        uploadPath = uploadPath.resolve(sub);
+      }
       if (!Files.exists(uploadPath)) {
         Files.createDirectories(uploadPath);
       }
 
-      // Benzersiz dosya adı oluştur
       String originalFilename = file.getOriginalFilename();
-
-      // Dosyayı kaydet
       Path filePath = uploadPath.resolve(originalFilename);
       Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-      // DB'de saklanacak yol: assets/{subfolder}/{filename}
-      String dbPath = "assets";
-      if (subfolder != null && !subfolder.isEmpty()) {
-        dbPath += "/" + subfolder;
+      String dbPath = ASSETS_ROOT + "/" + TENANT_DIR + "/" + tenant + "/files";
+      if (!sub.isEmpty()) {
+        dbPath += "/" + sub;
       }
       dbPath += "/" + originalFilename;
-
       return dbPath;
     } catch (IOException e) {
       throw new BadRequestException("Failed to save file", e);

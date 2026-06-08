@@ -15,9 +15,14 @@ import org.springframework.web.multipart.MultipartFile;
 import com.cms.config.TenantContext;
 import com.cms.exception.BadRequestException;
 import com.cms.service.IFileService;
+import com.cms.service.IStorageQuotaService;
+import lombok.RequiredArgsConstructor;
 
 @Service
+@RequiredArgsConstructor
 public class FileService implements IFileService {
+
+  private final IStorageQuotaService storageQuotaService;
 
   @Value("${file.upload.directory:uploads/assets/images}")
   private String uploadDirectory;
@@ -47,6 +52,13 @@ public class FileService implements IFileService {
     return subfolder.replace("\\", "/").replaceAll("\\.\\.", "").replaceAll("^/+|/+$", "");
   }
 
+  /** Yalnız kota-izlenen (assets/t/{tenant}/...) dosya silinince kullanımı düşür. */
+  private void untrackIfTenantScoped(String dbPath, long size) {
+    if (size > 0 && dbPath != null && dbPath.startsWith(ASSETS_ROOT + "/" + TENANT_DIR + "/")) {
+      storageQuotaService.removeUsage(size);
+    }
+  }
+
   @Override
   @Transactional
   public String saveImage(MultipartFile file, String subfolder) {
@@ -57,6 +69,7 @@ public class FileService implements IFileService {
     if (!isImageFile(file)) {
       throw new BadRequestException("File is not an image");
     }
+    storageQuotaService.ensureWithin(file.getSize());
 
     try {
       // Tenant izolasyonu: assets/t/{tenant}/images/{subfolder}
@@ -75,6 +88,7 @@ public class FileService implements IFileService {
 
       Path filePath = uploadPath.resolve(filename);
       Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+      storageQuotaService.addUsage(file.getSize());
 
       // DB yolu = served root'a göre relative (= FS yolu)
       String dbPath = ASSETS_ROOT + "/" + TENANT_DIR + "/" + tenant + "/images";
@@ -96,13 +110,13 @@ public class FileService implements IFileService {
     }
 
     try {
-      // DB'deki yol: assets/images/... -> uploads/assets/images/...
       String actualPath = filePath.replace("assets/images", uploadDirectory);
       Path path = Paths.get(actualPath);
-
+      long size = Files.exists(path) ? Files.size(path) : 0L;
       if (Files.exists(path)) {
         Files.delete(path);
       }
+      untrackIfTenantScoped(filePath, size);
     } catch (IOException e) {
       throw new BadRequestException("Failed to delete image file", e);
     }
@@ -114,6 +128,7 @@ public class FileService implements IFileService {
     if (file == null || file.isEmpty()) {
       throw new BadRequestException("File is empty or null");
     }
+    storageQuotaService.ensureWithin(file.getSize());
 
     try {
       // Tenant izolasyonu: assets/t/{tenant}/files/{subfolder}
@@ -130,6 +145,7 @@ public class FileService implements IFileService {
       String originalFilename = file.getOriginalFilename();
       Path filePath = uploadPath.resolve(originalFilename);
       Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+      storageQuotaService.addUsage(file.getSize());
 
       String dbPath = ASSETS_ROOT + "/" + TENANT_DIR + "/" + tenant + "/files";
       if (!sub.isEmpty()) {
@@ -146,13 +162,13 @@ public class FileService implements IFileService {
   @Transactional
   public void deleteFile(String filePath) {
     try {
-      // DB'deki yol: assets/images/... -> uploads/assets/images/...
       String actualPath = filePath.replace("assets", uploadDirectoryFiles);
       Path path = Paths.get(actualPath);
-
+      long size = Files.exists(path) ? Files.size(path) : 0L;
       if (Files.exists(path)) {
         Files.delete(path);
       }
+      untrackIfTenantScoped(filePath, size);
     } catch (IOException e) {
       throw new BadRequestException("Failed to delete file", e);
     }

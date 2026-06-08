@@ -166,3 +166,10 @@ jobs:
 
             # Pod durumlarını göster
             sudo kubectl get pods -n elly -l component=backend
+
+            # 🧹 Kullanılmayan eski imajları temizle — her deploy yeni 231MB imaj üretiyor;
+            # eskiler birikip disk'i dolduruyordu. Imajlar GHCR'da kaldığı için rollback
+            # (rollback.yml / kubectl rollout undo) etkilenmez — gerekirse k8s tekrar pull eder.
+            echo "🧹 Pruning unused images..."
+            sudo k3s crictl rmi --prune 2>/dev/null || true
+            sudo df -h / | tail -1

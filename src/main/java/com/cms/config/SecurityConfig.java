@@ -143,6 +143,9 @@ public class SecurityConfig {
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers(HttpMethod.GET, "/api/v1/public/**").permitAll()
+            // Yuklenen medya (assets) public OKUNUR — CMS gorselleri tarayicidan/tenant
+            // sitelerinden token'sız erisilir. Yukleme yine auth'lu endpoint'lerden yapilir.
+            .requestMatchers(HttpMethod.GET, "/assets/**").permitAll()
             // POST/PUT/DELETE: PublicApiFilter icindeki ALLOWED_WRITE_ENDPOINTS allowlist'i
             // hangi yazma endpoint'lerine izin verilecegini belirler; eslesmeyenler 405 doner.
             .requestMatchers(HttpMethod.POST, "/api/v1/public/**").permitAll()

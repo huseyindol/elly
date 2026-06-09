@@ -34,14 +34,14 @@ public class StorageQuotaController extends BaseController implements IStorageQu
 
   @Override
   @PutMapping("/quota/limit")
-  @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN','ROLE_ADMIN')")
+  @PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
   public RootEntityResponse<DtoStorageQuota> setLimit(@RequestBody DtoStorageQuotaLimitRequest request) {
     return ok(quotaService.setLimit(request.getLimitBytes()));
   }
 
   @Override
   @PostMapping("/quota/recompute")
-  @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN','ROLE_ADMIN')")
+  @PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
   public RootEntityResponse<DtoStorageQuota> recompute() {
     return ok(quotaService.recompute());
   }

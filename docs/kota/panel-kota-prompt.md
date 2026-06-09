@@ -21,8 +21,8 @@ Header yoksa backend `basedb` bağlamında çalışır.
 | İşlem | Method + Path | Auth | Body | data |
 |---|---|---|---|---|
 | Kullanım | `GET /api/v1/storage/quota` | authenticated | — | `StorageQuota` |
-| Limit ayarla | `PUT /api/v1/storage/quota/limit` | SUPER_ADMIN/ADMIN | `{ limitBytes }` | `StorageQuota` |
-| Yeniden hesapla | `POST /api/v1/storage/quota/recompute` | SUPER_ADMIN/ADMIN | — | `StorageQuota` |
+| Limit ayarla | `PUT /api/v1/storage/quota/limit` | SUPER_ADMIN | `{ limitBytes }` | `StorageQuota` |
+| Yeniden hesapla | `POST /api/v1/storage/quota/recompute` | SUPER_ADMIN | — | `StorageQuota` |
 
 ```ts
 interface StorageQuota {
@@ -93,7 +93,7 @@ yukarıda.
 3. **Kullanım çubuğu** (içerik/assets sayfasında veya ayarlar):
    - `usedBytes / limitBytes` → progress bar + "X.X GB / Y.Y GB (%Z)". Byte→insan-okur format helper'ı.
    - `usedPercent > 80` → turuncu, `> 95` → kırmızı.
-4. **Limit ayarı** (yalnız SUPER_ADMIN/ADMIN — `usePermission`/role ile gate):
+4. **Limit ayarı** (yalnız SUPER_ADMIN — `usePermission`/role ile gate):
    - GB cinsinden input → `limitBytes = gb * 1024^3` → `setQuotaLimit`. Başarıda quota'yı invalidate et.
    - "Yeniden hesapla" butonu → `recomputeQuota` (drift onarımı).
 5. **413 yakalama:** Tüm dosya upload servislerinde (assets/banners...) yanıt `status === 413` /

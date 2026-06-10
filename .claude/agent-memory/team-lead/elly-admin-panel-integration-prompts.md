@@ -1269,7 +1269,7 @@ export const formsKeys = {
 
 ## Prompt 7 — Chat (Admin Chat + Tenant Chat, polymorphic sender)
 
-**Ön koşul:** Prompt 1 tamam (http client `X-Tenant-Id` header'ını destekliyor olmalı — aksi halde aşağıdaki client wrapper'da elle eklersin). Backend chat-tenant-aware migration uygulanmış olmalı.
+**Ön koşul:** Prompt 1 tamam. Backend chat-tenant-aware migration uygulanmış olmalı.
 
 ```
 elly-admin-panel'e "Chat" admin sayfası ekle. CMS'in iki chat domain'i var:
@@ -1281,7 +1281,7 @@ elly-admin-panel'e "Chat" admin sayfası ekle. CMS'in iki chat domain'i var:
 
 Tek bir chat module'ünden ikisini de yönet. Frontend'in işi:
   1) AC ve TC group'larını ayrı listelemek (rozetlerle)
-  2) TC group'una giderken X-Tenant-Id header'ını set etmek
+  2) TC group'una giderken tenant-switch token kullanmak (bkz. TC erişimi notu)
   3) WebSocket subscribe'ında tenant-aware topic'i kullanmak
   4) Mesaj render'ında sender_type'a göre admin/visitor rozetini göstermek
 
@@ -1318,7 +1318,7 @@ CMS Response body alanları:
 ## Bağlam — CMS Endpoint'leri
 
 REST (auth: admin JWT):
-  GET    /api/v1/chat/groups                          → SEÇİLİ KAPSAMIN (X-Tenant-Id) görünür group'ları
+  GET    /api/v1/chat/groups                          → SEÇİLİ KAPSAMIN görünür group'ları (AC: admin JWT; TC: tenant-switch token)
   POST   /api/v1/chat/groups                          → yeni group (body: name, description,
                                                          memberIds[], tenantId?, visitorAccess?)
   GET    /api/v1/chat/groups/{groupId}                → group detay
@@ -1335,21 +1335,19 @@ REST (auth: admin JWT):
   DELETE /api/v1/chat/messages/{messageId}            → sil (soft delete)
   POST   /api/v1/chat/files (multipart)               → dosya yükle
 
-**X-Tenant-Id header (kritik) — KAPSAM (scope) modeli:**
-  TÜM `/api/v1/chat/*` istekleri X-Tenant-Id'ye göre kapsamlanır:
-  - header YOK → basedb (AC: admin-admin chat)
-  - X-Tenant-Id: {tenantId} → o tenant DB'si (TC: website/ziyaretçi grupları)
+**TC erişimi — panel tenant-switch token kullanır:**
+  Panel, TC grubu seçildiğinde `POST /api/v1/tenants/token` ile tenantId içeren JWT alır.
+  Bu JWT'yi Authorization header'ında göndererek `/api/v1/tenant-chat/**` endpoint'lerine
+  erişir. `X-Tenant-Id` header göndermek GEREKMEZ.
 
-  Bu yüzden **grup LİSTESİ de kapsamlıdır** — `GET /api/v1/chat/groups`:
-  - header yok → AC grupları
-  - X-Tenant-Id: tenant1 → tenant1 TC grupları
-  ⚠️ Tek çağrı TÜM tenant'ları birden DÖNDÜRMEZ (her tenant ayrı DB; backend
-  X-Tenant-Id modeline geçti — cross-tenant aggregate YOK).
+  AC istekleri: `/api/v1/chat/**` — admin JWT, header yok → basedb (değişmedi).
+  TC istekleri: `/api/v1/tenant-chat/**` — tenant-switch JWT → JWT'den tenantId okunur.
+
+  ⚠️ Tek çağrı TÜM tenant'ları birden DÖNDÜRMEZ (her tenant ayrı DB — cross-tenant aggregate YOK).
 
   → Panel'de bir **KAPSAM SEÇİCİ** olmalı: `AC | tenant1 | tenant2 | …`. Seçilen
-    kapsam X-Tenant-Id'yi belirler (AC'de header boş); liste / history / send / üye
-    işlemleri hepsi o kapsamla gider. TC'de X-Tenant-Id: {group.tenantId} (= seçili
-    kapsam), AC'de header HİÇ gönderilmez.
+    kapsam TC ise tenant-switch token alınır; liste / history / send / üye işlemleri
+    hepsi o token ile gider. AC'de normal admin JWT kullanılır.
 
 **Erişim kuralları (backend — panel buna göre davranmalı):**
   - **Okuma** (liste, history, grup detay): üye VEYA `roleLevel >= visibilityLevel`
@@ -1480,28 +1478,6 @@ export interface ChatWsError {
   groupId: string | null;
 }
 ```
-
-### http client'a X-Tenant-Id desteği
-
-`lib/api/http.ts` (veya mevcut wrapper):
-
-```typescript
-// Her isteğe opsiyonel olarak X-Tenant-Id eklenebilmeli
-type RequestOptions = {
-  tenantId?: string | null;       // dolu ise X-Tenant-Id header'a eklenir
-  searchParams?: Record<string, unknown>;
-  json?: unknown;
-  // ...mevcut opsiyonlar
-};
-
-// Implementation:
-if (opts?.tenantId) {
-  headers['X-Tenant-Id'] = opts.tenantId;
-}
-```
-
-Yardımcı: `chatClient.tenantId(group.tenantId)` gibi bir helper'la
-group context'ini otomatik X-Tenant-Id'ye çevir.
 
 ### Dosya yapısı
 
@@ -1714,19 +1690,19 @@ onMembershipJoined: (ev) => {
 - "Üye ekle" multi-select (admin user'ları — basedb)
 - Submit:
   - POST /api/v1/chat/groups (gövdede tenantId + visitorAccess varsa)
-  - **Kapsam TENANT ise** isteğe `X-Tenant-Id: {tenantId}` header'ı eklenir
+  - **Kapsam TENANT ise** tenant-switch token ile istek atılır
   - Success → yeni group'a navigate et
 
 **Chat detay (`/[groupId]`)**
-- Server Component data: GET /api/v1/chat/groups/{groupId} (uygun X-Tenant-Id ile)
+- Server Component data: GET /api/v1/chat/groups/{groupId} (TC ise tenant-switch token ile)
 - ChatWindow: history infinite scroll
   - useChatHistory hook: `useInfiniteQuery`
     - queryKey: `['chat','messages', groupId]`
     - queryFn: GET /api/v1/chat/groups/{groupId}/messages?before={cursor}&limit=50
-    - X-Tenant-Id: group.tenantId
+    - TC ise tenant-switch token Authorization header'ında
 - ChatComposer: text input + dosya butonu + gönder butonu
   - Submit → POST /api/v1/chat/groups/{groupId}/messages
-  - X-Tenant-Id otomatik group.tenantId'den
+  - TC ise tenant-switch token Authorization header'ında
   - Optimistic insert (UUID v4 ile geçici id), backend response gelince swap
 
 **MessageBubble — polymorphic sender render**
@@ -1902,7 +1878,7 @@ hazır gelen `senderUsername` alanındadır (backend zaten doldurur).
 
 4. **Admin'in GUEST'e yanıtı — değişiklik YOK.** Admin, guest'in bulunduğu TC
    grubuna her zamanki gibi `POST /api/v1/chat/groups/{groupId}/messages`
-   (`X-Tenant-Id: group.tenantId`) ile yazar; mesaj `senderType=ADMIN` olur.
+   (tenant-switch token ile) yazar; mesaj `senderType=ADMIN` olur.
    Guest tarafı WebSocket ile anlık alır. Composer'da ekstra iş yok.
 
 5. **Typing/Read göstergesi — beklenen davranış:** Guest oturumları typing ve

@@ -56,41 +56,27 @@ public class JwtTenantFilter extends OncePerRequestFilter {
   }
 
   /**
-   * Tenant ID kaynak sırası (en yüksekten en düşüğe):
+   * Tenant ID kaynak sırası:
    * <ol>
-   *   <li><b>{@code X-Tenant-Id} header</b> — admin'in panel UI'sında seçtiği tenant
-   *       (örn. TC group'ları için). Header değeri "basedb" ya da boş ise null döner.</li>
+   *   <li>Chat + Notifications path'leri → her zaman basedb (null).</li>
    *   <li>Admin login + basedb-only path (auth, users, roles) → null (basedb).</li>
-   *   <li>JWT {@code tenantId} claim'i — tenant user'ları için.</li>
+   *   <li>JWT {@code tenantId} claim'i — tenant user'ları ve tenant-switch token için.</li>
    * </ol>
    *
-   * <p><b>Chat ve {@code X-Tenant-Id}:</b> Chat (AC + TC) tek endpoint ailesi
-   * (`/api/v1/chat/*`) altında. Admin AC'de iken header'ı göndermez → basedb'ye düşer.
-   * Admin TC'de iken {@code X-Tenant-Id: tenant1} gönderir → tenant1 DB'sine düşer.
-   * Tenant user (loginSource=tenant) JWT'inde zaten tenantId taşır.
+   * <p><b>TC erişimi:</b> Admin panel, TC grupları için {@code POST /api/v1/tenants/token}
+   * ile tenant-switch token alır ve bu JWT'yi Authorization header'ında gönderir.
+   * {@code X-Tenant-Id} header artık desteklenmemektedir.
    */
   private String resolveTenantId(HttpServletRequest request) {
     String path = request.getRequestURI();
 
-    // 1) X-Tenant-Id header açıkça verilmişse, JWT claim'ini override eder.
-    String headerTenant = request.getHeader("X-Tenant-Id");
-    if (headerTenant != null && !headerTenant.isBlank()) {
-      String normalized = headerTenant.trim();
-      if ("basedb".equalsIgnoreCase(normalized) || "null".equalsIgnoreCase(normalized)) {
-        log.debug("X-Tenant-Id header explicitly requests basedb for path: {}", path);
-        return null;
-      }
-      log.debug("X-Tenant-Id header set TenantContext={} for path: {}", normalized, path);
-      return normalized;
-    }
-
-    // 2) Chat + Notifications REST: X-Tenant-Id yoksa basedb.
+    // 1) Chat + Notifications REST: her zaman basedb.
     if (path.startsWith("/api/v1/chat/") || path.startsWith("/api/v1/notifications")) {
-      log.debug("Basedb-only path without X-Tenant-Id, forcing basedb: {}", path);
+      log.debug("Basedb-only path, forcing basedb: {}", path);
       return null;
     }
 
-    // 3) Authorization yoksa null (anonim akış zaten public filter'a bırakılıyor)
+    // 2) Authorization yoksa null (anonim akış zaten public filter'a bırakılıyor)
     String authHeader = request.getHeader("Authorization");
     if (authHeader == null || !authHeader.startsWith("Bearer ")) {
       return null;

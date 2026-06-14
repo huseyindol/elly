@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Authorization header'ındaki main JWT'den tenantId claim'ini okuyup
@@ -33,6 +35,16 @@ import java.io.IOException;
 public class JwtTenantFilter extends OncePerRequestFilter {
 
   private final JwtUtil jwtUtil;
+  private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
+
+  /**
+   * URL-tenant kuralı: admin'in hedef-tenant işlemleri için tenant URL path'inde taşınır —
+   * {@code /api/v1/chat/tenant/{tid}/**} ve {@code /api/v1/storage/tenant/{tid}/**}.
+   * WS destination'ları ({@code /app/tenant-chat/{tid}/..}) ve public REST
+   * ({@code /api/v1/public/{tid}/..}) ile aynı kalıp: kimlik JWT'de, hedef tenant URL'de.
+   */
+  private static final Pattern URL_TENANT =
+      Pattern.compile("^/api/v1/(?:chat|storage)/tenant/([a-zA-Z0-9_-]+)(?:/|$)");
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -43,7 +55,22 @@ public class JwtTenantFilter extends OncePerRequestFilter {
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
     try {
-      String tenantId = resolveTenantId(request);
+      String tenantId;
+      String urlTenant = matchUrlTenant(request.getRequestURI());
+      if (urlTenant != null && "admin".equals(safeLoginSource(request))) {
+        // URL-tenant yalnız admin kimliğiyle: tenant user başka tenant'a sıçrayamaz.
+        if (!tenantProperties.getDatasources().containsKey(urlTenant)) {
+          response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+          response.setContentType("application/json;charset=UTF-8");
+          response.getWriter().write(
+              "{\"result\":false,\"status\":400,\"error\":\"Bad Request\",\"message\":\"Unknown tenant: "
+                  + urlTenant + "\"}");
+          return;
+        }
+        tenantId = urlTenant;
+      } else {
+        tenantId = resolveTenantId(request);
+      }
       if (tenantId != null) {
         TenantContext.setTenantId(tenantId);
       }
@@ -55,17 +82,37 @@ public class JwtTenantFilter extends OncePerRequestFilter {
     }
   }
 
+  /** Path {@code /api/v1/{chat|storage}/tenant/{tid}/**} kalıbına uyuyorsa tid, değilse null. */
+  private String matchUrlTenant(String path) {
+    Matcher m = URL_TENANT.matcher(path);
+    return m.find() ? m.group(1) : null;
+  }
+
+  /** Bearer token'dan loginSource — token yok/bozuksa null (sessiz). */
+  private String safeLoginSource(HttpServletRequest request) {
+    String authHeader = request.getHeader("Authorization");
+    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+      return null;
+    }
+    try {
+      return jwtUtil.extractLoginSource(authHeader.substring(7));
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
   /**
    * Tenant ID kaynak sırası:
    * <ol>
+   *   <li>URL-tenant (doFilterInternal'da): {@code /api/v1/{chat|storage}/tenant/{tid}/**}
+   *       — yalnız admin kimliğiyle; admin'in hedef-tenant işlemleri (TC, kota).</li>
    *   <li>Chat + Notifications path'leri → her zaman basedb (null).</li>
    *   <li>Admin login + basedb-only path (auth, users, roles) → null (basedb).</li>
-   *   <li>JWT {@code tenantId} claim'i — tenant user'ları ve tenant-switch token için.</li>
+   *   <li>JWT {@code tenantId} claim'i — tenant user'larının kendi tenancy'si.</li>
    * </ol>
    *
-   * <p><b>TC erişimi:</b> Admin panel, TC grupları için {@code POST /api/v1/tenants/token}
-   * ile tenant-switch token alır ve bu JWT'yi Authorization header'ında gönderir.
-   * {@code X-Tenant-Id} header artık desteklenmemektedir.
+   * <p><b>Kural:</b> kimlik her zaman JWT'de, hedef tenant her zaman URL'de.
+   * {@code X-Tenant-Id} header ve tenant-switch token desteklenmez.</p>
    */
   private String resolveTenantId(HttpServletRequest request) {
     String path = request.getRequestURI();

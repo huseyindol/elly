@@ -26,21 +26,21 @@ public class StorageQuotaController extends BaseController implements IStorageQu
   private final IStorageQuotaService quotaService;
 
   @Override
-  @GetMapping("/quota")
+  @GetMapping({"/quota", "/tenant/{tenantId}/quota"})
   @PreAuthorize("isAuthenticated()")
   public RootEntityResponse<DtoStorageQuota> getQuota() {
     return ok(quotaService.currentUsage());
   }
 
   @Override
-  @PutMapping("/quota/limit")
+  @PutMapping({"/quota/limit", "/tenant/{tenantId}/quota/limit"})
   @PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
   public RootEntityResponse<DtoStorageQuota> setLimit(@RequestBody DtoStorageQuotaLimitRequest request) {
     return ok(quotaService.setLimit(request.getLimitBytes()));
   }
 
   @Override
-  @PostMapping("/quota/recompute")
+  @PostMapping({"/quota/recompute", "/tenant/{tenantId}/quota/recompute"})
   @PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
   public RootEntityResponse<DtoStorageQuota> recompute() {
     return ok(quotaService.recompute());

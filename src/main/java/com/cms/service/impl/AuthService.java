@@ -35,7 +35,6 @@ import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
 import com.cms.dto.DtoGuestTokenRequest;
 import com.cms.dto.DtoGuestTokenResponse;
-import com.cms.dto.DtoTenantTokenResponse;
 import com.cms.dto.EmailRequest;
 import com.cms.service.TotpService;
 import com.cms.util.AesEncryptor;
@@ -566,14 +565,6 @@ public class AuthService implements IAuthService {
     }
   }
 
-  @Override
-  public DtoTenantTokenResponse getPublicToken(String tenantId) {
-    if (!tenantProperties.getDatasources().containsKey(tenantId)) {
-      throw new BadRequestException("Unknown tenant: " + tenantId);
-    }
-    String token = jwtUtil.generateTenantToken(tenantId);
-    return new DtoTenantTokenResponse(token, "Bearer", tenantId);
-  }
 
   @Override
   public DtoGuestTokenResponse getGuestToken(DtoGuestTokenRequest request) {

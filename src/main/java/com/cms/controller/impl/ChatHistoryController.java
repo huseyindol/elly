@@ -50,7 +50,7 @@ public class ChatHistoryController implements IChatHistoryController {
    * ({@link ChatTopics}).
    */
   @Override
-  @PostMapping("/groups/{groupId}/messages")
+  @PostMapping({"/groups/{groupId}/messages", "/tenant/{tenantId}/groups/{groupId}/messages"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatMessage>> sendMessage(
       @PathVariable UUID groupId,
@@ -71,7 +71,7 @@ public class ChatHistoryController implements IChatHistoryController {
   }
 
   @Override
-  @GetMapping("/groups/{groupId}/messages")
+  @GetMapping({"/groups/{groupId}/messages", "/tenant/{tenantId}/groups/{groupId}/messages"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<List<DtoChatMessage>>> getHistory(
       @PathVariable UUID groupId,
@@ -82,7 +82,7 @@ public class ChatHistoryController implements IChatHistoryController {
   }
 
   @Override
-  @PutMapping("/messages/{messageId}")
+  @PutMapping({"/messages/{messageId}", "/tenant/{tenantId}/messages/{messageId}"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatMessage>> editMessage(
       @PathVariable UUID messageId, @RequestBody String newContent) {
@@ -91,7 +91,7 @@ public class ChatHistoryController implements IChatHistoryController {
   }
 
   @Override
-  @DeleteMapping("/messages/{messageId}")
+  @DeleteMapping({"/messages/{messageId}", "/tenant/{tenantId}/messages/{messageId}"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<Void> deleteMessage(@PathVariable UUID messageId) {
     messageService.deleteMessage(messageId, getCurrentUserId());
@@ -99,7 +99,7 @@ public class ChatHistoryController implements IChatHistoryController {
   }
 
   @Override
-  @PostMapping("/files")
+  @PostMapping({"/files", "/tenant/{tenantId}/files"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<String>> uploadFile(@RequestParam("file") MultipartFile file) {
     String path = fileService.saveFile(file, "chat");

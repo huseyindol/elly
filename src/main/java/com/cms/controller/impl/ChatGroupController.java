@@ -35,7 +35,7 @@ public class ChatGroupController implements IChatGroupController {
   private final SimpMessagingTemplate messagingTemplate;
 
   @Override
-  @PostMapping("/groups")
+  @PostMapping({"/groups", "/tenant/{tenantId}/groups"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatGroup>> createGroup(
       @RequestBody DtoChatGroupCreate dto) {
@@ -47,14 +47,14 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @GetMapping("/groups")
+  @GetMapping({"/groups", "/tenant/{tenantId}/groups"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<List<DtoChatGroup>>> getMyGroups() {
     return ResponseEntity.ok(RootEntityResponse.ok(groupService.getMyGroups(getCurrentUserId())));
   }
 
   @Override
-  @GetMapping("/groups/{groupId}")
+  @GetMapping({"/groups/{groupId}", "/tenant/{tenantId}/groups/{groupId}"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatGroup>> getGroup(@PathVariable UUID groupId) {
     return ResponseEntity.ok(RootEntityResponse.ok(groupService.getGroupById(groupId, getCurrentUserId())));
@@ -68,7 +68,7 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @PostMapping("/groups/{groupId}/members/{userId}")
+  @PostMapping({"/groups/{groupId}/members/{userId}", "/tenant/{tenantId}/groups/{groupId}/members/{userId}"})
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<RootEntityResponse<DtoChatMember>> addMember(
       @PathVariable UUID groupId, @PathVariable Long userId) {
@@ -86,7 +86,7 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @DeleteMapping("/groups/{groupId}/members/{userId}")
+  @DeleteMapping({"/groups/{groupId}/members/{userId}", "/tenant/{tenantId}/groups/{groupId}/members/{userId}"})
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<Void> removeMember(@PathVariable UUID groupId, @PathVariable Long userId) {
     groupService.removeMember(groupId, userId, getCurrentUserId());
@@ -101,14 +101,14 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @GetMapping("/groups/{groupId}/members")
+  @GetMapping({"/groups/{groupId}/members", "/tenant/{tenantId}/groups/{groupId}/members"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<List<DtoChatMember>>> getMembers(@PathVariable UUID groupId) {
     return ResponseEntity.ok(RootEntityResponse.ok(groupService.getMembers(groupId, getCurrentUserId())));
   }
 
   @Override
-  @GetMapping("/groups/{groupId}/access")
+  @GetMapping({"/groups/{groupId}/access", "/tenant/{tenantId}/groups/{groupId}/access"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<DtoChatGroupAccess>> getGroupAccess(@PathVariable UUID groupId) {
     return ResponseEntity.ok(
@@ -116,7 +116,7 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @DeleteMapping("/groups/{groupId}")
+  @DeleteMapping({"/groups/{groupId}", "/tenant/{tenantId}/groups/{groupId}"})
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<Void> deleteGroup(@PathVariable UUID groupId) {
     groupService.deleteGroup(groupId, getCurrentUserId());
@@ -127,7 +127,7 @@ public class ChatGroupController implements IChatGroupController {
   // =============== TC Ban (yazma engeli — okuma serbest; EDITOR+ = chat:manage) ===============
 
   @Override
-  @PostMapping("/groups/{groupId}/bans")
+  @PostMapping({"/groups/{groupId}/bans", "/tenant/{tenantId}/groups/{groupId}/bans"})
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<RootEntityResponse<DtoChatBan>> banUser(
       @PathVariable UUID groupId, @RequestBody DtoChatBanRequest request) {
@@ -136,7 +136,7 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @DeleteMapping("/groups/{groupId}/bans")
+  @DeleteMapping({"/groups/{groupId}/bans", "/tenant/{tenantId}/groups/{groupId}/bans"})
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<Void> unbanUser(
       @PathVariable UUID groupId,
@@ -147,7 +147,7 @@ public class ChatGroupController implements IChatGroupController {
   }
 
   @Override
-  @GetMapping("/groups/{groupId}/bans")
+  @GetMapping({"/groups/{groupId}/bans", "/tenant/{tenantId}/groups/{groupId}/bans"})
   @PreAuthorize("hasAuthority('chat:read')")
   public ResponseEntity<RootEntityResponse<List<DtoChatBan>>> listBans(@PathVariable UUID groupId) {
     return ResponseEntity.ok(RootEntityResponse.ok(banService.listBans(groupId)));

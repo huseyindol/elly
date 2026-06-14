@@ -17,7 +17,6 @@ import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
 import com.cms.dto.DtoGuestTokenRequest;
 import com.cms.dto.DtoGuestTokenResponse;
-import com.cms.dto.DtoTenantTokenResponse;
 import com.cms.entity.RootEntityResponse;
 import com.cms.service.IAuthService;
 import com.cms.util.AuthCookieWriter;
@@ -38,11 +37,6 @@ public class AuthController extends BaseController implements IAuthController {
   private final IAuthService authService;
   private final JwtUtil jwtUtil;
   private final AuthCookieWriter authCookieWriter;
-
-  @GetMapping("/public-token/{tenantId}")
-  public RootEntityResponse<DtoTenantTokenResponse> getPublicToken(@PathVariable String tenantId) {
-    return ok(authService.getPublicToken(tenantId));
-  }
 
   /**
    * Anonim website ziyaretçisi için guest chat token'ı.

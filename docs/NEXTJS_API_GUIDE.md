@@ -113,43 +113,6 @@ Mevcut token'ın claim'lerini çözer. Token geçerliliğini ve içeriğini kont
 
 ---
 
-### GET /api/v1/auth/public-token/{tenantId}
-Login gerektirmeyen public içerik erişimi için tenant token üretir.
-Next.js app startup'ta bir kez çağrılır; alınan token tüm public isteklerde `Authorization: Bearer` olarak gönderilir.
-
-**Path Parameters:**
-- `tenantId`: Tenant adı (`basedb`, `tenant1`, `tenant2`, ...)
-
-**Response:**
-```json
-{
-  "result": true,
-  "data": {
-    "token": "string",     // Authorization: Bearer <token> olarak kullan
-    "type": "Bearer",
-    "tenantId": "tenant1"
-  }
-}
-```
-
-**Next.js Kullanımı:**
-```ts
-// lib/tenantClient.ts — uygulama başlarken bir kez çağır
-const res = await fetch(`${API_BASE}/api/v1/auth/public-token/${TENANT_ID}`);
-const { data } = await res.json();
-const tenantToken = data.token;
-
-// Tüm public fetch'lerde
-fetch(`${API_BASE}/api/v1/pages/list`, {
-  headers: { Authorization: `Bearer ${tenantToken}` }
-});
-```
-
-> Token kullanıcı bilgisi içermez; yalnızca `tenantId` ve `type: "tenant"` claim'leri bulunur.
-> Bilinmeyen tenant ID ile istek gönderilirse `400 Bad Request` döner.
-
----
-
 ### OAuth2 Login (Google / Facebook / GitHub)
 Sosyal giriş akışı redirect tabanlıdır.
 
@@ -170,7 +133,7 @@ Token'da `loginSource: "admin"` bulunur (OAuth2 kullanıcıları admin akışın
 
 ## Authorization (RBAC)
 
-> **⚠️ ÖNEMLİ:** Tüm API endpoint'leri (auth ve public-token hariç) artık **JWT authentication** ve **permission bazlı yetkilendirme** gerektirir.
+> **⚠️ ÖNEMLİ:** Tüm API endpoint'leri (auth hariç) artık **JWT authentication** ve **permission bazlı yetkilendirme** gerektirir.
 
 ### Yetkilendirme Mimarisi
 
@@ -261,7 +224,7 @@ if (response.status === 403) {
 
 | Endpoint | Açıklama |
 |----------|----------|
-| `/api/v1/auth/**` | Login, register, token refresh, public-token |
+| `/api/v1/auth/**` | Login, register, token refresh |
 | `/oauth2/**`, `/login/oauth2/**` | OAuth2 akışı |
 | `/swagger-ui/**`, `/api-docs/**` | API dokümantasyonu |
 | `/actuator/**` | Health check |

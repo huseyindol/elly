@@ -47,7 +47,7 @@ CONTENTS, BASIC_INFOS, MAIL, EMAILS, CACHE, TENANTS, USERS, ROLES
 - GET /api/v1/roles/permissions/module/{module} — modüle göre izinler
 
 ## Public Endpoint'ler (Auth gerektirmeyen)
-- /api/v1/auth/** — login, register, token refresh, public-token
+- /api/v1/auth/** — login, register, token refresh
 - /oauth2/**, /login/oauth2/** — OAuth2
 - /swagger-ui/**, /api-docs/** — API docs
 - /actuator/** — health check

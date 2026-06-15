@@ -17,8 +17,9 @@ sayfaya gidilecek ve okundu işaretlenecek.
 
 - Tüm REST yanıtları RootEntityResponse<T> ile sarılı: { result, message, data }.
 - Auth: JWT Bearer. Kullanıcı id'si JWT'den (basedb users.id) çözülüyor.
-- Çok kiracılı (multi-tenant): basedb + her tenant'ın kendi DB'si. X-Tenant-Id
-  header'ı ile tenant context'i belirleniyor; header yoksa basedb kullanılıyor.
+- Çok kiracılı (multi-tenant): basedb + her tenant'ın kendi DB'si. Tenant context'i
+  JWT claim'inden (admin TC/kota işlemlerinde URL path'inden) belirlenir; aksi halde
+  basedb. (X-Tenant-Id header'ı artık kullanılmaz — bkz. URL_TENANT_MODELI.md.)
 - Gerçek zamanlı: STOMP üzerinden SockJS, endpoint ${API}/ws. Kişisel kuyruklar
   için Spring "user destination" kullanılıyor (örn. /user/queue/...).
 

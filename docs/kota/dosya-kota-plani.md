@@ -84,7 +84,7 @@ Delete: `removeUsage(tenant, size)` (silinen dosyanın boyutu — silmeden önce
 
 | Method | Path | Yetki | İş |
 |--------|------|-------|-----|
-| GET | `/api/v1/storage/quota` | authenticated | Mevcut tenant'ın kullanım/limit (X-Tenant-Id'ye göre) |
+| GET | `/api/v1/storage/quota` (+ `/tenant/{tid}/quota`) | authenticated | Kullanım/limit — hedef tenant URL path'inde, yoksa basedb |
 | GET | `/api/v1/admin/tenants/{tenantId}/storage-quota` | SUPER_ADMIN/ADMIN | Bir tenant'ın kotası |
 | PUT | `/api/v1/admin/tenants/{tenantId}/storage-quota` | SUPER_ADMIN | Limit ayarla `{ limitBytes }` |
 | POST | `/api/v1/admin/tenants/{tenantId}/storage-quota/recompute` | SUPER_ADMIN | Klasörden gerçek kullanımı yeniden hesapla |

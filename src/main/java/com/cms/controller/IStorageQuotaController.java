@@ -4,7 +4,7 @@ import com.cms.dto.DtoStorageQuota;
 import com.cms.dto.DtoStorageQuotaLimitRequest;
 import com.cms.entity.RootEntityResponse;
 
-/** Depolama kotası — mevcut tenant (X-Tenant-Id) bağlamında çalışır. */
+/** Depolama kotası — hedef tenant URL path'inde (/storage/tenant/{tid}/quota), yoksa basedb. */
 public interface IStorageQuotaController {
 
   RootEntityResponse<DtoStorageQuota> getQuota();

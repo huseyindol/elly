@@ -14,7 +14,7 @@ import java.util.UUID;
 @Tag(name = "Chat Messages", description = "Mesaj geçmişi ve yönetimi")
 public interface IChatHistoryController {
 
-  @Operation(summary = "Mesaj gönder (REST — admin, AC veya TC, X-Tenant-Id ile)")
+  @Operation(summary = "Mesaj gönder (REST — admin; AC: /chat, TC: /chat/tenant/{tenantId})")
   ResponseEntity<RootEntityResponse<DtoChatMessage>> sendMessage(UUID groupId, DtoChatMessageSend payload);
 
   @Operation(summary = "Grup mesaj geçmişi (cursor-based pagination)")

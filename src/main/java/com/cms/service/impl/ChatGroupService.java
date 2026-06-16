@@ -107,10 +107,10 @@ public class ChatGroupService implements IChatGroupService {
   @Override
   public List<DtoChatGroup> getMyGroups(Long userId) {
     int roleLevel = currentUserRoleLevel();
-    // X-Tenant-Id (TenantContext) modeli: JwtTenantFilter chat'i X-Tenant-Id'ye gore
-    // yonlendirir — header yoksa basedb (AC), header varsa o tenant (TC). Burada yalnizca
-    // MEVCUT context'in gruplari dondurulur. Cross-DB aggregate (mapAllTenants) YOK; bu hem
-    // OSIV ile uyumludur hem de filter/prompt/panel ile ayni X-Tenant-Id modeline oturur.
+    // URL-tenant (TenantContext) modeli: JwtTenantFilter chat'i yonlendirir — AC'de basedb,
+    // TC'de URL path'indeki tenant (/api/v1/chat/tenant/{tid}). Burada yalnizca MEVCUT
+    // context'in gruplari dondurulur. Cross-DB aggregate (mapAllTenants) YOK; bu hem OSIV
+    // ile uyumludur hem de filter/panel ile ayni URL-tenant modeline oturur.
     return groupRepository.findGroupsByUserIdAndRole(userId, roleLevel)
         .stream()
         .map(chatMapper::toGroupDto)

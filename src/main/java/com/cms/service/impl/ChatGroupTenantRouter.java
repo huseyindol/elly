@@ -29,8 +29,9 @@ public class ChatGroupTenantRouter {
   private String defaultTenant;
 
   public Optional<ChatGroup> findGroup(UUID groupId) {
-    // Model A: grup once MEVCUT TenantContext'te aranir (REST'te X-Tenant-Id header'i,
-    // WS'te /app/tenant-chat/{tenantId}/... destination'i context'i dogru set eder).
+    // Model A: grup once MEVCUT TenantContext'te aranir (REST'te URL path'i — admin icin
+    // /api/v1/chat/tenant/{tid}, tenant user icin JWT claim'i; WS'te
+    // /app/tenant-chat/{tenantId}/... destination'i context'i dogru set eder).
     // OSIV tek request-bound baglanti tuttugu icin asagidaki cross-tenant tarama TC
     // gruplari icin calismiyordu (baglanti ilk iterasyonda basedb'ye pinlenir, sonraki
     // context switch'leri etkisiz kalir) -> "Chat group not found". Mevcut context'te

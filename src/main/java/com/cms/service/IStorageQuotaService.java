@@ -4,7 +4,8 @@ import com.cms.dto.DtoStorageQuota;
 
 /**
  * Tenant depolama kotası — hepsi MEVCUT tenant context'inde (TenantContext) çalışır.
- * Admin bir tenant'ın kotasını ayarlamak için X-Tenant-Id ile o context'e girer.
+ * Admin bir tenant'ın kotasını yönetmek için hedef tenant'ı URL path'inde taşır
+ * (/api/v1/storage/tenant/{tid}/quota); JwtTenantFilter context'i URL'den set eder.
  */
 public interface IStorageQuotaService {
 

@@ -42,9 +42,9 @@ public class ChatHistoryController implements IChatHistoryController {
   /**
    * Admin REST üzerinden mesaj gönderme (AC veya TC).
    *
-   * <p>Routing: TenantContext {@code JwtTenantFilter} tarafından {@code X-Tenant-Id}
-   * header'ından (veya JWT claim'inden) set edilir; bu yüzden hangi DB'ye yazılacağı
-   * burada elle belirlenmez.
+   * <p>Routing: TenantContext {@code JwtTenantFilter} tarafından URL path'inden
+   * (TC: {@code /api/v1/chat/tenant/{tid}}) veya JWT claim'inden set edilir; bu yüzden
+   * hangi DB'ye yazılacağı burada elle belirlenmez.
    *
    * <p>Broadcast: kaydedilen group'un {@code tenantId} alanına göre topic seçilir
    * ({@link ChatTopics}).

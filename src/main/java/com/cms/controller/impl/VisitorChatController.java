@@ -25,9 +25,9 @@ import java.util.UUID;
 /**
  * Tenant Chat (TC) için kayıtlı tenant user'larına yönelik endpoint'ler.
  *
- * <p>TenantContext: JwtTenantFilter, tenant JWT'sinin tenantId claim'inden
- * (veya X-Tenant-Id header'ından) okuyup set eder. Bu endpoint'ler `loginSource=tenant`
- * için tasarlandı ama admin JWT'siyle de çağrılabilir (X-Tenant-Id header'ı ile).
+ * <p>TenantContext: JwtTenantFilter, tenant JWT'sinin tenantId claim'inden okuyup set eder.
+ * Bu endpoint'ler `loginSource=tenant` (kendi tenant'ına yazan tenant user) içindir.
+ * Admin'in başka tenant'a yazması için URL-tenant'lı /api/v1/chat/tenant/{tid} kullanılır.
  */
 @Slf4j
 @RestController

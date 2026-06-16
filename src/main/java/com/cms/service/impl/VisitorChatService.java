@@ -72,7 +72,7 @@ public class VisitorChatService implements IVisitorChatService {
   @Transactional(readOnly = true)
   public List<DtoChatGroup> listVisibleGroups() {
     // groupRepository.findAll TenantContext'in işaret ettiği DB'den çeker —
-    // controller bu service'i çağırmadan önce X-Tenant-Id veya JWT claim ile
+    // controller bu service'i çağırmadan önce JWT claim'i (veya admin'de URL path'i) ile
     // TenantContext'i set etmiş olmalı.
     return groupRepository.findAll().stream()
         .filter(ChatGroup::isVisitorAccess)

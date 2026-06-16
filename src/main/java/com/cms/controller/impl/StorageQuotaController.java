@@ -15,8 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Depolama kotası API'si — istek MEVCUT tenant context'inde çalışır (X-Tenant-Id).
- * Admin bir tenant'ın kotasını yönetmek için o tenant'ın X-Tenant-Id'siyle çağırır.
+ * Depolama kotası API'si — istek MEVCUT tenant context'inde çalışır.
+ * Admin bir tenant'ın kotasını yönetmek için hedef tenant'ı URL path'inde taşır:
+ * /api/v1/storage/tenant/{tid}/quota (JwtTenantFilter context'i URL'den set eder).
  */
 @RestController
 @RequestMapping("/api/v1/storage")

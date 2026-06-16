@@ -57,8 +57,8 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 ## Multi-Tenancy
 - **Strateji:** Database-per-tenant
 - **Tenant'lar:** `basedb` (varsayilan), `tenant1`, `tenant2`
-- **Routing:** `DataSourceConfig` -> `TenantDataSourceRouter`
-- **Context:** JWT claim'den `tenantId` alinir, `TenantContext.setCurrentTenant()` ile set edilir
+- **Routing:** `DataSourceConfig` -> `TenantRoutingDataSource`
+- **Context:** JWT claim'den `tenantId` alinir, `TenantContext.setTenantId()` ile set edilir
 - **Filtreleme:** `JwtTenantFilter` -> her request'te tenant context kurulur
 
 ## Kimlik Dogrulama & RBAC

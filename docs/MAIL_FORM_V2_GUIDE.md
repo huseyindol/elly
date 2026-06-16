@@ -252,7 +252,7 @@ Password değiştirmek istersen `smtpPassword` doldur → yeni değer AES ile ş
 - **Şifreleme noktası:** `MailAccountService.create()` / `update()` — `aesEncryptor.encrypt(plain)` çağrısı burada yapılır.
 - **Çözme noktası:** `TenantMailSenderFactory.getMailSender(account)` — password decrypt edilip `JavaMailSenderImpl`’a verilir. Factory `ConcurrentHashMap<Long, JavaMailSender>` ile mailAccountId bazında cache tutar.
 - **Cache invalidation:** Hesap update/delete olursa service `mailSenderFactory.evict(id)` çağırır. Auto-refresh yok.
-- **Tenant izolasyonu:** mail_accounts tablosu zaten her tenant DB’sinde ayrı. `TenantContext` JWT’den geliyor, `TenantDataSourceRouter` doğru DB’ye yönlendiriyor.
+- **Tenant izolasyonu:** mail_accounts tablosu zaten her tenant DB’sinde ayrı. `TenantContext` JWT’den geliyor, `TenantRoutingDataSource` doğru DB’ye yönlendiriyor.
 - **RabbitMQ consumer** içinde `TenantContext.setTenantId(msg.tenantId)` + `finally { clear() }` kurulumu korunur (v1’den aynen).
 - **Spring Mail auto-config EXCLUDE** hala aktif (`EllyApplication`): `management.health.mail.enabled=false` + `MailSenderAutoConfiguration` exclude → pod crash önlenir, tüm mail sender’lar factory ile yaratılır.
 

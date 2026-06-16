@@ -56,7 +56,7 @@ EllyApplication.java
   ↓ exclude: MailSenderAutoConfiguration (pod crash önlemi)
 
 JWT Flow:
-  Request → JwtTenantFilter → TenantContext.setCurrentTenant(tenantId)
+  Request → JwtTenantFilter → TenantContext.setTenantId(tenantId)
            → JwtAuthenticationFilter → CachedUserDetails (Redis 30dk)
 
 Mail Flow (v2 — DB-based, AES-encrypted):
@@ -204,7 +204,7 @@ Tüm skill dosyaları: `.claude/skills/<skill-adi>/SKILL.md`
 1. `elly-conventions` skill'ini aktif et → package/pattern kontrolü
 2. Şu sırayı takip et: `Entity → Repository → IService → ServiceImpl → IController → Controller → DTO → Mapper`
 3. Her endpoint `RootEntityResponse<T>` döndürmeli
-4. Multi-tenant sorgularda `TenantContext.getCurrentTenant()` kullan
+4. Multi-tenant sorgularda `TenantContext.getTenantId()` kullan
 5. Cache: `redis-cache-patterns` skill'ine bak — tenant prefix otomatik, key pattern'i takip et
 6. Exception: `error-handling-patterns` skill'ine bak — BaseException alt sınıfı kullan
 7. Permission ekle: `PermissionConstants.java` + `DataInitializer.java`

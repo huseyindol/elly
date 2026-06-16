@@ -9,7 +9,7 @@ version: 1.0.0
 ## Mimari
 - **Strateji:** Database-per-tenant (her tenant ayrı PostgreSQL DB'si)
 - **Tenant'lar:** `basedb` (varsayılan), `tenant1`, `tenant2`
-- **DataSource Routing:** `TenantDataSourceRouter extends AbstractRoutingDataSource`
+- **DataSource Routing:** `TenantRoutingDataSource extends AbstractRoutingDataSource`
 - **Context Holder:** `TenantContext` (ThreadLocal tabanlı)
 
 ## Request Akışı
@@ -17,9 +17,9 @@ version: 1.0.0
 HTTP Request
   → JwtTenantFilter
       → JWT'den tenantId claim'ini çıkar
-      → TenantContext.setCurrentTenant(tenantId)
-  → TenantDataSourceRouter.determineCurrentLookupKey()
-      → TenantContext.getCurrentTenant() döndürür
+      → TenantContext.setTenantId(tenantId)
+  → TenantRoutingDataSource.determineCurrentLookupKey()
+      → TenantContext.getTenantId() döndürür
   → Doğru PostgreSQL DB'sine bağlan
   → İşlem tamamlanınca TenantContext.clear()  ← finally bloğunda!
 ```
@@ -29,9 +29,9 @@ HTTP Request
 **@Async kullanımında:**
 Async method'larda ThreadLocal kaybolur. Tenant'ı manuel aktar:
 ```java
-String tenantId = TenantContext.getCurrentTenant();
+String tenantId = TenantContext.getTenantId();
 CompletableFuture.runAsync(() -> {
-    TenantContext.setCurrentTenant(tenantId);
+    TenantContext.setTenantId(tenantId);
     try { /* iş */ } finally { TenantContext.clear(); }
 });
 ```
@@ -46,7 +46,7 @@ Multi-tenant cache'ler için tenantId'yi key'e ekle:
 ```java
 @BeforeEach
 void setUp() {
-    TenantContext.setCurrentTenant("basedb");
+    TenantContext.setTenantId("basedb");
 }
 @AfterEach
 void tearDown() {

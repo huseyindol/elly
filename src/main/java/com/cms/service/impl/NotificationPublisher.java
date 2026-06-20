@@ -81,21 +81,48 @@ public class NotificationPublisher implements INotificationPublisher {
     });
   }
 
+  /**
+   * Rolü uyan aktif kullanıcıları, bildirimin tenant kapsamına göre filtreleyerek döner.
+   *
+   * <p>Tenant izolasyonu — {@code tenantId} dolu ise:
+   * <ul>
+   *   <li>SUPER_ADMIN her tenant'ın bildirimini alır (sınırsız yetki).</li>
+   *   <li>ADMIN/EDITOR yalnızca {@code managedTenants}'ında o tenant varsa alır.</li>
+   * </ul>
+   * {@code tenantId} null/boş ise (tenant'a özgü olmayan global bildirim) rol uyan herkese gider.
+   */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
-  public List<Long> findUserIdsByRoles(Set<String> roleNames) {
+  public List<Long> findUserIdsByRoles(Set<String> roleNames, String tenantId) {
     return runOnBasedb(() -> userRepository.findAll().stream()
         .filter(User::getIsActive)
         .filter(user -> user.getRoles().stream().anyMatch(role -> roleNames.contains(role.getName())))
+        .filter(user -> matchesTenantScope(user, tenantId))
         .map(User::getId)
         .toList());
   }
 
-  public List<Long> findAdminPlusUserIds() {
-    return findUserIdsByRoles(ADMIN_PLUS_ROLES);
+  /**
+   * Bildirim alıcısı, event'in tenant kapsamına uyuyor mu?
+   * Global bildirim (tenantId yok) → herkes; SUPER_ADMIN → her zaman; diğerleri → managedTenants.
+   */
+  private boolean matchesTenantScope(User user, String tenantId) {
+    if (tenantId == null || tenantId.isBlank()) {
+      return true;
+    }
+    boolean isSuperAdmin = user.getRoles().stream()
+        .anyMatch(role -> "SUPER_ADMIN".equals(role.getName()));
+    if (isSuperAdmin) {
+      return true;
+    }
+    return user.getManagedTenants() != null && user.getManagedTenants().contains(tenantId);
   }
 
-  public List<Long> findSuperAdminAndAdminUserIds() {
-    return findUserIdsByRoles(SUPER_ADMIN_ADMIN_ROLES);
+  public List<Long> findAdminPlusUserIds(String tenantId) {
+    return findUserIdsByRoles(ADMIN_PLUS_ROLES, tenantId);
+  }
+
+  public List<Long> findSuperAdminAndAdminUserIds(String tenantId) {
+    return findUserIdsByRoles(SUPER_ADMIN_ADMIN_ROLES, tenantId);
   }
 
   private void pushNotification(Long userId, DtoNotification dto) {

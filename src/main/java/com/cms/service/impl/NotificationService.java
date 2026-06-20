@@ -127,7 +127,7 @@ public class NotificationService implements INotificationService {
       String link,
       String tenantId,
       Map<String, Object> metadata) {
-    notifyUsers(notificationPublisher.findAdminPlusUserIds(), type, title, message, link, tenantId, metadata);
+    notifyUsers(notificationPublisher.findAdminPlusUserIds(tenantId), type, title, message, link, tenantId, metadata);
   }
 
   @Override
@@ -138,7 +138,7 @@ public class NotificationService implements INotificationService {
       String link,
       String tenantId,
       Map<String, Object> metadata) {
-    notifyUsers(notificationPublisher.findSuperAdminAndAdminUserIds(), type, title, message, link, tenantId, metadata);
+    notifyUsers(notificationPublisher.findSuperAdminAndAdminUserIds(tenantId), type, title, message, link, tenantId, metadata);
   }
 
   private Notification findOwnedNotification(Long id, Long userId) {

@@ -1,5 +1,6 @@
 package com.cms.config;
 
+import com.cms.util.AuthTokenResolver;
 import com.cms.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -88,14 +89,14 @@ public class JwtTenantFilter extends OncePerRequestFilter {
     return m.find() ? m.group(1) : null;
   }
 
-  /** Bearer token'dan loginSource — token yok/bozuksa null (sessiz). */
+  /** Token'dan (Bearer header veya accessToken cookie) loginSource — yok/bozuksa null. */
   private String safeLoginSource(HttpServletRequest request) {
-    String authHeader = request.getHeader("Authorization");
-    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+    String jwt = AuthTokenResolver.resolve(request);
+    if (jwt == null) {
       return null;
     }
     try {
-      return jwtUtil.extractLoginSource(authHeader.substring(7));
+      return jwtUtil.extractLoginSource(jwt);
     } catch (Exception e) {
       return null;
     }
@@ -123,14 +124,14 @@ public class JwtTenantFilter extends OncePerRequestFilter {
       return null;
     }
 
-    // 2) Authorization yoksa null (anonim akış zaten public filter'a bırakılıyor)
-    String authHeader = request.getHeader("Authorization");
-    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+    // 2) Token yoksa (Bearer header de accessToken cookie de yok) null —
+    //    anonim akış zaten public filter'a bırakılıyor.
+    String jwt = AuthTokenResolver.resolve(request);
+    if (jwt == null) {
       return null;
     }
 
     try {
-      String jwt = authHeader.substring(7);
       String tenantId = jwtUtil.extractTenantId(jwt);
       String loginSource = jwtUtil.extractLoginSource(jwt);
 

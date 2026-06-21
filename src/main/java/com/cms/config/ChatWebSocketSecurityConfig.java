@@ -102,7 +102,27 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
       }
 
       String username = jwtUtil.extractUsername(token);
-      CachedUserDetails cachedUser = resolveCachedUser(username, loginSource);
+
+      String tenantIdClaim = null;
+      try {
+        tenantIdClaim = jwtUtil.extractTenantId(token);
+      } catch (Exception ignored) {
+        // tenantId claim opsiyonel
+      }
+
+      // Tenant user kendi tenant DB'sinde yaşar → user'ı YÜKLEMEDEN ÖNCE context'i
+      // o tenant'a kur (admin'i loadUserFromDbAndCache zaten basedb'ye yönlendirir).
+      // Aksi halde tenant user basedb'de aranır ve bulunamaz → CONNECT reddedilir.
+      String originalTenant = TenantContext.getTenantId();
+      if (isTenant && tenantIdClaim != null && !tenantIdClaim.isBlank()) {
+        TenantContext.setTenantId(tenantIdClaim);
+      }
+      CachedUserDetails cachedUser;
+      try {
+        cachedUser = resolveCachedUser(username, loginSource);
+      } finally {
+        TenantContext.setTenantId(originalTenant);
+      }
 
       Long tokenVersion = cachedUser.getTokenVersion() != null ? cachedUser.getTokenVersion() : 0L;
       if (!jwtUtil.validateToken(token, cachedUser.getUsername(), tokenVersion)) {
@@ -120,13 +140,6 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
           new UsernamePasswordAuthenticationToken(principal, null, authorities);
       accessor.setUser(auth);
       SecurityContextHolder.getContext().setAuthentication(auth);
-
-      String tenantIdClaim = null;
-      try {
-        tenantIdClaim = jwtUtil.extractTenantId(token);
-      } catch (Exception ignored) {
-        // tenantId claim opsiyonel
-      }
 
       Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
       if (sessionAttrs != null) {

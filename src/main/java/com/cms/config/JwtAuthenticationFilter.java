@@ -5,7 +5,6 @@ import com.cms.entity.Permission;
 import com.cms.entity.Role;
 import com.cms.entity.User;
 import com.cms.repository.UserRepository;
-import com.cms.util.AuthTokenResolver;
 import com.cms.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -60,19 +59,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
 
-    // Token kaynağı: Authorization Bearer header veya accessToken httpOnly cookie.
-    // strict = header ile geldi → geçersizse 401 (açık niyet).
-    // !strict = cookie ile geldi → geçersizse anonim devam (cookie her isteğe gider;
-    //           süresi dolmuş cookie login/refresh gibi public çağrıları kırmamalı).
-    final boolean strict = AuthTokenResolver.hasBearerHeader(request);
-    final String jwt = AuthTokenResolver.resolve(request);
+    final String authorizationHeader = request.getHeader("Authorization");
 
-    // Token yoksa (ne header ne cookie) anonim devam
-    if (jwt == null) {
+    // Auth YALNIZCA Authorization: Bearer ile taşınır; cookie ile token OKUNMAZ
+    // (her tenant kendi domain'inde → cookie api'ye ulaşmaz; BFF SSR'da Bearer ekler).
+    // Header yoksa anonim devam.
+    if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
       chain.doFilter(request, response);
       return;
     }
 
+    // Authorization header gönderilmişse token MUTLAKA geçerli olmalı
+    final String jwt = authorizationHeader.substring(7);
     final String username;
     final String loginSource;
 
@@ -80,12 +78,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       username = jwtUtil.extractUsername(jwt);
       loginSource = jwtUtil.extractLoginSource(jwt);
     } catch (Exception e) {
-      // Token geçersiz/decrypt edilemiyor
-      if (strict) {
-        sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid or expired token");
-      } else {
-        chain.doFilter(request, response); // cookie path → anonim
-      }
+      // Token geçersiz veya decrypt edilemiyor
+      sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid or expired token");
       return;
     }
 
@@ -103,11 +97,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // Token'ı validate et (tokenVersion kontrolü ile)
         Long currentTokenVersion = cachedUser.getTokenVersion() != null ? cachedUser.getTokenVersion() : 0L;
         if (!jwtUtil.validateToken(jwt, cachedUser.getUsername(), currentTokenVersion)) {
-          if (strict) {
-            sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid or expired token");
-          } else {
-            chain.doFilter(request, response); // cookie path → anonim
-          }
+          sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid or expired token");
           return;
         }
 
@@ -126,19 +116,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         SecurityContextHolder.getContext().setAuthentication(authToken);
 
       } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
-        if (strict) {
-          sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid token or user not found");
-        } else {
-          chain.doFilter(request, response); // cookie path → anonim
-        }
+        sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid token or user not found");
         return;
       } catch (Exception e) {
         log.error("Authentication error for user {}: {}", username, e.getMessage());
-        if (strict) {
-          sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid token or user not found");
-        } else {
-          chain.doFilter(request, response); // cookie path → anonim
-        }
+        sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid token or user not found");
         return;
       }
     }

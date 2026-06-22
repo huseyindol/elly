@@ -57,11 +57,20 @@ public class DataSourceConfig {
 
     routingDataSource.setTargetDataSources(targetDataSources);
 
-    // Default tenant datasource
+    // Boot/fallback hedef datasource — SADECE boot (Hibernate dialect tespiti) ve context'siz
+    // dahili işlemler için. Request routing'i ETKİLEMEZ (her istek kendi tenant'ını taşır).
+    // default-tenant mevcut bir tenant DEĞİLSE (örn. stale DEFAULT_TENANT=basedb) ilk
+    // datasource'a düşülür ki uygulama yine de ayağa kalksın.
     String defaultTenant = properties.getDefaultTenant();
-    if (defaultTenant != null && targetDataSources.containsKey(defaultTenant)) {
-      routingDataSource.setDefaultTargetDataSource(targetDataSources.get(defaultTenant));
-      log.info("Default tenant datasource set to: {}", defaultTenant);
+    Object bootKey = (defaultTenant != null && targetDataSources.containsKey(defaultTenant))
+        ? defaultTenant
+        : targetDataSources.keySet().stream().findFirst().orElse(null);
+    if (bootKey != null) {
+      routingDataSource.setDefaultTargetDataSource(targetDataSources.get(bootKey));
+      log.info("Boot/fallback target datasource = '{}' (configured default-tenant='{}')",
+          bootKey, defaultTenant);
+    } else {
+      log.warn("Hiç tenant datasource'u tanımlı değil — uygulama DB'siz ayağa kalkamaz.");
     }
 
     routingDataSource.afterPropertiesSet();

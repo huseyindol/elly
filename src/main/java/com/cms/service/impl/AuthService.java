@@ -269,9 +269,15 @@ public class AuthService implements IAuthService {
       }
     }
 
-    // Site login: authentication tenant DB'sinde yapılır
-    if (!isAdminLogin && tenantId != null && !tenantId.isBlank()) {
+    // Login (admin VEYA tenant) tenant DB'sinde doğrulanır (basedb yok).
+    // Panel admin: tenantId body'de gelir. Tenant site: /api/v1/public/{tid}/auth/login →
+    // PublicApiFilter context'i URL'den set eder (body'de tenantId YOK).
+    if (tenantId != null && !tenantId.isBlank()) {
       TenantContext.setTenantId(tenantId);
+    }
+    String effectiveTenantId = TenantContext.getTenantId();
+    if (effectiveTenantId == null || effectiveTenantId.isBlank()) {
+      throw new BadRequestException("Login için tenant gerekli (tenantId veya /api/v1/public/{tid})");
     }
 
     // Authentication işlemi (BCrypt - kasıtlı yavaş)
@@ -300,10 +306,13 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("E-posta adresiniz henüz doğrulanmamış. Lütfen e-postanızı kontrol edin.");
     }
 
-    // Admin login: tenant yetki kontrolü (managedTenants)
-    if (isAdminLogin && tenantId != null && !tenantId.isBlank()) {
-      if (user.getManagedTenants() == null || !user.getManagedTenants().contains(tenantId)) {
-        throw new ForbiddenException("User is not authorized for tenant: " + tenantId);
+    // Admin (panel) login: kullanıcı bu tenant'ta admin rolüne sahip olmalı (tam izolasyon —
+    // managedTenants/cross-tenant yok; her admin kendi tenant'ında yetkilidir).
+    if (isAdminLogin) {
+      boolean isAdmin = user.getRoles() != null && user.getRoles().stream()
+          .anyMatch(r -> "SUPER_ADMIN".equals(r.getName()) || "ADMIN".equals(r.getName()));
+      if (!isAdmin) {
+        throw new ForbiddenException("Bu kullanıcı panel (admin) girişi için yetkili değil");
       }
     }
 
@@ -313,14 +322,14 @@ public class AuthService implements IAuthService {
     // Şifre doğrulandı; MFA aktifse kısa ömürlü mfaToken dön, JWT henüz yok.
     // tokenVersion bu adımda artırılmaz — MFA doğrulandığında artırılır.
     if (Boolean.TRUE.equals(user.getMfaEnabled()) && Boolean.TRUE.equals(user.getMfaSetupVerified())) {
-      String mfaToken = jwtUtil.generateMfaToken(user.getId(), loginSource, tenantId);
+      String mfaToken = jwtUtil.generateMfaToken(user.getId(), loginSource, effectiveTenantId);
       DtoAuthResponse mfaResponse = new DtoAuthResponse();
       mfaResponse.setMfaRequired(true);
       mfaResponse.setMfaToken(mfaToken);
       return mfaResponse;
     }
 
-    return issueFullAuthToken(user, loginSource, tenantId);
+    return issueFullAuthToken(user, loginSource, effectiveTenantId);
   }
 
   /**

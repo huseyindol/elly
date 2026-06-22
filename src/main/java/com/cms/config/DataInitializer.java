@@ -22,6 +22,7 @@ import com.cms.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * Uygulama başladığında varsayılan roller, izinler ve
@@ -41,6 +42,15 @@ public class DataInitializer implements CommandLineRunner {
   private final PermissionRepository permissionRepository;
   private final UserRepository userRepository;
   private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
+  private final PasswordEncoder passwordEncoder;
+
+  // İlk SUPER_ADMIN seed (her tenant'a, idempotent). Prod'da env ile override edilmeli.
+  @Value("${SEED_ADMIN_USER:admin}")
+  private String seedAdminUsername;
+  @Value("${SEED_ADMIN_PASSWORD:Admin123!}")
+  private String seedAdminPassword;
+  @Value("${SEED_ADMIN_EMAIL:admin@elly.local}")
+  private String seedAdminEmail;
 
   @Override
   @Transactional
@@ -56,7 +66,7 @@ public class DataInitializer implements CommandLineRunner {
           TenantContext.setTenantId(tenantId);
           initializePermissions();
           initializeRoles();
-          assignSuperAdminToExistingUsers();
+          ensureSeedSuperAdmin();
           log.info("✅ Tenant '{}' seed (permission+rol+super-admin) tamamlandı.", tenantId);
         } catch (Exception e) {
           log.warn("⚠️ Tenant '{}' seed başarısız (devam ediliyor): {}", tenantId, e.getMessage());
@@ -189,26 +199,34 @@ public class DataInitializer implements CommandLineRunner {
     }
   }
 
-  private void assignSuperAdminToExistingUsers() {
-    Optional<Role> superAdminRole = roleRepository.findByName("SUPER_ADMIN");
-    if (superAdminRole.isEmpty()) {
-      log.warn("⚠️ SUPER_ADMIN rolü bulunamadı, kullanıcılara rol atanamadı.");
+  /**
+   * MEVCUT tenant context'inde varsayılan SUPER_ADMIN kullanıcısını seed eder (idempotent).
+   * Kullanıcı zaten varsa atlar. Krediler env'den:
+   * {@code SEED_ADMIN_USER} / {@code SEED_ADMIN_PASSWORD} / {@code SEED_ADMIN_EMAIL}
+   * (prod'da MUTLAKA override edilmeli — varsayılan şifre güvenli değildir).
+   */
+  private void ensureSeedSuperAdmin() {
+    if (seedAdminUsername == null || seedAdminUsername.isBlank()) {
       return;
     }
-
-    List<User> usersWithoutRoles = userRepository.findAll().stream()
-        .filter(u -> u.getRoles() == null || u.getRoles().isEmpty())
-        .toList();
-
-    if (!usersWithoutRoles.isEmpty()) {
-      Role role = superAdminRole.get();
-      for (User user : usersWithoutRoles) {
-        user.setRoles(new HashSet<>(Set.of(role)));
-        userRepository.save(user);
-        log.info("✅ SUPER_ADMIN rolü atandı: {}", user.getUsername());
-      }
-    } else {
-      log.info("ℹ️ Tüm kullanıcıların zaten rolü mevcut.");
+    if (userRepository.existsByUsername(seedAdminUsername)) {
+      log.info("ℹ️ Seed SUPER_ADMIN zaten mevcut: {}", seedAdminUsername);
+      return;
     }
+    Optional<Role> superAdminRole = roleRepository.findByName("SUPER_ADMIN");
+    if (superAdminRole.isEmpty()) {
+      log.warn("⚠️ SUPER_ADMIN rolü yok, seed admin oluşturulamadı.");
+      return;
+    }
+    User admin = new User();
+    admin.setUsername(seedAdminUsername);
+    admin.setEmail(seedAdminEmail);
+    admin.setPassword(passwordEncoder.encode(seedAdminPassword));
+    admin.setProvider("local");
+    admin.setIsActive(true);
+    admin.setEmailVerified(true);
+    admin.getRoles().add(superAdminRole.get());
+    userRepository.save(admin);
+    log.info("✅ Seed SUPER_ADMIN oluşturuldu: {}", seedAdminUsername);
   }
 }

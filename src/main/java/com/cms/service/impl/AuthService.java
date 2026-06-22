@@ -216,18 +216,19 @@ public class AuthService implements IAuthService {
   }
 
   private void sendVerificationEmail(User user, String tenantId, String verificationToken) {
-    // Mail hesapları admin panelde (basedb) yönetilir.
-    // Tenant context geçici olarak basedb'ye alınır, sonra geri döner.
+    // Mail hesapları artık her tenant'ın KENDİ DB'sinde (basedb yok). Context'i o tenant'a al.
     String currentTenant = TenantContext.getTenantId();
     try {
-      TenantContext.setTenantId("basedb");
+      if (tenantId != null && !tenantId.isBlank()) {
+        TenantContext.setTenantId(tenantId);
+      }
 
       var mailAccount = (tenantId != null && !tenantId.isBlank())
           ? mailAccountRepository.findByTenantIdAndIsPrimaryTrueAndActiveTrue(tenantId)
           : java.util.Optional.<com.cms.entity.MailAccount>empty();
 
       if (mailAccount.isEmpty()) {
-        log.warn("Doğrulama e-postası gönderilemedi — basedb'de '{}' tenant'ına ait aktif primary mail hesabı yok", tenantId);
+        log.warn("Doğrulama e-postası gönderilemedi — '{}' tenant'ında aktif primary mail hesabı yok", tenantId);
         return;
       }
 
@@ -368,6 +369,15 @@ public class AuthService implements IAuthService {
     if (!jwtUtil.validateRefreshToken(refreshTokenString)) {
       throw new BadRequestException("Invalid or expired refresh token");
     }
+
+    // Tenant'ı refresh token'ın tenantId claim'inden çöz ve context'i set et.
+    // Refresh isteğinde access token header'i yok/expired olabilir → refresh token VE user
+    // DOĞRU tenant DB'sinde aranmalı (basedb fallback yok). Eski logout bug'ının kökü buydu.
+    String refreshTenantId = jwtUtil.extractTenantId(refreshTokenString);
+    if (refreshTenantId == null || refreshTenantId.isBlank()) {
+      throw new BadRequestException("Refresh token tenant bilgisi icermiyor");
+    }
+    TenantContext.setTenantId(refreshTenantId);
 
     // Veritabanından refresh token'ı bul
     RefreshToken refreshToken = refreshTokenRepository.findByToken(refreshTokenString)
@@ -546,15 +556,13 @@ public class AuthService implements IAuthService {
   }
 
   /**
-   * MFA işlemleri için kullanıcıyı doğru tenant context'te yükler.
-   * Admin login = basedb, tenant login = tenantId.
+   * MFA işlemleri için kullanıcıyı doğru tenant context'te yükler (tenantId = kullanıcının
+   * tenant'ı; basedb yok).
    */
   private User loadUserForMfa(Long userId, String tenantId) {
     String originalTenant = TenantContext.getTenantId();
-    // loginSource bilinmiyorsa tenantId'ye göre context belirle
-    if (tenantId == null || tenantId.isBlank()) {
-      TenantContext.setTenantId(null); // basedb fallback
-    } else {
+    // tenantId verilmişse o tenant context'inde; verilmemişse MEVCUT context korunur.
+    if (tenantId != null && !tenantId.isBlank()) {
       TenantContext.setTenantId(tenantId);
     }
     try {

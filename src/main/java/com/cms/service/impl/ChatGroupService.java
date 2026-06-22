@@ -43,9 +43,6 @@ public class ChatGroupService implements IChatGroupService {
   private final ChatGroupTenantRouter tenantRouter;
   private final ObjectProvider<ChatGroupService> selfProvider;
 
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
-
   @Override
   @Transactional
   public DtoChatGroup createGroup(DtoChatGroupCreate dto, Long creatorId) {
@@ -381,23 +378,18 @@ public class ChatGroupService implements IChatGroupService {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
   protected int userRoleLevelFromBasedb(Long userId) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId(defaultTenant);
-      return userRepository.findById(userId)
-          .map(u -> {
-            Set<String> roles = u.getRoles().stream()
-                .map(r -> r.getName())
-                .collect(Collectors.toSet());
-            if (roles.contains("SUPER_ADMIN")) return 4;
-            if (roles.contains("ADMIN")) return 3;
-            if (roles.contains("EDITOR")) return 2;
-            return 1;
-          })
-          .orElse(1);
-    } finally {
-      TenantContext.setTenantId(originalTenant);
-    }
+    // Mevcut tenant context'inde — kullanıcı kendi tenant DB'sinde (basedb yok).
+    return userRepository.findById(userId)
+        .map(u -> {
+          Set<String> roles = u.getRoles().stream()
+              .map(r -> r.getName())
+              .collect(Collectors.toSet());
+          if (roles.contains("SUPER_ADMIN")) return 4;
+          if (roles.contains("ADMIN")) return 3;
+          if (roles.contains("EDITOR")) return 2;
+          return 1;
+        })
+        .orElse(1);
   }
 
   private ChatGroupMember addMemberInternal(UUID groupId, Long userId, ChatMemberRole role) {

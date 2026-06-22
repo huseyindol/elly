@@ -53,24 +53,12 @@ public class ChatWebSocketController {
     rateLimitService.checkRateLimit(userId);
     String sessionTenant = resolveOptionalSessionTenant(headerAccessor);
 
-    TenantContext.setTenantId(null);
-    String activeTenant = null;
+    // AC=TC: admin kendi tenant'ında yazar (CONNECT session tenantId'si). basedb yok.
+    TenantContext.setTenantId(sessionTenant);
     try {
-      DtoChatMessage saved;
-      try {
-        saved = messageService.saveMessage(groupId, userId, username, payload);
-      } catch (ForbiddenException e) {
-        // Eski AC grupları JWT tenantId varken yanlışlıkla tenant DB'ye yazılmış olabilir
-        if (sessionTenant == null || sessionTenant.isBlank()) {
-          throw e;
-        }
-        log.debug("AC send denied on basedb for group {}, retrying tenant {}", groupId, sessionTenant);
-        TenantContext.setTenantId(sessionTenant);
-        activeTenant = sessionTenant;
-        saved = messageService.saveMessage(groupId, userId, username, payload);
-      }
-      messagingTemplate.convertAndSend(ChatTopics.messageTopic(activeTenant, groupId), saved);
-      log.debug("AC message sent to group {} by user {} (tenant={})", groupId, userId, activeTenant);
+      DtoChatMessage saved = messageService.saveMessage(groupId, userId, username, payload);
+      messagingTemplate.convertAndSend(ChatTopics.messageTopic(sessionTenant, groupId), saved);
+      log.debug("Chat message sent to group {} by user {} (tenant={})", groupId, userId, sessionTenant);
     } finally {
       TenantContext.clear();
     }

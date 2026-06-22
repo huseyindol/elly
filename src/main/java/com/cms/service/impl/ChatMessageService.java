@@ -54,9 +54,6 @@ public class ChatMessageService implements IChatMessageService {
   @Value("${chat.message.max-length:4000}")
   private int maxMessageLength;
 
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
-
   @Override
   @Transactional
   public DtoChatMessage saveMessage(UUID groupId, Long senderId, String senderUsername, DtoChatMessageSend dto) {
@@ -255,14 +252,9 @@ public class ChatMessageService implements IChatMessageService {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
   public String lookupAdminUsername(Long userId) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId(defaultTenant);
-      return userRepository.findById(userId)
-          .map(u -> u.getUsername())
-          .orElse(null);
-    } finally {
-      TenantContext.setTenantId(originalTenant);
-    }
+    // Mevcut tenant context'inde — kullanıcı kendi tenant DB'sinde (basedb yok).
+    return userRepository.findById(userId)
+        .map(u -> u.getUsername())
+        .orElse(null);
   }
 }

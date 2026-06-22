@@ -1,59 +1,30 @@
 package com.cms.service.impl;
 
-import com.cms.config.DataSourceConfig;
 import com.cms.config.TenantContext;
 import com.cms.entity.ChatGroup;
 import com.cms.repository.ChatGroupRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /**
- * Chat gruplarını doğru tenant DB'sinde bulur ve TenantContext'i o DB'ye yönlendirir.
- * AC (basedb) ve TC (tenantX) kayıtlarının karışmasını önler.
+ * Chat gruplarını MEVCUT tenant context'inde bulur/yönlendirir.
+ *
+ * <p>basedb/AC ayrımı YOKTUR — her grup ait olduğu tenant DB'sinde yaşar. Context;
+ * filtre (JWT tenantId), WS CONNECT (token tenantId) veya WS destination
+ * ({@code /app/tenant-chat/{tid}/..}) tarafından zaten doğru set edilir; bu yüzden
+ * eski cross-tenant tarama kaldırıldı.
  */
 @Component
 @RequiredArgsConstructor
 public class ChatGroupTenantRouter {
 
   private final ChatGroupRepository groupRepository;
-  private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
-
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
 
   public Optional<ChatGroup> findGroup(UUID groupId) {
-    // Model A: grup once MEVCUT TenantContext'te aranir (REST'te URL path'i — admin icin
-    // /api/v1/chat/tenant/{tid}, tenant user icin JWT claim'i; WS'te
-    // /app/tenant-chat/{tenantId}/... destination'i context'i dogru set eder).
-    // OSIV tek request-bound baglanti tuttugu icin asagidaki cross-tenant tarama TC
-    // gruplari icin calismiyordu (baglanti ilk iterasyonda basedb'ye pinlenir, sonraki
-    // context switch'leri etkisiz kalir) -> "Chat group not found". Mevcut context'te
-    // bulununca taramaya hic gerek kalmaz.
-    Optional<ChatGroup> inCurrentContext = groupRepository.findById(groupId);
-    if (inCurrentContext.isPresent()) {
-      return inCurrentContext;
-    }
-    // Fallback: context'in set edilmedigi nadir durumlar icin tarama (OSIV altinda sinirli).
-    String original = TenantContext.getTenantId();
-    try {
-      for (String tenantKey : tenantScanOrder()) {
-        setTenantContext(tenantKey);
-        Optional<ChatGroup> found = groupRepository.findById(groupId);
-        if (found.isPresent()) {
-          return found;
-        }
-      }
-      return Optional.empty();
-    } finally {
-      TenantContext.setTenantId(original);
-    }
+    return groupRepository.findById(groupId);
   }
 
   public ChatGroup requireGroup(UUID groupId) {
@@ -67,27 +38,10 @@ public class ChatGroupTenantRouter {
   }
 
   public void setTenantContextForGroup(String groupTenantId) {
-    if (groupTenantId == null || groupTenantId.isBlank()) {
-      TenantContext.setTenantId(null);
-    } else {
-      TenantContext.setTenantId(groupTenantId);
-    }
+    TenantContext.setTenantId(groupTenantId);
   }
 
   public void setTenantContext(String tenantKey) {
-    if (tenantKey.equals(defaultTenant)) {
-      TenantContext.setTenantId(null);
-    } else {
-      TenantContext.setTenantId(tenantKey);
-    }
-  }
-
-  private List<String> tenantScanOrder() {
-    Set<String> ordered = new LinkedHashSet<>();
-    if (tenantProperties.getDatasources().containsKey(defaultTenant)) {
-      ordered.add(defaultTenant);
-    }
-    ordered.addAll(tenantProperties.getDatasources().keySet());
-    return List.copyOf(ordered);
+    TenantContext.setTenantId(tenantKey);
   }
 }

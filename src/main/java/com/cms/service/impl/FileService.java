@@ -28,18 +28,17 @@ public class FileService implements IFileService {
   private String uploadDirectory;
   @Value("${file.upload.directory.files:uploads/assets}")
   private String uploadDirectoryFiles;
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
 
   /** Served + PVC kökü (WebConfig: /assets/** → file:assets/). Tenant izolasyonu bunun altında. */
   private static final String ASSETS_ROOT = "assets";
   private static final String TENANT_DIR = "t";
 
-  /** Geçerli tenant'ı path-safe segment'e çevirir (null → basedb). Path traversal koruması. */
+  /** Geçerli tenant'ı path-safe segment'e çevirir. Context yoksa TENANT_REQUIRED (basedb yok). */
   private String currentTenant() {
     String t = TenantContext.getTenantId();
     if (t == null || t.isBlank()) {
-      t = defaultTenant;
+      throw new com.cms.exception.TenantRequiredException(
+          "Dosya işlemi için tenant context'i gerekli");
     }
     return t.replaceAll("[^a-zA-Z0-9_-]", "_");
   }

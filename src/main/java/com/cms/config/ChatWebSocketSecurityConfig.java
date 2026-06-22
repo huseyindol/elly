@@ -42,8 +42,7 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
   private final ObjectMapper objectMapper;
   private final RedisTemplate<String, Object> redisTemplate;
 
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
+  // basedb kaldırıldı — WS CONNECT'te tenant daima token tenantId claim'inden çözülür.
 
   @Override
   public void configureClientInboundChannel(ChannelRegistration registration) {
@@ -103,20 +102,22 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
 
       String username = jwtUtil.extractUsername(token);
 
-      String tenantIdClaim = null;
+      // Tenant zorunlu: token tenantId claim'i yoksa hangi DB belirsiz → reddet (basedb yok).
+      String tenantIdClaim;
       try {
         tenantIdClaim = jwtUtil.extractTenantId(token);
-      } catch (Exception ignored) {
-        // tenantId claim opsiyonel
+      } catch (Exception e) {
+        tenantIdClaim = null;
+      }
+      if (tenantIdClaim == null || tenantIdClaim.isBlank()) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "Token tenant bilgisi icermiyor (TENANT_REQUIRED)");
       }
 
-      // Tenant user kendi tenant DB'sinde yaşar → user'ı YÜKLEMEDEN ÖNCE context'i
-      // o tenant'a kur (admin'i loadUserFromDbAndCache zaten basedb'ye yönlendirir).
-      // Aksi halde tenant user basedb'de aranır ve bulunamaz → CONNECT reddedilir.
+      // Hem admin hem tenant user kendi tenant DB'sinde → user'ı YÜKLEMEDEN ÖNCE
+      // context'i o tenant'a kur (basedb yok).
       String originalTenant = TenantContext.getTenantId();
-      if (isTenant && tenantIdClaim != null && !tenantIdClaim.isBlank()) {
-        TenantContext.setTenantId(tenantIdClaim);
-      }
+      TenantContext.setTenantId(tenantIdClaim);
       CachedUserDetails cachedUser;
       try {
         cachedUser = resolveCachedUser(username, loginSource);
@@ -228,10 +229,7 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
   private CachedUserDetails loadUserFromDbAndCache(String username, String loginSource) {
     String originalTenant = TenantContext.getTenantId();
     try {
-      if ("admin".equals(loginSource)) {
-        TenantContext.setTenantId(defaultTenant);
-      }
-
+      // basedb forcing YOK — MEVCUT context'te (authenticateConnect token tenantId'sinden set eder).
       User user = userRepository.findByUsername(username)
           .orElseThrow(() -> new org.springframework.security.core.userdetails
               .UsernameNotFoundException("User not found: " + username));

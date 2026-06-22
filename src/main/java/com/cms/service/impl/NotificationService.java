@@ -36,9 +36,6 @@ public class NotificationService implements INotificationService {
   private final NotificationMapper notificationMapper;
   private final NotificationPublisher notificationPublisher;
 
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
-
   @Override
   @Transactional(readOnly = true)
   public Page<DtoNotification> list(Pageable pageable, Boolean unreadOnly) {
@@ -160,12 +157,6 @@ public class NotificationService implements INotificationService {
   }
 
   private <T> T runOnBasedb(java.util.function.Supplier<T> action) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId(defaultTenant);
-      return action.get();
-    } finally {
-      TenantContext.setTenantId(originalTenant);
-    }
+    return action.get(); // mevcut tenant context'inde — basedb yok
   }
 }

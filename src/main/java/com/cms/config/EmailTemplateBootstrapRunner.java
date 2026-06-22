@@ -34,52 +34,50 @@ import lombok.extern.slf4j.Slf4j;
 public class EmailTemplateBootstrapRunner implements ApplicationRunner {
 
   private final IEmailTemplateService emailTemplateService;
+  private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
 
   @Override
   public void run(ApplicationArguments args) {
-    seed("form-notification", "Yeni Form Gönderimi: [[${formTitle}]]",
-        "form-notification.html", "Form submit bildirim maili");
-    seedInline("welcome", "Hoş Geldin, [[${userName}]]!", buildWelcomeTemplate(),
-        "Yeni kullanıcı kayıt hoşgeldin maili");
-    seedInline("password-reset", "Şifre Sıfırlama Talebiniz",
-        buildPasswordResetTemplate(), "Şifre sıfırlama bağlantısı maili");
+    String original = TenantContext.getTenantId();
+    try {
+      // basedb yok → her tenant kendi şablonlarını alır (seed mevcut context'te çalışır).
+      for (String tenantId : tenantProperties.getDatasources().keySet()) {
+        TenantContext.setTenantId(tenantId);
+        seed("form-notification", "Yeni Form Gönderimi: [[${formTitle}]]",
+            "form-notification.html", "Form submit bildirim maili");
+        seedInline("welcome", "Hoş Geldin, [[${userName}]]!", buildWelcomeTemplate(),
+            "Yeni kullanıcı kayıt hoşgeldin maili");
+        seedInline("password-reset", "Şifre Sıfırlama Talebiniz",
+            buildPasswordResetTemplate(), "Şifre sıfırlama bağlantısı maili");
+      }
+    } finally {
+      TenantContext.setTenantId(original);
+    }
   }
 
   private void seedInline(String key, String subject, String htmlBody, String description) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId("basedb");
-      if (emailTemplateService.existsByKey(null, key)) {
-        log.debug("EmailTemplate seed atlanıyor (zaten mevcut): key={}", key);
-        return;
-      }
-      emailTemplateService.createGlobal(key, subject, htmlBody, description);
-    } finally {
-      TenantContext.setTenantId(originalTenant);
+    // Mevcut tenant context'inde (run() döngüsü set eder) — basedb yok.
+    if (emailTemplateService.existsByKey(null, key)) {
+      log.debug("EmailTemplate seed atlanıyor (zaten mevcut): key={}", key);
+      return;
     }
+    emailTemplateService.createGlobal(key, subject, htmlBody, description);
   }
 
   private void seed(String key, String subject, String filename, String description) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId("basedb");
-
-      if (emailTemplateService.existsByKey(null, key)) {
-        log.debug("EmailTemplate seed atlanıyor (zaten mevcut): key={}", key);
-        return;
-      }
-
-      String htmlBody = loadClasspathTemplate(filename);
-      if (htmlBody == null) {
-        log.warn("Classpath template bulunamadı, seed atlanıyor: {}", filename);
-        return;
-      }
-
-      emailTemplateService.createGlobal(key, subject, htmlBody, description);
-
-    } finally {
-      TenantContext.setTenantId(originalTenant);
+    // Mevcut tenant context'inde (run() döngüsü set eder) — basedb yok.
+    if (emailTemplateService.existsByKey(null, key)) {
+      log.debug("EmailTemplate seed atlanıyor (zaten mevcut): key={}", key);
+      return;
     }
+
+    String htmlBody = loadClasspathTemplate(filename);
+    if (htmlBody == null) {
+      log.warn("Classpath template bulunamadı, seed atlanıyor: {}", filename);
+      return;
+    }
+
+    emailTemplateService.createGlobal(key, subject, htmlBody, description);
   }
 
   private static String buildWelcomeTemplate() {

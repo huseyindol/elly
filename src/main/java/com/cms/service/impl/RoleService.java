@@ -35,9 +35,6 @@ public class RoleService implements IRoleService {
   private final UserRepository userRepository;
   private final UserAuthCacheService userAuthCacheService;
 
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
-
   @Override
   public List<DtoRole> getAllRoles() {
     return executeInDefaultTenant(() -> {
@@ -180,17 +177,11 @@ public class RoleService implements IRoleService {
   // =============== Helpers ===============
 
   /**
-   * Role/Permission işlemleri her zaman defaultTenant (basedb) üzerinde yapılır
-   * çünkü User entity'si orada tutulur.
+   * Role/Permission işlemleri MEVCUT tenant context'inde yapılır — her tenant kendi
+   * rollerini/kullanıcılarını kendi DB'sinde tutar (basedb yok).
    */
   private <T> T executeInDefaultTenant(java.util.function.Supplier<T> action) {
-    String originalTenant = TenantContext.getTenantId();
-    try {
-      TenantContext.setTenantId(defaultTenant);
-      return action.get();
-    } finally {
-      TenantContext.setTenantId(originalTenant);
-    }
+    return action.get();
   }
 
   private DtoRole toDto(Role role) {

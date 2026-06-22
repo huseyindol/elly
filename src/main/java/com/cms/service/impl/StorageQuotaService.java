@@ -28,8 +28,6 @@ public class StorageQuotaService implements IStorageQuotaService {
 
   @Value("${app.storage.default-quota-bytes:3221225472}") // 3 GB
   private long defaultQuotaBytes;
-  @Value("${app.tenants.default-tenant:basedb}")
-  private String defaultTenant;
 
   // FileService ile aynı kök (assets/t/{tenant})
   private static final String ASSETS_ROOT = "assets";
@@ -38,7 +36,8 @@ public class StorageQuotaService implements IStorageQuotaService {
   private String currentTenant() {
     String t = TenantContext.getTenantId();
     if (t == null || t.isBlank()) {
-      t = defaultTenant;
+      throw new com.cms.exception.TenantRequiredException(
+          "Depolama kotası için tenant context'i gerekli");
     }
     return t.replaceAll("[^a-zA-Z0-9_-]", "_");
   }

@@ -11,6 +11,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.cms.entity.Permission;
 import com.cms.entity.Role;
@@ -43,6 +45,7 @@ public class DataInitializer implements CommandLineRunner {
   private final UserRepository userRepository;
   private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
   private final PasswordEncoder passwordEncoder;
+  private final PlatformTransactionManager transactionManager;
 
   // İlk SUPER_ADMIN seed (her tenant'a, idempotent). Prod'da env ile override edilmeli.
   @Value("${SEED_ADMIN_USER:admin}")
@@ -53,20 +56,21 @@ public class DataInitializer implements CommandLineRunner {
   private String seedAdminEmail;
 
   @Override
-  @Transactional
   public void run(String... args) {
     String originalTenant = TenantContext.getTenantId();
+    TransactionTemplate tx = new TransactionTemplate(transactionManager);
     try {
-      // basedb yok — HER tenant kendi permission/rol'lerini + (rolsüz kullanıcı varsa)
-      // ilk SUPER_ADMIN'ini alır. Hepsi idempotent: var olanlar atlanır. Not: register
-      // VIEWER atadığı için normal tenant-site kullanıcıları SUPER_ADMIN'e yükselmez;
-      // yalnızca rolsüz (seed) kullanıcı yükseltilir.
+      // basedb yok — HER tenant kendi permission/rol + (rolsüz değil) ilk SUPER_ADMIN'ini alır.
+      // ÖNEMLİ: her tenant AYRI transaction'da seed edilir. Tek @Transactional ile bağlantı
+      // ilk tenant'a pinlenir ve diğer tenant'lara YAZILAMAZdı (tenant mid-transaction değişmez).
       for (String tenantId : tenantProperties.getDatasources().keySet()) {
         try {
           TenantContext.setTenantId(tenantId);
-          initializePermissions();
-          initializeRoles();
-          ensureSeedSuperAdmin();
+          tx.executeWithoutResult(status -> {
+            initializePermissions();
+            initializeRoles();
+            ensureSeedSuperAdmin();
+          });
           log.info("✅ Tenant '{}' seed (permission+rol+super-admin) tamamlandı.", tenantId);
         } catch (Exception e) {
           log.warn("⚠️ Tenant '{}' seed başarısız (devam ediliyor): {}", tenantId, e.getMessage());

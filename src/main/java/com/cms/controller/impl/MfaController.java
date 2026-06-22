@@ -19,6 +19,7 @@ import com.cms.entity.RootEntityResponse;
 import com.cms.exception.UnauthorizedException;
 import com.cms.service.IAuthService;
 import com.cms.util.AuthCookieWriter;
+import com.cms.util.JwtUtil;
 
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -38,6 +39,7 @@ public class MfaController implements IMfaController {
 
   private final IAuthService authService;
   private final AuthCookieWriter authCookieWriter;
+  private final JwtUtil jwtUtil;
 
   // ── GET /api/v1/auth/mfa/status ────────────────────────────────────────
   @Override
@@ -74,6 +76,12 @@ public class MfaController implements IMfaController {
   @Override
   public ResponseEntity<RootEntityResponse<DtoAuthResponse>> verifyLogin(
       @Valid DtoMfaVerifyRequest request, HttpServletResponse httpResponse) {
+    // Tenant'ı mfaToken claim'inden çöz ve @Transactional çağrıdan ÖNCE context'e kur
+    // (login/refresh ile aynı sebep — bu endpoint JWT gerektirmez, context henüz yok).
+    String mfaTenantId = jwtUtil.extractTenantId(request.getMfaToken());
+    if (mfaTenantId != null && !mfaTenantId.isBlank()) {
+      TenantContext.setTenantId(mfaTenantId);
+    }
     DtoAuthResponse response = authService.verifyMfaLogin(request);
     // GAP-2: /login ile aynı HttpOnly oturum cookie'lerini set et (yollar arası drift kapatıldı)
     authCookieWriter.writeAuthCookies(httpResponse, response);

@@ -77,6 +77,13 @@ public class AuthController extends BaseController implements IAuthController {
   @PostMapping("/login")
   public RootEntityResponse<DtoAuthResponse> login(@Valid @RequestBody DtoLogin dtoLogin,
       HttpServletResponse httpResponse) {
+    // Tenant context'i @Transactional servis çağrısından ÖNCE kur. Aksi halde transaction
+    // begin'inde context null olur, routing default (yanlış) tenant'a düşer (HikariPool hatası).
+    // Panel admin login'de tenant body'de gelir; tenant-site'ta PublicApiFilter zaten kurmuştur
+    // (o durumda body tenantId null → context'i ezmeyiz).
+    if (dtoLogin.getTenantId() != null && !dtoLogin.getTenantId().isBlank()) {
+      TenantContext.setTenantId(dtoLogin.getTenantId());
+    }
     DtoAuthResponse response = authService.login(dtoLogin);
 
     // 2FA gerekiyorsa tam token henüz yok (sadece mfaToken) — oturum cookie'leri YAZMA.
@@ -99,6 +106,12 @@ public class AuthController extends BaseController implements IAuthController {
   @PostMapping("/refresh")
   public RootEntityResponse<DtoAuthResponse> refreshToken(@Valid @RequestBody DtoRefreshToken dtoRefreshToken,
       HttpServletResponse httpResponse) {
+    // Tenant'ı refresh token'ın claim'inden çöz ve @Transactional çağrıdan ÖNCE context'e kur
+    // (login ile aynı sebep — transaction begin'inde context dolu olmalı).
+    String refreshTenantId = jwtUtil.extractTenantId(dtoRefreshToken.getRefreshToken());
+    if (refreshTenantId != null && !refreshTenantId.isBlank()) {
+      TenantContext.setTenantId(refreshTenantId);
+    }
     DtoAuthResponse response = authService.refreshToken(dtoRefreshToken);
     authCookieWriter.writeAuthCookies(httpResponse, response);
     return ok(response);

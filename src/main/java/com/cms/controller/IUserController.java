@@ -24,5 +24,7 @@ public interface IUserController {
   RootEntityResponse<List<DtoUserResponse>> getAllUsers();
 
   RootEntityResponse<DtoUserResponse> getUserById(@PathVariable Long id);
+
+  RootEntityResponse<Void> deleteUser(@PathVariable Long id);
 }
 

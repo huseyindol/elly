@@ -19,5 +19,11 @@ public interface IUserService {
   List<DtoUserResponse> getAllUsers();
 
   DtoUserResponse getUserById(Long id);
+
+  /**
+   * Kullanıcıyı kalıcı siler. Çağıran kullanıcı kendini silemez. Aktif refresh token'lar
+   * temizlenir (silinen kullanıcının açık oturumları sonlanır), auth cache invalid edilir.
+   */
+  void deleteUser(Long id, String currentUsername);
 }
 

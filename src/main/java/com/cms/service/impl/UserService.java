@@ -20,6 +20,7 @@ import com.cms.entity.User;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
 import com.cms.mapper.UserMapper;
+import com.cms.repository.RefreshTokenRepository;
 import com.cms.repository.UserRepository;
 import com.cms.service.IUserService;
 
@@ -36,6 +37,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 public class UserService implements IUserService {
 
   private final UserRepository userRepository;
+  private final RefreshTokenRepository refreshTokenRepository;
   private final PasswordEncoder passwordEncoder;
   private final UserMapper userMapper;
   private final UserAuthCacheService userAuthCacheService;
@@ -158,6 +160,31 @@ public class UserService implements IUserService {
     User user = userRepository.findById(id)
         .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
     return userMapper.toDtoUserResponse(user);
+  }
+
+  @Override
+  @Transactional
+  public void deleteUser(Long id, String currentUsername) {
+    User user = userRepository.findById(id)
+        .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
+
+    // Self-delete koruması — admin kendi hesabını silemez.
+    if (user.getUsername() != null && user.getUsername().equals(currentUsername)) {
+      throw new BadRequestException("Kendi hesabınızı silemezsiniz");
+    }
+
+    // RefreshToken @ManyToOne(User) ile FK constraint'i taşır → user silinmeden önce temizlenmeli.
+    // Notification/ChatMessage gibi userId Long alanları FK taşımaz → orphan kalır (tarih korunur).
+    refreshTokenRepository.deleteByUserId(id);
+
+    String username = user.getUsername();
+    userRepository.delete(user);
+
+    // Redis auth cache invalidate — silinen kullanıcının cache'lenmiş oturumu kalmasın
+    if (username != null) {
+      userAuthCacheService.evictUserCache(username);
+    }
+    log.info("Kullanici silindi: id={} username={} silen={}", id, username, currentUsername);
   }
 
   // =============== Helpers ===============

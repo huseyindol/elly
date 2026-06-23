@@ -78,11 +78,6 @@ public class User extends BaseEntity {
   )
   private Set<Role> roles = new HashSet<>();
 
-  @ElementCollection(fetch = FetchType.EAGER)
-  @CollectionTable(name = "user_tenants", joinColumns = @JoinColumn(name = "user_id"))
-  @Column(name = "tenant_id")
-  private List<String> managedTenants = new ArrayList<>();
-
   // ── 2FA (TOTP) ──────────────────────────────────────────────────────────
   @Column(name = "mfa_enabled", nullable = false)
   private Boolean mfaEnabled = false;

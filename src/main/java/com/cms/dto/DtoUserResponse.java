@@ -20,7 +20,6 @@ public class DtoUserResponse {
   private String lastName;
   private String provider;
   private Boolean isActive;
-  private List<String> managedTenants;
   private List<String> roles;
   private Date createdAt;
 }

@@ -1,7 +1,6 @@
 package com.cms.service.impl;
 
 import com.cms.config.JwtAuthenticationFilter;
-import com.cms.config.TenantContext;
 import com.cms.dto.DtoNotification;
 import com.cms.dto.DtoNotificationReadAllResult;
 import com.cms.dto.DtoNotificationUnreadCount;
@@ -40,19 +39,17 @@ public class NotificationService implements INotificationService {
   @Transactional(readOnly = true)
   public Page<DtoNotification> list(Pageable pageable, Boolean unreadOnly) {
     Long userId = requireCurrentUserId();
-    return runOnBasedb(() -> {
-      Page<Notification> page = Boolean.TRUE.equals(unreadOnly)
-          ? notificationRepository.findByUserIdAndReadFlagFalseOrderByCreatedAtDesc(userId, pageable)
-          : notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
-      return page.map(notificationMapper::toDto);
-    });
+    Page<Notification> page = Boolean.TRUE.equals(unreadOnly)
+        ? notificationRepository.findByUserIdAndReadFlagFalseOrderByCreatedAtDesc(userId, pageable)
+        : notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+    return page.map(notificationMapper::toDto);
   }
 
   @Override
   @Transactional(readOnly = true)
   public DtoNotificationUnreadCount unreadCount() {
     Long userId = requireCurrentUserId();
-    long count = runOnBasedb(() -> notificationRepository.countByUserIdAndReadFlagFalse(userId));
+    long count = notificationRepository.countByUserIdAndReadFlagFalse(userId);
     return new DtoNotificationUnreadCount(count);
   }
 
@@ -60,38 +57,31 @@ public class NotificationService implements INotificationService {
   @Transactional
   public DtoNotification markRead(Long id) {
     Long userId = requireCurrentUserId();
-    return runOnBasedb(() -> {
-      Notification notification = findOwnedNotification(id, userId);
-      if (!notification.isReadFlag()) {
-        notification.setReadFlag(true);
-        notification = notificationRepository.save(notification);
-        notificationPublisher.pushUnreadCount(userId);
-      }
-      return notificationMapper.toDto(notification);
-    });
+    Notification notification = findOwnedNotification(id, userId);
+    if (!notification.isReadFlag()) {
+      notification.setReadFlag(true);
+      notification = notificationRepository.save(notification);
+      notificationPublisher.pushUnreadCount(userId);
+    }
+    return notificationMapper.toDto(notification);
   }
 
   @Override
   @Transactional
   public DtoNotificationReadAllResult markAllRead() {
     Long userId = requireCurrentUserId();
-    return runOnBasedb(() -> {
-      int updated = notificationRepository.markAllReadByUserId(userId);
-      notificationPublisher.pushUnreadCount(userId);
-      return new DtoNotificationReadAllResult(updated);
-    });
+    int updated = notificationRepository.markAllReadByUserId(userId);
+    notificationPublisher.pushUnreadCount(userId);
+    return new DtoNotificationReadAllResult(updated);
   }
 
   @Override
   @Transactional
   public void delete(Long id) {
     Long userId = requireCurrentUserId();
-    runOnBasedb(() -> {
-      Notification notification = findOwnedNotification(id, userId);
-      notificationRepository.delete(notification);
-      notificationPublisher.pushUnreadCount(userId);
-      return null;
-    });
+    Notification notification = findOwnedNotification(id, userId);
+    notificationRepository.delete(notification);
+    notificationPublisher.pushUnreadCount(userId);
   }
 
   @Override
@@ -156,7 +146,4 @@ public class NotificationService implements INotificationService {
     throw new ForbiddenException("Kimlik dogrulama gerekli");
   }
 
-  private <T> T runOnBasedb(java.util.function.Supplier<T> action) {
-    return action.get(); // mevcut tenant context'inde — basedb yok
-  }
 }

@@ -33,7 +33,7 @@ public class ChatMembershipNotifier {
       messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/groups/joined", group);
       messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/membership", event);
       log.info("Chat JOINED → userId={} username={} groupId={}", userId, user.getUsername(), group.getId());
-    }, () -> log.warn("Chat JOINED → userId={} not found in basedb, topic-only delivery", userId));
+    }, () -> log.warn("Chat JOINED → userId={} not found, topic-only delivery", userId));
   }
 
   public void notifyRemoved(Long userId, UUID groupId, DtoChatMembershipEvent event) {
@@ -44,6 +44,6 @@ public class ChatMembershipNotifier {
       messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/groups/removed", event);
       messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/membership", event);
       log.info("Chat REMOVED → userId={} username={} groupId={}", userId, user.getUsername(), groupId);
-    }, () -> log.warn("Chat REMOVED → userId={} not found in basedb, topic-only delivery", userId));
+    }, () -> log.warn("Chat REMOVED → userId={} not found, topic-only delivery", userId));
   }
 }

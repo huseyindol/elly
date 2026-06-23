@@ -44,6 +44,7 @@ import com.cms.entity.User;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
 import com.cms.exception.ForbiddenException;
+import com.cms.exception.TenantRequiredException;
 import com.cms.exception.UnauthorizedException;
 import com.cms.enums.NotificationType;
 import com.cms.repository.MailAccountRepository;
@@ -87,78 +88,62 @@ public class AuthService implements IAuthService {
   @Override
   @Transactional
   public DtoAuthResponse register(DtoRegister dtoRegister) {
-    String tenantId = dtoRegister.getTenantId();
-    String originalTenant = TenantContext.getTenantId();
-
-    // Tenant doğrulama ve context switch
-    if (tenantId != null && !tenantId.isBlank()) {
-      if (!tenantProperties.getDatasources().containsKey(tenantId)) {
-        throw new BadRequestException("Tenant not found: " + tenantId);
-      }
-      TenantContext.setTenantId(tenantId);
+    // Tenant context AuthController.register tarafından @Transactional ÖNCESİ kuruluyor
+    // (body'deki tenantId'den). Burada tek görev: context'in gerçekten kurulduğunu doğrulamak.
+    // null/blank → TENANT_REQUIRED (basedb / sessiz fallback yok). Tenant id ayrıca config'te
+    // tanımlı bir tenant'a karşılık gelmeli — gelmiyorsa BadRequest.
+    String tenantId = TenantContext.getTenantId();
+    if (tenantId == null || tenantId.isBlank()) {
+      throw new TenantRequiredException("Register icin tenantId zorunludur");
+    }
+    if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+      throw new BadRequestException("Tenant not found: " + tenantId);
     }
 
-    try {
-      // Email ve username kontrolü
-      if (userRepository.existsByEmail(dtoRegister.getEmail())) {
-        throw new ConflictException("Email already exists: " + dtoRegister.getEmail());
-      }
-      if (userRepository.existsByUsername(dtoRegister.getUsername())) {
-        throw new ConflictException("Username already exists: " + dtoRegister.getUsername());
-      }
-
-      // VIEWER rolünü bul (tenant DB'de olmayabilir, graceful fallback)
-      Role viewerRole = roleRepository.findByName("VIEWER").orElse(null);
-
-      // Verification token oluştur
-      String verificationToken = UUID.randomUUID().toString();
-
-      // Yeni kullanıcı oluştur
-      User user = new User();
-      user.setUsername(dtoRegister.getUsername());
-      user.setEmail(dtoRegister.getEmail());
-      user.setPassword(passwordEncoder.encode(dtoRegister.getPassword()));
-      user.setFirstName(dtoRegister.getFirstName());
-      user.setLastName(dtoRegister.getLastName());
-      user.setProvider("local");
-      user.setIsActive(true);
-      user.setEmailVerified(false);
-      user.setEmailVerificationToken(verificationToken);
-      user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24));
-
-      if (viewerRole != null) {
-        user.getRoles().add(viewerRole);
-      }
-
-      // managedTenants sadece SUPER_ADMIN tarafından set edilebilir
-      // Public register endpoint'inden gelen isteklerde bu alan yok sayılır
-      if (dtoRegister.getManagedTenants() != null && !dtoRegister.getManagedTenants().isEmpty()) {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        boolean isSuperAdmin = auth != null && auth.getAuthorities().stream()
-            .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
-        if (isSuperAdmin) {
-          user.setManagedTenants(dtoRegister.getManagedTenants());
-        }
-        // SUPER_ADMIN değilse sessizce yok say — hata fırlatma, kayıt devam eder
-      }
-
-      User savedUser = userRepository.save(user);
-
-      triggerUserRegisteredNotification(savedUser, tenantId);
-
-      // Doğrulama e-postası gönder (hata olursa kayıt yine tamamlanır)
-      sendVerificationEmail(savedUser, tenantId, verificationToken);
-
-      DtoAuthResponse response = new DtoAuthResponse();
-      response.setUserId(savedUser.getId());
-      response.setUsername(savedUser.getUsername());
-      response.setEmail(savedUser.getEmail());
-      response.setMessage("Kayıt başarılı. Lütfen e-posta adresinize gönderilen doğrulama bağlantısına tıklayın.");
-
-      return response;
-    } finally {
-      TenantContext.setTenantId(originalTenant);
+    // Email ve username kontrolü
+    if (userRepository.existsByEmail(dtoRegister.getEmail())) {
+      throw new ConflictException("Email already exists: " + dtoRegister.getEmail());
     }
+    if (userRepository.existsByUsername(dtoRegister.getUsername())) {
+      throw new ConflictException("Username already exists: " + dtoRegister.getUsername());
+    }
+
+    // Tenant register → VIEWER (panel'e giremez, sadece tenant-site). VIEWER yoksa
+    // (seed eksik) graceful fallback: kullanıcı rolsüz kalır; admin sonradan rol atar.
+    Role viewerRole = roleRepository.findByName("VIEWER").orElse(null);
+
+    String verificationToken = UUID.randomUUID().toString();
+
+    User user = new User();
+    user.setUsername(dtoRegister.getUsername());
+    user.setEmail(dtoRegister.getEmail());
+    user.setPassword(passwordEncoder.encode(dtoRegister.getPassword()));
+    user.setFirstName(dtoRegister.getFirstName());
+    user.setLastName(dtoRegister.getLastName());
+    user.setProvider("local");
+    user.setIsActive(true);
+    user.setEmailVerified(false);
+    user.setEmailVerificationToken(verificationToken);
+    user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24));
+
+    if (viewerRole != null) {
+      user.getRoles().add(viewerRole);
+    }
+
+    User savedUser = userRepository.save(user);
+
+    triggerUserRegisteredNotification(savedUser, tenantId);
+
+    // Doğrulama e-postası gönder (hata olursa kayıt yine tamamlanır)
+    sendVerificationEmail(savedUser, tenantId, verificationToken);
+
+    DtoAuthResponse response = new DtoAuthResponse();
+    response.setUserId(savedUser.getId());
+    response.setUsername(savedUser.getUsername());
+    response.setEmail(savedUser.getEmail());
+    response.setMessage("Kayıt başarılı. Lütfen e-posta adresinize gönderilen doğrulama bağlantısına tıklayın.");
+
+    return response;
   }
 
   @Override
@@ -306,14 +291,18 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("E-posta adresiniz henüz doğrulanmamış. Lütfen e-postanızı kontrol edin.");
     }
 
-    // Admin (panel) login: kullanıcı bu tenant'ta admin rolüne sahip olmalı (tam izolasyon —
-    // managedTenants/cross-tenant yok; her admin kendi tenant'ında yetkilidir).
-    if (isAdminLogin) {
-      boolean isAdmin = user.getRoles() != null && user.getRoles().stream()
-          .anyMatch(r -> "SUPER_ADMIN".equals(r.getName()) || "ADMIN".equals(r.getName()));
-      if (!isAdmin) {
-        throw new ForbiddenException("Bu kullanıcı panel (admin) girişi için yetkili değil");
-      }
+    // Panel ↔ tenant ayrımı (simetrik). Tam izolasyon: cross-tenant kavramı YOK.
+    //   • loginType=admin → kullanıcı SUPER_ADMIN veya ADMIN olmalı (panel paneline yalnız bunlar)
+    //   • loginType=tenant → kullanıcı admin rolünde OLMAMALI (panel adminleri tenant site'a girmesin)
+    // Mantık: register endpoint'i VIEWER atar; admin'ler dedicated seed/atama ile oluşur. Tenant
+    // site'tan login olan VIEWER (ve gelecekteki EDITOR vb.) tenant'tır; panelden login olan admin'dir.
+    boolean isAdmin = user.getRoles() != null && user.getRoles().stream()
+        .anyMatch(r -> "SUPER_ADMIN".equals(r.getName()) || "ADMIN".equals(r.getName()));
+    if (isAdminLogin && !isAdmin) {
+      throw new ForbiddenException("Bu kullanıcı panel (admin) girişi için yetkili değil");
+    }
+    if (!isAdminLogin && isAdmin) {
+      throw new ForbiddenException("Admin kullanıcılar yalnız panel'den giriş yapabilir");
     }
 
     String loginSource = isAdminLogin ? "admin" : "tenant";

@@ -69,6 +69,13 @@ public class AuthController extends BaseController implements IAuthController {
   @Override
   @PostMapping("/register")
   public RootEntityResponse<DtoAuthResponse> register(@Valid @RequestBody DtoRegister dtoRegister) {
+    // Tenant context'i @Transactional servis çağrısından ÖNCE kur (login/refresh ile aynı sebep).
+    // Body'deki tenantId zorunlu (DtoRegister.@NotBlank); blank gelirse zaten validasyon reddeder.
+    // Public URL altındaki çağrılarda (/api/v1/public/{tid}/auth/register) PublicApiFilter
+    // tenant context'i URL'den kurmuş olur ve body'deki tenantId aynısı olmalı.
+    if (dtoRegister.getTenantId() != null && !dtoRegister.getTenantId().isBlank()) {
+      TenantContext.setTenantId(dtoRegister.getTenantId());
+    }
     DtoAuthResponse response = authService.register(dtoRegister);
     return ok(response);
   }

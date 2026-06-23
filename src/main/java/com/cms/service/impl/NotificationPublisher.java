@@ -1,6 +1,5 @@
 package com.cms.service.impl;
 
-import com.cms.config.TenantContext;
 import com.cms.dto.DtoNotification;
 import com.cms.dto.DtoNotificationUnreadCount;
 import com.cms.entity.Notification;
@@ -47,71 +46,44 @@ public class NotificationPublisher implements INotificationPublisher {
       String link,
       String tenantId,
       Map<String, Object> metadata) {
-    runOnBasedb(() -> {
-      Notification notification = Notification.builder()
-          .userId(userId)
-          .type(type)
-          .title(sanitizeText(title))
-          .message(sanitizeText(message))
-          .link(link)
-          .tenantId(tenantId)
-          .metadata(metadata)
-          .readFlag(false)
-          .build();
-      Notification saved = notificationRepository.save(notification);
-      DtoNotification dto = notificationMapper.toDto(saved);
-      pushNotification(userId, dto);
-      pushUnreadCount(userId);
-      return null;
-    });
+    Notification notification = Notification.builder()
+        .userId(userId)
+        .type(type)
+        .title(sanitizeText(title))
+        .message(sanitizeText(message))
+        .link(link)
+        .tenantId(tenantId)
+        .metadata(metadata)
+        .readFlag(false)
+        .build();
+    Notification saved = notificationRepository.save(notification);
+    DtoNotification dto = notificationMapper.toDto(saved);
+    pushNotification(userId, dto);
+    pushUnreadCount(userId);
   }
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
   public void pushUnreadCount(Long userId) {
-    runOnBasedb(() -> {
-      long count = notificationRepository.countByUserIdAndReadFlagFalse(userId);
-      DtoNotificationUnreadCount payload = new DtoNotificationUnreadCount(count);
-      userRepository.findById(userId).ifPresent(user ->
-          messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/notifications/unread-count", payload));
-      return null;
-    });
+    long count = notificationRepository.countByUserIdAndReadFlagFalse(userId);
+    DtoNotificationUnreadCount payload = new DtoNotificationUnreadCount(count);
+    userRepository.findById(userId).ifPresent(user ->
+        messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/notifications/unread-count", payload));
   }
 
   /**
-   * Rolü uyan aktif kullanıcıları, bildirimin tenant kapsamına göre filtreleyerek döner.
-   *
-   * <p>Tenant izolasyonu — {@code tenantId} dolu ise:
-   * <ul>
-   *   <li>SUPER_ADMIN her tenant'ın bildirimini alır (sınırsız yetki).</li>
-   *   <li>ADMIN/EDITOR yalnızca {@code managedTenants}'ında o tenant varsa alır.</li>
-   * </ul>
-   * {@code tenantId} null/boş ise (tenant'a özgü olmayan global bildirim) rol uyan herkese gider.
+   * Rolü uyan aktif kullanıcıları döner — mevcut tenant context'inden okunur.
+   * Tam izolasyon: cross-tenant managedTenants konsepti yok; bildirim hangi tenant'ta
+   * üretildiyse o tenant'ın DB'sinde alıcı bulunur. {@code tenantId} parametresi yalnız
+   * Notification entity'sinde event kapsamını işaretlemek için saklanır (rağmen filtre yok).
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
   public List<Long> findUserIdsByRoles(Set<String> roleNames, String tenantId) {
-    return runOnBasedb(() -> userRepository.findAll().stream()
+    return userRepository.findAll().stream()
         .filter(User::getIsActive)
         .filter(user -> user.getRoles().stream().anyMatch(role -> roleNames.contains(role.getName())))
-        .filter(user -> matchesTenantScope(user, tenantId))
         .map(User::getId)
-        .toList());
-  }
-
-  /**
-   * Bildirim alıcısı, event'in tenant kapsamına uyuyor mu?
-   * Global bildirim (tenantId yok) → herkes; SUPER_ADMIN → her zaman; diğerleri → managedTenants.
-   */
-  private boolean matchesTenantScope(User user, String tenantId) {
-    if (tenantId == null || tenantId.isBlank()) {
-      return true;
-    }
-    boolean isSuperAdmin = user.getRoles().stream()
-        .anyMatch(role -> "SUPER_ADMIN".equals(role.getName()));
-    if (isSuperAdmin) {
-      return true;
-    }
-    return user.getManagedTenants() != null && user.getManagedTenants().contains(tenantId);
+        .toList();
   }
 
   public List<Long> findAdminPlusUserIds(String tenantId) {
@@ -127,7 +99,7 @@ public class NotificationPublisher implements INotificationPublisher {
       messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/notifications", dto);
       log.debug("Notification WS push → userId={} username={} notificationId={}",
           userId, user.getUsername(), dto.getId());
-    }, () -> log.warn("Notification WS push skipped — userId={} not found in basedb", userId));
+    }, () -> log.warn("Notification WS push skipped — userId={} not found", userId));
   }
 
   private String sanitizeText(String value) {
@@ -135,9 +107,5 @@ public class NotificationPublisher implements INotificationPublisher {
       return "";
     }
     return Jsoup.clean(value, Safelist.none()).trim();
-  }
-
-  private <T> T runOnBasedb(java.util.function.Supplier<T> action) {
-    return action.get(); // mevcut tenant context'inde — basedb yok
   }
 }

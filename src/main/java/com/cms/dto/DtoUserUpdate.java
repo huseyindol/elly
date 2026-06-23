@@ -7,8 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.List;
-
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,6 +20,4 @@ public class DtoUserUpdate {
 
   private String firstName;
   private String lastName;
-
-  private List<String> managedTenants;
 }

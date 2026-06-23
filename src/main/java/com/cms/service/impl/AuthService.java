@@ -356,7 +356,9 @@ public class AuthService implements IAuthService {
     response.setUsername(user.getUsername());
     response.setEmail(user.getEmail());
     response.setUserCode(userUtil.generateUserCode(user));
-    response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
+    long now = System.currentTimeMillis();
+    response.setExpiredDate(now + accessTokenExpiration);
+    response.setRefreshExpiredDate(now + refreshTokenExpiration);
     populateRolesAndPermissions(response, user);
 
     return response;
@@ -444,7 +446,9 @@ public class AuthService implements IAuthService {
     response.setUsername(user.getUsername());
     response.setEmail(user.getEmail());
     response.setUserCode(userUtil.generateUserCode(user));
-    response.setExpiredDate(System.currentTimeMillis() + accessTokenExpiration);
+    long now = System.currentTimeMillis();
+    response.setExpiredDate(now + accessTokenExpiration);
+    response.setRefreshExpiredDate(now + refreshTokenExpiration);
     populateRolesAndPermissions(response, user);
 
     return response;

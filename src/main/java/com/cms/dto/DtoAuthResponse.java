@@ -19,6 +19,8 @@ public class DtoAuthResponse {
   private String email;
   private String userCode;
   private Long expiredDate;
+  /** Refresh token'ın expire epoch'u (ms). Frontend cookie max-age hesabı için. */
+  private Long refreshExpiredDate;
   private String message;
 
   /** Kullanıcının rolleri: ["SUPER_ADMIN", "ADMIN", ...] */

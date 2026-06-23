@@ -157,14 +157,20 @@ public class DataInitializer implements CommandLineRunner {
     }
     syncRole("EDITOR", "İçerik oluşturma ve düzenleme", editorPerms);
 
-    // VIEWER — tüm read izinleri + users:update
+    // VIEWER — tüm read izinleri + users:update (kendi /me profili güncellemesi için)
     Set<Permission> viewerPerms = new HashSet<>();
     for (Permission p : allPermissions) {
       if (p.getName().contains(":read") || p.getName().equals("users:update")) {
         viewerPerms.add(p);
       }
     }
-    syncRole("VIEWER", "Sadece okuma yetkisi", viewerPerms);
+    syncRole("VIEWER", "Sadece okuma yetkisi (kendi profilini güncelleyebilir)", viewerPerms);
+
+    // TENANT — tenant-site kullanıcısı (public /auth/register ile oluşur). Panel'e GİREMEZ.
+    // Tenant-site backend feature'ları "authenticated kullanıcı" check'i ile çalışır; RBAC
+    // permission'larına ihtiyaç yok. Bu rol salt bir "tag" — login'de panel-rol filtrelemesi
+    // bu sayede simetrik yapılır.
+    syncRole("TENANT", "Tenant-site kullanıcısı (panel erişimi yok)", Set.of());
   }
 
   /**

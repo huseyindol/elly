@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -108,9 +109,9 @@ public class AuthService implements IAuthService {
       throw new ConflictException("Username already exists: " + dtoRegister.getUsername());
     }
 
-    // Tenant register → VIEWER (panel'e giremez, sadece tenant-site). VIEWER yoksa
-    // (seed eksik) graceful fallback: kullanıcı rolsüz kalır; admin sonradan rol atar.
-    Role viewerRole = roleRepository.findByName("VIEWER").orElse(null);
+    // Tenant register → TENANT rolü (tenant-site kullanıcısı, panel'e GİREMEZ). TENANT rolü
+    // yoksa (seed eksik) graceful fallback: kullanıcı rolsüz kalır; admin sonradan rol atar.
+    Role tenantRole = roleRepository.findByName("TENANT").orElse(null);
 
     String verificationToken = UUID.randomUUID().toString();
 
@@ -126,8 +127,8 @@ public class AuthService implements IAuthService {
     user.setEmailVerificationToken(verificationToken);
     user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24));
 
-    if (viewerRole != null) {
-      user.getRoles().add(viewerRole);
+    if (tenantRole != null) {
+      user.getRoles().add(tenantRole);
     }
 
     User savedUser = userRepository.save(user);
@@ -292,17 +293,20 @@ public class AuthService implements IAuthService {
     }
 
     // Panel ↔ tenant ayrımı (simetrik). Tam izolasyon: cross-tenant kavramı YOK.
-    //   • loginType=admin → kullanıcı SUPER_ADMIN veya ADMIN olmalı (panel paneline yalnız bunlar)
-    //   • loginType=tenant → kullanıcı admin rolünde OLMAMALI (panel adminleri tenant site'a girmesin)
-    // Mantık: register endpoint'i VIEWER atar; admin'ler dedicated seed/atama ile oluşur. Tenant
-    // site'tan login olan VIEWER (ve gelecekteki EDITOR vb.) tenant'tır; panelden login olan admin'dir.
-    boolean isAdmin = user.getRoles() != null && user.getRoles().stream()
-        .anyMatch(r -> "SUPER_ADMIN".equals(r.getName()) || "ADMIN".equals(r.getName()));
-    if (isAdminLogin && !isAdmin) {
-      throw new ForbiddenException("Bu kullanıcı panel (admin) girişi için yetkili değil");
+    //   • Panel rolleri: SUPER_ADMIN, ADMIN, EDITOR, VIEWER → panel'e girer
+    //   • Tenant rolü:  TENANT                              → tenant-site'a girer
+    // Login filtresi simetrik: iki dünya birbirine geçemez (panel kullanıcısı tenant site'a,
+    // tenant kullanıcısı panel'e giremez).
+    Set<String> panelRoleNames = Set.of("SUPER_ADMIN", "ADMIN", "EDITOR", "VIEWER");
+    boolean isPanelUser = user.getRoles() != null && user.getRoles().stream()
+        .anyMatch(r -> panelRoleNames.contains(r.getName()));
+    boolean isTenantUser = user.getRoles() != null && user.getRoles().stream()
+        .anyMatch(r -> "TENANT".equals(r.getName()));
+    if (isAdminLogin && !isPanelUser) {
+      throw new ForbiddenException("Bu kullanıcı panel girişi için yetkili değil");
     }
-    if (!isAdminLogin && isAdmin) {
-      throw new ForbiddenException("Admin kullanıcılar yalnız panel'den giriş yapabilir");
+    if (!isAdminLogin && !isTenantUser) {
+      throw new ForbiddenException("Panel kullanıcıları yalnız panel'den giriş yapabilir");
     }
 
     String loginSource = isAdminLogin ? "admin" : "tenant";

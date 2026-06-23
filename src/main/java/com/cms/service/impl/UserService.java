@@ -147,10 +147,27 @@ public class UserService implements IUserService {
         .build();
   }
 
+  // Panel ↔ tenant ayrımı (login filtresiyle simetrik). Frontend "audience" parametresiyle
+  // doğru tabı doğru kullanıcılarla doldurur.
+  private static final Set<String> PANEL_ROLE_NAMES =
+      Set.of("SUPER_ADMIN", "ADMIN", "EDITOR", "VIEWER");
+  private static final String TENANT_ROLE_NAME = "TENANT";
+
   @Override
-  public List<DtoUserResponse> getAllUsers() {
+  public List<DtoUserResponse> getAllUsers(String audience) {
     List<User> users = userRepository.findAll();
+    java.util.function.Predicate<User> filter;
+    if ("panel".equalsIgnoreCase(audience)) {
+      filter = u -> u.getRoles() != null
+          && u.getRoles().stream().anyMatch(r -> PANEL_ROLE_NAMES.contains(r.getName()));
+    } else if ("tenant".equalsIgnoreCase(audience)) {
+      filter = u -> u.getRoles() != null
+          && u.getRoles().stream().anyMatch(r -> TENANT_ROLE_NAME.equals(r.getName()));
+    } else {
+      filter = u -> true;
+    }
     return users.stream()
+        .filter(filter)
         .map(userMapper::toDtoUserResponse)
         .collect(Collectors.toList());
   }
@@ -185,6 +202,34 @@ public class UserService implements IUserService {
       userAuthCacheService.evictUserCache(username);
     }
     log.info("Kullanici silindi: id={} username={} silen={}", id, username, currentUsername);
+  }
+
+  @Override
+  @Transactional
+  public DtoUserResponse setUserStatus(Long id, boolean isActive, String currentUsername) {
+    User user = userRepository.findById(id)
+        .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
+
+    // Self-deactivate koruması — admin kendi hesabını pasifleştirip kilitleyemez.
+    if (!isActive && user.getUsername() != null && user.getUsername().equals(currentUsername)) {
+      throw new BadRequestException("Kendi hesabınızı pasifleştiremezsiniz");
+    }
+
+    user.setIsActive(isActive);
+    User saved = userRepository.save(user);
+
+    // Pasifleştirme sonrası açık oturumlar mantıksal olarak sona ermeli:
+    // (a) auth cache invalidate → bir sonraki request DB'den okur, isActive=false → redirected
+    // (b) refresh token sil → silent refresh denerse fail; tam logout
+    if (!isActive) {
+      refreshTokenRepository.deleteByUserId(id);
+    }
+    if (saved.getUsername() != null) {
+      userAuthCacheService.evictUserCache(saved.getUsername());
+    }
+    log.info("Kullanici durumu degisti: id={} username={} isActive={} degisen={}",
+        id, saved.getUsername(), isActive, currentUsername);
+    return userMapper.toDtoUserResponse(saved);
   }
 
   // =============== Helpers ===============

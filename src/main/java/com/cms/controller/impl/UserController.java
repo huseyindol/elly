@@ -8,10 +8,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.controller.IUserController;
@@ -68,8 +70,9 @@ public class UserController extends BaseController implements IUserController {
   @Override
   @GetMapping
   @PreAuthorize("hasAuthority('users:manage')")
-  public RootEntityResponse<List<DtoUserResponse>> getAllUsers() {
-    return ok(userService.getAllUsers());
+  public RootEntityResponse<List<DtoUserResponse>> getAllUsers(
+      @RequestParam(required = false) String audience) {
+    return ok(userService.getAllUsers(audience));
   }
 
   @Override
@@ -85,6 +88,14 @@ public class UserController extends BaseController implements IUserController {
   public RootEntityResponse<Void> deleteUser(@PathVariable Long id) {
     userService.deleteUser(id, getCurrentUsername());
     return ok(null);
+  }
+
+  @Override
+  @PatchMapping("/{id}/status")
+  @PreAuthorize("hasAuthority('users:manage')")
+  public RootEntityResponse<DtoUserResponse> setUserStatus(@PathVariable Long id,
+      @RequestParam boolean isActive) {
+    return ok(userService.setUserStatus(id, isActive, getCurrentUsername()));
   }
 
   // =============== Helpers ===============

@@ -11,6 +11,7 @@ import com.cms.entity.RootEntityResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 public interface IUserController {
   RootEntityResponse<DtoUserResponse> getMe();
@@ -21,10 +22,12 @@ public interface IUserController {
 
   RootEntityResponse<DtoUserPermissions> getMyPermissions();
 
-  RootEntityResponse<List<DtoUserResponse>> getAllUsers();
+  RootEntityResponse<List<DtoUserResponse>> getAllUsers(@RequestParam(required = false) String audience);
 
   RootEntityResponse<DtoUserResponse> getUserById(@PathVariable Long id);
 
   RootEntityResponse<Void> deleteUser(@PathVariable Long id);
+
+  RootEntityResponse<DtoUserResponse> setUserStatus(@PathVariable Long id, @RequestParam boolean isActive);
 }
 

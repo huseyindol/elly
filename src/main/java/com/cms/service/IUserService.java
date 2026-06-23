@@ -16,7 +16,12 @@ public interface IUserService {
 
   DtoUserPermissions getMyPermissions(String username);
 
-  List<DtoUserResponse> getAllUsers();
+  /**
+   * Tüm kullanıcıları listeler.
+   * @param audience "panel" → SUPER_ADMIN/ADMIN/EDITOR/VIEWER rollerinden EN AZ birine sahip
+   *                 olanlar; "tenant" → TENANT rolüne sahip olanlar; null/blank → tümü.
+   */
+  List<DtoUserResponse> getAllUsers(String audience);
 
   DtoUserResponse getUserById(Long id);
 
@@ -25,5 +30,11 @@ public interface IUserService {
    * temizlenir (silinen kullanıcının açık oturumları sonlanır), auth cache invalid edilir.
    */
   void deleteUser(Long id, String currentUsername);
+
+  /**
+   * Kullanıcı aktif/pasif durumunu değiştirir. isActive=false olan kullanıcı login yapamaz,
+   * mevcut auth cache invalid edilir. Self-status koruması: kendi hesabını pasifleştiremez.
+   */
+  DtoUserResponse setUserStatus(Long id, boolean isActive, String currentUsername);
 }
 

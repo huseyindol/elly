@@ -97,16 +97,22 @@ public class ChatWebSocketController {
     }
   }
 
+  /**
+   * AC=TC legacy handler: panel hâlâ {@code /app/chat/{groupId}/typing} kullanırsa session'ın
+   * tenant'ına yazar (basedb yok). Yeni client'lar {@code /app/tenant-chat/{tid}/{groupId}/typing}
+   * kullanmalı; bu yol ileride kaldırılacak.
+   */
   @MessageMapping("/chat/{groupId}/typing")
   public void typing(@DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
-    TenantContext.setTenantId(null);
+    String sessionTenant = resolveOptionalSessionTenant(headerAccessor);
+    TenantContext.setTenantId(sessionTenant);
     try {
       Long userId = resolveUserId(headerAccessor);
       String username = resolveUsername(headerAccessor);
       typingService.setTyping(groupId, userId);
       DtoChatTyping event = new DtoChatTyping(groupId, userId, username, true, null);
-      messagingTemplate.convertAndSend(ChatTopics.typingTopic(null, groupId), event);
+      messagingTemplate.convertAndSend(ChatTopics.typingTopic(sessionTenant, groupId), event);
     } finally {
       TenantContext.clear();
     }
@@ -136,16 +142,22 @@ public class ChatWebSocketController {
     }
   }
 
+  /**
+   * AC=TC legacy handler: panel hâlâ {@code /app/chat/{groupId}/read} kullanırsa session'ın
+   * tenant'ına yazar (basedb yok). Yeni client'lar {@code /app/tenant-chat/{tid}/{groupId}/read}
+   * kullanmalı; bu yol ileride kaldırılacak.
+   */
   @MessageMapping("/chat/{groupId}/read")
   public void markRead(@DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
-    TenantContext.setTenantId(null);
+    String sessionTenant = resolveOptionalSessionTenant(headerAccessor);
+    TenantContext.setTenantId(sessionTenant);
     try {
       Long userId = resolveUserId(headerAccessor);
       String username = resolveUsername(headerAccessor);
       messageService.markGroupAsRead(groupId, userId);
       DtoChatRead event = new DtoChatRead(groupId, userId, username);
-      messagingTemplate.convertAndSend(ChatTopics.readTopic(null, groupId), event);
+      messagingTemplate.convertAndSend(ChatTopics.readTopic(sessionTenant, groupId), event);
     } finally {
       TenantContext.clear();
     }
@@ -173,39 +185,31 @@ public class ChatWebSocketController {
 
   @EventListener
   public void handleSessionConnect(SessionConnectEvent event) {
-    TenantContext.setTenantId(null);
-    try {
-      SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
-      Long userId = resolveUserIdFromSessionAttrs(accessor);
-      String username = resolveUsernameFromSessionAttrs(accessor);
-      if (userId == null) return;
-      boolean firstSession = presenceService.userConnected(userId);
-      if (firstSession) {
-        DtoChatPresence presence = new DtoChatPresence(userId, username, "ONLINE");
-        messagingTemplate.convertAndSend("/topic/presence", presence);
-        log.debug("User {} connected → ONLINE", username);
-      }
-    } finally {
-      TenantContext.clear();
+    // Presence tracking Redis tabanlı (DB değil) → TenantContext'e dokunmaya gerek yok.
+    SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
+    Long userId = resolveUserIdFromSessionAttrs(accessor);
+    String username = resolveUsernameFromSessionAttrs(accessor);
+    if (userId == null) return;
+    boolean firstSession = presenceService.userConnected(userId);
+    if (firstSession) {
+      DtoChatPresence presence = new DtoChatPresence(userId, username, "ONLINE");
+      messagingTemplate.convertAndSend("/topic/presence", presence);
+      log.debug("User {} connected → ONLINE", username);
     }
   }
 
   @EventListener
   public void handleSessionDisconnect(SessionDisconnectEvent event) {
-    TenantContext.setTenantId(null);
-    try {
-      SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
-      Long userId = resolveUserIdFromSessionAttrs(accessor);
-      String username = resolveUsernameFromSessionAttrs(accessor);
-      if (userId == null) return;
-      boolean lastSession = presenceService.userDisconnected(userId);
-      if (lastSession) {
-        DtoChatPresence presence = new DtoChatPresence(userId, username, "OFFLINE");
-        messagingTemplate.convertAndSend("/topic/presence", presence);
-        log.debug("User {} disconnected → OFFLINE", username);
-      }
-    } finally {
-      TenantContext.clear();
+    // Presence tracking Redis tabanlı (DB değil) → TenantContext'e dokunmaya gerek yok.
+    SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
+    Long userId = resolveUserIdFromSessionAttrs(accessor);
+    String username = resolveUsernameFromSessionAttrs(accessor);
+    if (userId == null) return;
+    boolean lastSession = presenceService.userDisconnected(userId);
+    if (lastSession) {
+      DtoChatPresence presence = new DtoChatPresence(userId, username, "OFFLINE");
+      messagingTemplate.convertAndSend("/topic/presence", presence);
+      log.debug("User {} disconnected → OFFLINE", username);
     }
   }
 

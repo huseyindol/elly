@@ -33,20 +33,26 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
   private final CookieUtil cookieUtil;
   private final UserUtil userUtil;
 
+  @Value("${jwt.expiration:1800000}")
+  private Long accessTokenExpiration;
+
   @Value("${jwt.refresh.expiration:604800000}")
   private Long refreshTokenExpiration;
 
   @Value("${app.oauth2.redirect-uri:http://localhost:3000/oauth2/redirect}")
   private String redirectUri;
 
-  @Value("${cookie.access-token.expiration:14400}")
-  private Integer accessTokenCookieExpiration;
-
-  @Value("${cookie.refresh-token.expiration:15552000}")
-  private Integer refreshTokenCookieExpiration;
-
-  @Value("${cookie.user-code.expiration:3600}")
-  private Integer userCodeCookieExpiration;
+  // Cookie max-age'leri JWT sürelerinden türetilir (ms / 1000). Tek kaynak = JWT_*_EXPIRATION
+  // env'leri. userCode access süresince yaşar (panel/tenant frontend ile tutarlı).
+  private int accessTokenCookieExpiration() {
+    return (int) (accessTokenExpiration / 1000);
+  }
+  private int refreshTokenCookieExpiration() {
+    return (int) (refreshTokenExpiration / 1000);
+  }
+  private int userCodeCookieExpiration() {
+    return accessTokenCookieExpiration();
+  }
 
   @Override
   public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
@@ -88,12 +94,14 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
     // Token'ları normal login ile aynı şekilde HttpOnly cookie olarak set et
     // (URL'de token taşımak: server log, browser history, Referrer header sızıntısı)
-    cookieUtil.setAccessTokenCookie(response, token, accessTokenCookieExpiration);
-    cookieUtil.setRefreshTokenCookie(response, refreshTokenString, refreshTokenCookieExpiration);
-    cookieUtil.setUserCodeCookie(response, userUtil.generateUserCode(user), userCodeCookieExpiration);
+    int accessTtl = accessTokenCookieExpiration();
+    int refreshTtl = refreshTokenCookieExpiration();
+    cookieUtil.setAccessTokenCookie(response, token, accessTtl);
+    cookieUtil.setRefreshTokenCookie(response, refreshTokenString, refreshTtl);
+    cookieUtil.setUserCodeCookie(response, userUtil.generateUserCode(user), userCodeCookieExpiration());
     cookieUtil.setCookie(response, "expiredDate",
-        String.valueOf(System.currentTimeMillis() + (long) accessTokenCookieExpiration * 1000),
-        refreshTokenCookieExpiration, false, true, "/");
+        String.valueOf(System.currentTimeMillis() + (long) accessTtl * 1000),
+        accessTtl, false, true, "/");
 
     // Redirect: hassas veri yok, sadece UI için userId/username/email
     String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)

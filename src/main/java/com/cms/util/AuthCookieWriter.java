@@ -26,28 +26,33 @@ public class AuthCookieWriter {
 
   private final CookieUtil cookieUtil;
 
-  @Value("${cookie.access-token.expiration:180}")
-  private Integer accessTokenCookieExpiration; // saniye
+  // Cookie max-age'leri JWT sürelerinden türetilir (ms → sn). Tek kaynak = JWT_EXPIRATION /
+  // JWT_REFRESH_EXPIRATION env'leri. Ayrı COOKIE_*_EXPIRATION env'leri YOK.
+  @Value("${jwt.expiration:1800000}")
+  private long jwtAccessExpirationMs;
 
-  @Value("${cookie.refresh-token.expiration:360}")
-  private Integer refreshTokenCookieExpiration; // saniye
-
-  @Value("${cookie.user-code.expiration:360}")
-  private Integer userCodeCookieExpiration; // saniye
+  @Value("${jwt.refresh.expiration:604800000}")
+  private long jwtRefreshExpirationMs;
 
   /**
    * Verilen auth yanıtından access/refresh/userCode/expiredDate cookie'lerini set eder.
    * Çağıran taraf tam token üretilmiş bir yanıt geçmelidir (MFA challenge sırasında çağrılmamalı).
+   *
+   * <p>userCode + expiredDate cookie'leri ACCESS süresince yaşar (panel/tenant frontend ile
+   * tutarlı): access expire olduğunda silent refresh mekanizması zaten önceden devreye girer
+   * ve cookie'ler yenilenir; refresh'in kendisi ayrıca refresh süresi kadar yaşar.
    */
   public void writeAuthCookies(HttpServletResponse response, DtoAuthResponse auth) {
-    cookieUtil.setAccessTokenCookie(response, auth.getToken(), accessTokenCookieExpiration);
-    cookieUtil.setRefreshTokenCookie(response, auth.getRefreshToken(), refreshTokenCookieExpiration);
+    int accessMaxAge = (int) (jwtAccessExpirationMs / 1000);
+    int refreshMaxAge = (int) (jwtRefreshExpirationMs / 1000);
 
-    // userCode servis tarafından (kullanıcı doğru context'te yüklüyken) zaten üretildi
+    cookieUtil.setAccessTokenCookie(response, auth.getToken(), accessMaxAge);
+    cookieUtil.setRefreshTokenCookie(response, auth.getRefreshToken(), refreshMaxAge);
+
     String userCode = auth.getUserCode() != null ? auth.getUserCode() : "";
-    cookieUtil.setUserCodeCookie(response, userCode, userCodeCookieExpiration);
+    cookieUtil.setUserCodeCookie(response, userCode, accessMaxAge);
 
     cookieUtil.setCookie(response, "expiredDate", String.valueOf(auth.getExpiredDate()),
-        refreshTokenCookieExpiration, false, true, "/");
+        accessMaxAge, false, true, "/");
   }
 }

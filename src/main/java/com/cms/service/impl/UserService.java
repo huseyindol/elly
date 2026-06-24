@@ -1,27 +1,37 @@
 package com.cms.service.impl;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.config.UserAuthCacheService;
+import com.cms.config.TenantContext;
 import com.cms.dto.DtoChangePassword;
+import com.cms.dto.DtoCreateUser;
 import com.cms.dto.DtoUserPermissions;
 import com.cms.dto.DtoUserResponse;
 import com.cms.dto.DtoUserUpdate;
+import com.cms.entity.Role;
 import com.cms.entity.User;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
+import com.cms.exception.TenantRequiredException;
 import com.cms.mapper.UserMapper;
 import com.cms.repository.RefreshTokenRepository;
+import com.cms.repository.RoleRepository;
 import com.cms.repository.UserRepository;
+import com.cms.service.IAuthService;
 import com.cms.service.IUserService;
 
 import lombok.RequiredArgsConstructor;
@@ -38,9 +48,14 @@ public class UserService implements IUserService {
 
   private final UserRepository userRepository;
   private final RefreshTokenRepository refreshTokenRepository;
+  private final RoleRepository roleRepository;
   private final PasswordEncoder passwordEncoder;
   private final UserMapper userMapper;
   private final UserAuthCacheService userAuthCacheService;
+  private final IAuthService authService;
+
+  @Value("${app.frontend-url.panel:http://localhost:3001}")
+  private String panelFrontendUrl;
 
   @Override
   public DtoUserResponse getMe(String username) {
@@ -177,6 +192,65 @@ public class UserService implements IUserService {
     User user = userRepository.findById(id)
         .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
     return userMapper.toDtoUserResponse(user);
+  }
+
+  @Override
+  @Transactional
+  public DtoUserResponse createUser(DtoCreateUser request) {
+    // Çağıran user authenticated SUPER_ADMIN/ADMIN — JwtTenantFilter context'i zaten kurmuş.
+    String tenantId = TenantContext.getTenantId();
+    if (tenantId == null || tenantId.isBlank()) {
+      throw new TenantRequiredException("Tenant context bos — admin create icin gerekli");
+    }
+
+    if (userRepository.existsByEmail(request.getEmail())) {
+      throw new ConflictException("Email already exists: " + request.getEmail());
+    }
+    if (userRepository.existsByUsername(request.getUsername())) {
+      throw new ConflictException("Username already exists: " + request.getUsername());
+    }
+
+    Set<Role> rolesToAssign = new HashSet<>();
+    if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
+      for (Long roleId : request.getRoleIds()) {
+        Role r = roleRepository.findById(roleId)
+            .orElseThrow(() -> new BadRequestException("Role not found: " + roleId));
+        // TENANT rolü panel-create yolundan ASLA atanamaz — tenant kullanıcısı public register'la.
+        if ("TENANT".equals(r.getName())) {
+          throw new BadRequestException("TENANT rolü panel'den atanamaz");
+        }
+        rolesToAssign.add(r);
+      }
+    } else {
+      // Default: ADMIN rolü atanır (panel-create varsayılan davranışı).
+      Role admin = roleRepository.findByName("ADMIN")
+          .orElseThrow(() -> new BadRequestException("ADMIN rolü tanımlı değil"));
+      rolesToAssign.add(admin);
+    }
+
+    String verificationToken = UUID.randomUUID().toString();
+
+    User user = new User();
+    user.setUsername(request.getUsername());
+    user.setEmail(request.getEmail());
+    user.setPassword(passwordEncoder.encode(request.getPassword()));
+    user.setFirstName(request.getFirstName());
+    user.setLastName(request.getLastName());
+    user.setProvider("local");
+    user.setIsActive(true);
+    user.setEmailVerified(false);
+    user.setEmailVerificationToken(verificationToken);
+    user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(24));
+    user.getRoles().addAll(rolesToAssign);
+
+    User saved = userRepository.save(user);
+
+    // Verification mail PANEL frontend URL'i ile — admin panel'den girecek.
+    authService.sendVerificationEmail(saved, tenantId, verificationToken, panelFrontendUrl);
+
+    log.info("Admin user olusturuldu: id={} username={} tenant={}",
+        saved.getId(), saved.getUsername(), tenantId);
+    return userMapper.toDtoUserResponse(saved);
   }
 
   @Override

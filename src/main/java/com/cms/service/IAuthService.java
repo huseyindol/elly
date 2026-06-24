@@ -11,6 +11,7 @@ import com.cms.dto.DtoMfaStatusResponse;
 import com.cms.dto.DtoMfaVerifyRequest;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.entity.User;
 
 public interface IAuthService {
   DtoAuthResponse register(DtoRegister dtoRegister);
@@ -20,6 +21,13 @@ public interface IAuthService {
   DtoAuthResponse refreshToken(DtoRefreshToken dtoRefreshToken);
 
   void verifyEmail(String token, String tenantId);
+
+  /**
+   * Verification email gönderir; URL caller tarafından geçilir
+   * (tenant register → tenant frontend, admin create → panel frontend).
+   */
+  void sendVerificationEmail(User user, String tenantId, String verificationToken,
+      String frontendUrl);
 
   // ── Guest Chat (anonim website ziyaretçisi) ──────────────────────────────
   /**

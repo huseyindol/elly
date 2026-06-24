@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.controller.IUserController;
 import com.cms.dto.DtoChangePassword;
+import com.cms.dto.DtoCreateUser;
 import com.cms.dto.DtoUserPermissions;
 import com.cms.dto.DtoUserResponse;
 import com.cms.dto.DtoUserUpdate;
@@ -80,6 +82,13 @@ public class UserController extends BaseController implements IUserController {
   @PreAuthorize("hasAuthority('users:manage')")
   public RootEntityResponse<DtoUserResponse> getUserById(@PathVariable Long id) {
     return ok(userService.getUserById(id));
+  }
+
+  @Override
+  @PostMapping
+  @PreAuthorize("hasAuthority('users:manage')")
+  public RootEntityResponse<DtoUserResponse> createUser(@Valid @RequestBody DtoCreateUser request) {
+    return ok(userService.createUser(request));
   }
 
   @Override

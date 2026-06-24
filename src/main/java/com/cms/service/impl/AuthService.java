@@ -83,8 +83,10 @@ public class AuthService implements IAuthService {
   private Long refreshTokenExpiration;
   @Value("${jwt.expiration:1800000}")
   private Long accessTokenExpiration;
-  @Value("${app.frontend.url:http://localhost:3000}")
-  private String frontendUrl;
+  @Value("${app.frontend-url.tenant:http://localhost:3000}")
+  private String tenantFrontendUrl;
+  @Value("${app.frontend-url.panel:http://localhost:3001}")
+  private String panelFrontendUrl;
 
   @Override
   @Transactional
@@ -136,7 +138,8 @@ public class AuthService implements IAuthService {
     triggerUserRegisteredNotification(savedUser, tenantId);
 
     // Doğrulama e-postası gönder (hata olursa kayıt yine tamamlanır)
-    sendVerificationEmail(savedUser, tenantId, verificationToken);
+    // Public register (tenant kullanıcı) → tenant frontend URL'e link gider.
+    sendVerificationEmail(savedUser, tenantId, verificationToken, tenantFrontendUrl);
 
     DtoAuthResponse response = new DtoAuthResponse();
     response.setUserId(savedUser.getId());
@@ -201,7 +204,14 @@ public class AuthService implements IAuthService {
     }
   }
 
-  private void sendVerificationEmail(User user, String tenantId, String verificationToken) {
+  /**
+   * Mail göndermenin tek noktası. {@code frontendUrl} caller tarafından geçilir:
+   * tenant register → tenant frontend; admin create → panel frontend. Audience hint
+   * body'de değil — endpoint tipinden çıkar (decoupled, spoof'lanamaz).
+   */
+  @Override
+  public void sendVerificationEmail(User user, String tenantId, String verificationToken,
+      String frontendUrl) {
     // Mail hesapları artık her tenant'ın KENDİ DB'sinde (basedb yok). Context'i o tenant'a al.
     String currentTenant = TenantContext.getTenantId();
     try {

@@ -3,6 +3,7 @@ package com.cms.service;
 import java.util.List;
 
 import com.cms.dto.DtoChangePassword;
+import com.cms.dto.DtoCreateUser;
 import com.cms.dto.DtoUserPermissions;
 import com.cms.dto.DtoUserResponse;
 import com.cms.dto.DtoUserUpdate;
@@ -24,6 +25,13 @@ public interface IUserService {
   List<DtoUserResponse> getAllUsers(String audience);
 
   DtoUserResponse getUserById(Long id);
+
+  /**
+   * SUPER_ADMIN/ADMIN tarafından panel UI'sından kullanıcı (genelde admin) oluşturur.
+   * Tenant context çağıran kullanıcının JWT'sinden gelir. roleIds verilmezse ADMIN
+   * default'u atanır. Verification mail PANEL frontend URL'i ile gönderilir.
+   */
+  DtoUserResponse createUser(DtoCreateUser request);
 
   /**
    * Kullanıcıyı kalıcı siler. Çağıran kullanıcı kendini silemez. Aktif refresh token'lar

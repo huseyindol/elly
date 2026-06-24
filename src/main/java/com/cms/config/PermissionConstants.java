@@ -91,10 +91,6 @@ public final class PermissionConstants {
   public static final String CACHE_READ = "cache:read";
   public static final String CACHE_MANAGE = "cache:manage";
 
-  // =============== TENANTS ===============
-  public static final String TENANTS_READ = "tenants:read";
-  public static final String TENANTS_MANAGE = "tenants:manage";
-
   // =============== USERS ===============
   public static final String USERS_READ = "users:read";
   public static final String USERS_UPDATE = "users:update";

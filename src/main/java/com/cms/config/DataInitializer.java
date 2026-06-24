@@ -148,8 +148,7 @@ public class DataInitializer implements CommandLineRunner {
     for (Permission p : allPermissions) {
       if (editorFullModules.contains(p.getModule())) {
         editorPerms.add(p);
-      } else if ((p.getModule().equals("CACHE") || p.getModule().equals("TENANTS"))
-          && p.getName().contains(":read")) {
+      } else if (p.getModule().equals("CACHE") && p.getName().contains(":read")) {
         editorPerms.add(p);
       } else if (p.getName().equals("users:read") || p.getName().equals("users:update")) {
         editorPerms.add(p);

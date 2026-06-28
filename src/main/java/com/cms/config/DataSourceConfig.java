@@ -161,5 +161,12 @@ public class DataSourceConfig {
     private String schema;
     private Integer maxPoolSize;
     private Integer minIdle;
+    /**
+     * Tenant'a özgü frontend domain — verification mail link'leri burada üretilir.
+     * Her tenant kendi domain'inde register olduğu için per-tenant tutulur (k8s
+     * ConfigMap'inde {@code TENANT{n}_FRONTEND_URL} env'i ile set edilir). Boşsa
+     * AuthService global default'a (app.frontend-url.tenant) düşer.
+     */
+    private String frontendUrl;
   }
 }

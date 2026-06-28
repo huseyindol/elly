@@ -28,9 +28,14 @@ data:
   DEFAULT_TENANT: "tenant1"
 
   # --- Frontend URL'leri (verification mail link domain'leri) ---
-  # Tenant register (public /auth/register) → TENANT_FRONTEND_URL
-  # Admin create (panel SUPER_ADMIN POST /api/v1/users) → PANEL_FRONTEND_URL
+  # Admin create (panel POST /api/v1/users) → PANEL_FRONTEND_URL
   PANEL_FRONTEND_URL: "https://admin.huseyindol.com"
+  # Tenant register URL'i per-tenant — her tenant kendi domain'inde register olur.
+  # TENANT{n}_FRONTEND_URL pattern'i ile yeni tenant eklendiğinde tek satır eklenir.
+  TENANT1_FRONTEND_URL: "https://www.huseyindol.com"
+  TENANT2_FRONTEND_URL: "https://www.huseyindol.com"
+  # Global fallback — per-tenant değer yoksa kullanılır (yeni tenant set edilmeden
+  # önceki güvenlik ağı). Tipik kullanımda gerek olmaz.
   TENANT_FRONTEND_URL: "https://www.huseyindol.com"
 
   # --- Tenant 1 Database ---

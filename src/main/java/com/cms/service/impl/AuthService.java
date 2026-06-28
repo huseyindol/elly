@@ -138,8 +138,14 @@ public class AuthService implements IAuthService {
     triggerUserRegisteredNotification(savedUser, tenantId);
 
     // Doğrulama e-postası gönder (hata olursa kayıt yine tamamlanır)
-    // Public register (tenant kullanıcı) → tenant frontend URL'e link gider.
-    sendVerificationEmail(savedUser, tenantId, verificationToken, tenantFrontendUrl);
+    // Public register (tenant kullanıcı) → tenant'a özgü frontend URL'i. Her tenant
+    // kendi domain'inde register olduğu için per-tenant config'ten alınır; yoksa global
+    // fallback'e (tenantFrontendUrl) düşülür.
+    String tenantUrl = tenantProperties.getDatasources().get(tenantId).getFrontendUrl();
+    if (tenantUrl == null || tenantUrl.isBlank()) {
+      tenantUrl = tenantFrontendUrl;
+    }
+    sendVerificationEmail(savedUser, tenantId, verificationToken, tenantUrl);
 
     DtoAuthResponse response = new DtoAuthResponse();
     response.setUserId(savedUser.getId());

@@ -131,29 +131,3 @@ spec:
       targetPort: 6379
       nodePort: 31379
       protocol: TCP
-
----
-# ============================================
-# SERVICE - PostgreSQL BaseDB (NodePort)
-# ============================================
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres-basedb
-  namespace: elly
-  labels:
-    app: elly-cms
-    component: database
-    tenant: basedb
-spec:
-  type: NodePort
-  selector:
-    app: elly-cms
-    component: database
-    tenant: basedb
-  ports:
-    - name: postgres
-      port: 5432
-      targetPort: 5432
-      nodePort: 31432
-      protocol: TCP

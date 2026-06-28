@@ -1,7 +1,7 @@
 # ============================================
 # CRONJOB - PostgreSQL Otomatik Backup
 # ============================================
-# Her gece 03:00'da (Europe/Istanbul) basedb + her iki tenant DB'sini yedekler.
+# Her gece 03:00'da (Europe/Istanbul) tüm tenant DB'lerini yedekler.
 # Backup'lar gzip ile sıkıştırılır. 3 günden eski backup'lar otomatik silinir.
 #
 # ÖNEMLİ: Her DB'nin ŞİFRESİ FARKLI olabilir → her pg_dump kendi
@@ -12,9 +12,9 @@
 #   kubectl create job --from=cronjob/postgres-backup manual-backup-$(date +%s) -n elly
 # Logları:    kubectl logs -n elly job/<job-adı>
 # Geri yükleme:
-#   kubectl cp elly/<backup-pod>:/backups/basedb-2026-03-05.sql.gz ./restore.sql.gz
+#   kubectl cp elly/<backup-pod>:/backups/tenant1-2026-03-05.sql.gz ./restore.sql.gz
 #   gunzip restore.sql.gz
-#   kubectl exec -i postgres-basedb-0 -n elly -- psql -U postgres -d elly_basedb < restore.sql
+#   kubectl exec -i postgres-tenant1-0 -n elly -- psql -U postgres -d elly_tenant1 < restore.sql
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -72,18 +72,16 @@ spec:
                     fi
                   }
 
-                  echo "[1/5] BaseDB"
-                  dump_db basedb  postgres-basedb  "$BASEDB_USER"  "$BASEDB_NAME"     "$BASEDB_PASSWORD"
-                  echo "[2/5] Tenant 1"
+                  echo "[1/4] Tenant 1"
                   dump_db tenant1 postgres-tenant1 "$TENANT1_USER" "$TENANT1_DB_NAME" "$TENANT1_PASSWORD"
-                  echo "[3/5] Tenant 2"
+                  echo "[2/4] Tenant 2"
                   dump_db tenant2 postgres-tenant2 "$TENANT2_USER" "$TENANT2_DB_NAME" "$TENANT2_PASSWORD"
 
-                  echo "[4/5] 3 günden eski backup'lar siliniyor..."
+                  echo "[3/4] 3 günden eski backup'lar siliniyor..."
                   DELETED=$(find /backups/ -name "*.sql.gz" -mtime +3 -print -delete | wc -l)
                   echo "    🗑️  ${DELETED} eski backup silindi"
 
-                  echo "[5/5] Mevcut backup'lar:"
+                  echo "[4/4] Mevcut backup'lar:"
                   ls -lh /backups/*.sql.gz 2>/dev/null || echo "    Backup bulunamadı!"
                   echo "Toplam backup boyutu: $(du -sh /backups/ | cut -f1)"
                   echo "=========================================="
@@ -94,22 +92,6 @@ spec:
                   echo "Backup tamamlandı: $(date)"
                   echo "=========================================="
               env:
-                # --- BaseDB (kendi secret'i) ---
-                - name: BASEDB_USER
-                  valueFrom:
-                    secretKeyRef:
-                      name: postgres-basedb-secret
-                      key: POSTGRES_USER
-                - name: BASEDB_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: postgres-basedb-secret
-                      key: POSTGRES_PASSWORD
-                - name: BASEDB_NAME
-                  valueFrom:
-                    configMapKeyRef:
-                      name: elly-config
-                      key: BASEDB_NAME
                 # --- Tenant 1 (kendi secret'i) ---
                 - name: TENANT1_USER
                   valueFrom:

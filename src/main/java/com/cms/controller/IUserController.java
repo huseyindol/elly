@@ -2,6 +2,7 @@ package com.cms.controller;
 
 import java.util.List;
 
+import com.cms.dto.DtoAdminUserUpdate;
 import com.cms.dto.DtoChangePassword;
 import com.cms.dto.DtoCreateUser;
 import com.cms.dto.DtoUserPermissions;
@@ -28,6 +29,9 @@ public interface IUserController {
   RootEntityResponse<DtoUserResponse> getUserById(@PathVariable Long id);
 
   RootEntityResponse<DtoUserResponse> createUser(@Valid @RequestBody DtoCreateUser request);
+
+  RootEntityResponse<DtoUserResponse> updateUser(@PathVariable Long id,
+      @Valid @RequestBody DtoAdminUserUpdate request);
 
   RootEntityResponse<Void> deleteUser(@PathVariable Long id);
 

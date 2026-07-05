@@ -2,6 +2,7 @@ package com.cms.service;
 
 import java.util.List;
 
+import com.cms.dto.DtoAdminUserUpdate;
 import com.cms.dto.DtoChangePassword;
 import com.cms.dto.DtoCreateUser;
 import com.cms.dto.DtoUserPermissions;
@@ -32,6 +33,13 @@ public interface IUserService {
    * default'u atanır. Verification mail PANEL frontend URL'i ile gönderilir.
    */
   DtoUserResponse createUser(DtoCreateUser request);
+
+  /**
+   * SUPER_ADMIN/ADMIN'in başka bir kullanıcıyı güncellemesi. Yalnız dolu alanlar
+   * uygulanır; username/email değişiminde unique kontrol. newPassword dolu ise admin
+   * şifre sıfırlaması yapılır (refresh token cleanup → açık oturumlar sonlanır).
+   */
+  DtoUserResponse updateUser(Long id, DtoAdminUserUpdate request);
 
   /**
    * Kullanıcıyı kalıcı siler. Çağıran kullanıcı kendini silemez. Aktif refresh token'lar

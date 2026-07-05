@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.controller.IUserController;
+import com.cms.dto.DtoAdminUserUpdate;
 import com.cms.dto.DtoChangePassword;
 import com.cms.dto.DtoCreateUser;
 import com.cms.dto.DtoUserPermissions;
@@ -89,6 +90,14 @@ public class UserController extends BaseController implements IUserController {
   @PreAuthorize("hasAuthority('users:manage')")
   public RootEntityResponse<DtoUserResponse> createUser(@Valid @RequestBody DtoCreateUser request) {
     return ok(userService.createUser(request));
+  }
+
+  @Override
+  @PutMapping("/{id}")
+  @PreAuthorize("hasAuthority('users:manage')")
+  public RootEntityResponse<DtoUserResponse> updateUser(@PathVariable Long id,
+      @Valid @RequestBody DtoAdminUserUpdate request) {
+    return ok(userService.updateUser(id, request));
   }
 
   @Override

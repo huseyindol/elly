@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.cms.config.UserAuthCacheService;
 import com.cms.config.TenantContext;
+import com.cms.dto.DtoAdminUserUpdate;
 import com.cms.dto.DtoChangePassword;
 import com.cms.dto.DtoCreateUser;
 import com.cms.dto.DtoUserPermissions;
@@ -250,6 +251,65 @@ public class UserService implements IUserService {
 
     log.info("Admin user olusturuldu: id={} username={} tenant={}",
         saved.getId(), saved.getUsername(), tenantId);
+    return userMapper.toDtoUserResponse(saved);
+  }
+
+  @Override
+  @Transactional
+  public DtoUserResponse updateUser(Long id, DtoAdminUserUpdate request) {
+    User user = userRepository.findById(id)
+        .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
+    String oldUsername = user.getUsername();
+
+    // Username değişiyorsa unique kontrol
+    if (request.getUsername() != null && !request.getUsername().isBlank()
+        && !request.getUsername().equals(user.getUsername())) {
+      if (userRepository.existsByUsername(request.getUsername())) {
+        throw new ConflictException("Username already exists: " + request.getUsername());
+      }
+      user.setUsername(request.getUsername());
+    }
+
+    // Email değişiyorsa unique kontrol
+    if (request.getEmail() != null && !request.getEmail().isBlank()
+        && !request.getEmail().equals(user.getEmail())) {
+      if (userRepository.existsByEmail(request.getEmail())) {
+        throw new ConflictException("Email already exists: " + request.getEmail());
+      }
+      user.setEmail(request.getEmail());
+    }
+
+    if (request.getFirstName() != null) {
+      user.setFirstName(request.getFirstName());
+    }
+    if (request.getLastName() != null) {
+      user.setLastName(request.getLastName());
+    }
+
+    // Admin şifre sıfırlaması — eski şifre sorulmaz; açık oturumlar sonlandırılır
+    // (refresh token cleanup; access token kalan ömrünü cache evict sonrası DB'den
+    // yüklenen tokenVersion kontrolü zaten sınırlar).
+    boolean passwordReset = request.getNewPassword() != null && !request.getNewPassword().isBlank();
+    if (passwordReset) {
+      if (!"local".equals(user.getProvider())) {
+        throw new BadRequestException("Password reset is not available for OAuth users");
+      }
+      user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+      refreshTokenRepository.deleteByUserId(id);
+    }
+
+    User saved = userRepository.save(user);
+
+    // Auth cache evict — eski VE yeni username anahtarları (username değişmiş olabilir)
+    if (oldUsername != null) {
+      userAuthCacheService.evictUserCache(oldUsername);
+    }
+    if (saved.getUsername() != null && !saved.getUsername().equals(oldUsername)) {
+      userAuthCacheService.evictUserCache(saved.getUsername());
+    }
+
+    log.info("Kullanici guncellendi (admin): id={} username={} passwordReset={}",
+        id, saved.getUsername(), passwordReset);
     return userMapper.toDtoUserResponse(saved);
   }
 

@@ -105,6 +105,11 @@ public class AuthController extends BaseController implements IAuthController {
   @Override
   @GetMapping("/verify")
   public RootEntityResponse<Boolean> verifyEmail(@RequestParam String token, @RequestParam String tenantId) {
+    // Tenant context'i @Transactional servis çağrısından ÖNCE kur (login/register/refresh ile
+    // aynı sebep — strict routing'de transaction begin'inde context dolu olmalı).
+    if (tenantId != null && !tenantId.isBlank()) {
+      TenantContext.setTenantId(tenantId);
+    }
     authService.verifyEmail(token, tenantId);
     return ok(true);
   }

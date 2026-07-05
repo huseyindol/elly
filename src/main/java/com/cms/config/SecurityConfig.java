@@ -35,8 +35,6 @@ public class SecurityConfig {
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
   private final JwtTenantFilter jwtTenantFilter;
   private final DataSourceConfig.TenantDataSourceProperties tenantDataSourceProperties;
-  private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
-  private final CustomOAuth2UserService customOAuth2UserService;
 
   @Bean
   public PasswordEncoder passwordEncoder() {
@@ -150,8 +148,6 @@ public class SecurityConfig {
             // hangi yazma endpoint'lerine izin verilecegini belirler; eslesmeyenler 405 doner.
             .requestMatchers(HttpMethod.POST, "/api/v1/public/**").permitAll()
             .requestMatchers("/api/v1/auth/**").permitAll()
-            .requestMatchers("/oauth2/**").permitAll()
-            .requestMatchers("/login/oauth2/**").permitAll()
             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
             .requestMatchers("/actuator/**").permitAll()
             // AntPathRequestMatcher kullanilir cunku Spring Security 6 + Spring MVC kombinasyonunda
@@ -161,14 +157,9 @@ public class SecurityConfig {
             // AntPathRequestMatcher dogrudan path stringi karsilastirir, MVC mapping aramaz.
             .requestMatchers(AntPathRequestMatcher.antMatcher("/ws/**")).permitAll()
             .anyRequest().authenticated())
-        .oauth2Login(oauth2 -> oauth2
-            .loginPage("/api/v1/auth/login") // OAuth2 login sayfasını devre dışı bırak, API endpoint'e yönlendir
-            .successHandler(oAuth2AuthenticationSuccessHandler)
-            .userInfoEndpoint(userInfo -> userInfo
-                .userService(customOAuth2UserService)))
         .exceptionHandling(exceptions -> exceptions
             .authenticationEntryPoint((request, response, authException) -> {
-              // OAuth2 login sayfası yerine 401 JSON response döndür
+              // Login sayfası yerine 401 JSON response döndür
               response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
               response.setContentType("application/json");
               response.setCharacterEncoding("UTF-8");

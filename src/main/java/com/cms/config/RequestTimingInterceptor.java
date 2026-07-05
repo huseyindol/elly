@@ -83,10 +83,6 @@ public class RequestTimingInterceptor implements HandlerInterceptor {
     if (uri.startsWith("/api/")) {
       return true;
     }
-    // Track OAuth2 endpoints
-    if (uri.startsWith("/oauth2/") || uri.startsWith("/login/oauth2/")) {
-      return true;
-    }
     // Skip static resources, actuator, swagger, etc.
     return false;
   }

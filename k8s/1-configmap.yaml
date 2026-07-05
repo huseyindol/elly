@@ -83,9 +83,6 @@ data:
   # --- Cookie ---
   COOKIE_SECURE: "true"
 
-  # --- OAuth2 Redirect ---
-  OAUTH2_REDIRECT_URI: "https://your-domain.com/oauth2/redirect"
-
 ---
 # ============================================
 # CONFIGMAP - PostgreSQL Tenant 1

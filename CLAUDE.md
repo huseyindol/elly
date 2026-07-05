@@ -44,7 +44,7 @@ Eger mevcut kodun bu kurala uymadigi gorulurse (orn. feature-package mevcut) kul
 Coklu agent rolleri, is akislari ve dosya haritasi icin repo kokundeki **[`AGENTS.md`](./AGENTS.md)** dosyasina bak. Cursor odakli kisa workflow'lar **[`.agents/workflows/`](./.agents/workflows/)** altinda; uzun tanimlar bu repoda **`.claude/agents/`** icinde kalir (tek kaynak).
 
 ## Proje Ozeti
-Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-tenant), Redis cache, RabbitMQ, JWT + OAuth2 auth.
+Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-tenant), Redis cache, RabbitMQ, JWT auth (JWE-encrypted). OAuth2 kaldirildi (gerekirse tekrar eklenir).
 
 ## Mimari
 - **Pattern:** Monolith, katmanli mimari
@@ -55,21 +55,23 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Exception:** `BaseException` hiyerarsisi + `GlobalExceptionHandler` (@ControllerAdvice)
 
 ## Multi-Tenancy
-- **Strateji:** Database-per-tenant
-- **Tenant'lar:** `basedb` (varsayilan), `tenant1`, `tenant2`
-- **Routing:** `DataSourceConfig` -> `TenantRoutingDataSource`
-- **Context:** JWT claim'den `tenantId` alinir, `TenantContext.setTenantId()` ile set edilir
+- **Strateji:** Database-per-tenant. **basedb YOK** — tamamen tenant-scoped mimari
+- **Tenant'lar:** `tenant1`, `tenant2` (DEFAULT_TENANT yalniz boot/seed hedefi, request fallback DEGIL)
+- **Routing:** `DataSourceConfig` -> `TenantRoutingDataSource` (boot sonrasi strict: context bos -> `TenantRequiredException`)
+- **Context:** JWT `tenantId` claim'i veya `/api/v1/public/{tid}` URL'i; `TenantContext.setTenantId()`
 - **Filtreleme:** `JwtTenantFilter` -> her request'te tenant context kurulur
+- **ONEMLI:** `@Transactional` public auth endpoint'lerinde context CONTROLLER'da (transaction acilmadan ONCE) kurulmali — login/register/refresh/verify/mfa-verify ornekleri
 
 ## Kimlik Dogrulama & RBAC
-- **Admin login:** `POST /api/auth/admin/login` -> `AdminLoginInterceptor`
-- **Tenant login:** `POST /api/auth/login` -> `TenantLoginInterceptor`
-- **OAuth2:** Google, Facebook, GitHub -> `OAuth2AuthenticationSuccessHandler`
-- **JWT:** Access token + refresh token, `loginSource` ve `tenantId` claim'leri icerir
+- **Panel login:** `POST /api/v1/auth/login` + body `{ usernameOrEmail, password, tenantId, loginType:"admin" }` — panel rolu (SUPER_ADMIN/ADMIN/EDITOR/VIEWER) zorunlu
+- **Tenant login:** `POST /api/v1/public/{tid}/auth/login` + `loginType:"tenant"` — TENANT rolu zorunlu (simetrik ayrim: panel kullanicisi tenant site'a giremez, tersi de)
+- **Register:** public `/auth/register` -> TENANT rolu atar; admin user yalniz panel'den `POST /api/v1/users` (SUPER_ADMIN) ile olusur
+- **JWT:** Access + refresh token (JWE-encrypted), `loginSource` ve `tenantId` claim'leri; refresh body-based, tenant refresh token claim'inden cozulur
+- **Cookie max-age:** JWT surelerinden turetilir (JWT_EXPIRATION/JWT_REFRESH_EXPIRATION tek kaynak)
 - **Util:** `JwtUtil.generateToken(user, loginSource, tenantId)`
 - **RBAC:** User -> ManyToMany -> Role -> ManyToMany -> Permission
 - **Method Security:** `@EnableMethodSecurity` + `@PreAuthorize` ile method-level authorization
-- **Roller:** SUPER_ADMIN, ADMIN, EDITOR, VIEWER + 40+ permission (`PermissionConstants.java`)
+- **Roller:** Panel: SUPER_ADMIN, ADMIN, EDITOR, VIEWER; Tenant-site: TENANT (izinsiz "tag" rol) + 40+ permission (`PermissionConstants.java`)
 - **Auth Cache:** Redis `auth:user:{username}` TTL=30dk (her request'te 3 SQL yerine 1 Redis GET)
 
 ## Mail Sistemi
@@ -92,14 +94,13 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Consumer'da TenantContext:** Baslangicta `setTenantId()`, finally'de `clear()` — ZORUNLU
 
 ## Chat Sistemi
-- **Paket:** `com.cms.chat.*` — entity, repository, service, controller, websocket, dto, mapper
-- **DB:** Sadece `basedb`'de 5 tablo (chat_groups, chat_group_members, chat_messages, chat_message_reads, chat_message_edits)
-- **Routing:** `JwtTenantFilter` `/api/v1/chat/` yolunu zorla basedb'ye yonlendirir (tenantId override)
-- **WebSocket:** `${API}/ws` (SockJS+STOMP), CONNECT'te `Authorization: Bearer` zorunlu
+- **AC=TC tek model:** Her chat grubu ait oldugu TENANT DB'sinde yasar (basedb yok); 5 tablo her tenant'ta (chat_groups, chat_group_members, chat_messages, chat_message_reads, chat_message_edits)
+- **Routing:** Tenant, WS CONNECT'te token `tenantId` claim'inden; REST'te `/api/v1/chat/tenant/{tid}/...` URL'inden
+- **WebSocket:** `${API}/ws` (SockJS+STOMP), CONNECT'te `Authorization: Bearer` zorunlu (guest token'la anonim de baglanir)
 - **Permission:** `chat:read` (tum kullanicilar), `chat:manage` (EDITOR+)
 - **Visibility:** VIEWER=1 (herkese acik) → EDITOR=2 → ADMIN=3 → SUPER_ADMIN=4 (gizli), DM her zaman 4
 - **Davet hiyerarsisi:** Davet eden, kendi rol seviyesinden dusuk kullanicilari davet edebilir; SUPER_ADMIN herkesi
-- **Topic'ler:** `/topic/groups/new`, `/topic/groups/deleted`, `/topic/user/{userId}/groups/joined`, `/topic/group/{groupId}` (mesaj/typing/read), `/topic/presence`
+- **Topic'ler:** `/topic/tenant/{tid}/group/{groupId}` (mesaj/typing/read/bans), `/topic/groups/new`, `/topic/groups/deleted`, `/topic/user/{userId}/membership`, `/topic/presence`
 - **Detay:** `chat-patterns` skill'i acilir; query/topic ornekleri orada
 
 ## Build & Calistirma

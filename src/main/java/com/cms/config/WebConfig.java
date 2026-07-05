@@ -24,6 +24,6 @@ public class WebConfig implements WebMvcConfigurer {
   public void addInterceptors(@NonNull InterceptorRegistry registry) {
     // Register timing interceptor for all REST API requests
     registry.addInterceptor(requestTimingInterceptor)
-        .addPathPatterns("/api/**", "/oauth2/**", "/login/oauth2/**");
+        .addPathPatterns("/api/**");
   }
 }

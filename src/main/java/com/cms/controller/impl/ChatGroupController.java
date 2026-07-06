@@ -7,12 +7,14 @@ import com.cms.dto.DtoChatGroup;
 import com.cms.dto.DtoChatGroupAccess;
 import com.cms.dto.DtoChatGroupCreate;
 import com.cms.dto.DtoChatMember;
+import com.cms.dto.DtoChatMemberInvite;
 import com.cms.dto.DtoChatMembershipEvent;
 import com.cms.service.IChatBanService;
 import com.cms.service.IChatGroupService;
 import com.cms.service.ChatMembershipNotifier;
 import com.cms.entity.RootEntityResponse;
 import com.cms.exception.UnauthorizedException;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -73,6 +75,25 @@ public class ChatGroupController implements IChatGroupController {
   public ResponseEntity<RootEntityResponse<DtoChatMember>> addMember(
       @PathVariable UUID groupId, @PathVariable Long userId) {
     DtoChatMember member = groupService.addMember(groupId, userId, getCurrentUserId());
+    DtoChatGroup group = groupService.getGroupById(groupId, userId);
+    DtoChatMembershipEvent event = DtoChatMembershipEvent.builder()
+        .action("JOINED")
+        .groupId(groupId)
+        .userId(userId)
+        .group(group)
+        .message("Gruba dahil edildiniz.")
+        .build();
+    membershipNotifier.notifyJoined(userId, group, event);
+    return ResponseEntity.status(HttpStatus.CREATED).body(RootEntityResponse.ok(member));
+  }
+
+  @Override
+  @PostMapping({"/groups/{groupId}/members/by-email", "/tenant/{tenantId}/groups/{groupId}/members/by-email"})
+  @PreAuthorize("hasAuthority('chat:manage')")
+  public ResponseEntity<RootEntityResponse<DtoChatMember>> addMemberByEmail(
+      @PathVariable UUID groupId, @Valid @RequestBody DtoChatMemberInvite request) {
+    DtoChatMember member = groupService.addMemberByEmail(groupId, request.getEmail(), getCurrentUserId());
+    Long userId = member.getUserId();
     DtoChatGroup group = groupService.getGroupById(groupId, userId);
     DtoChatMembershipEvent event = DtoChatMembershipEvent.builder()
         .action("JOINED")

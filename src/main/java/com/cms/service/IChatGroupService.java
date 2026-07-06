@@ -20,6 +20,13 @@ public interface IChatGroupService {
 
   DtoChatMember addMember(UUID groupId, Long targetUserId, Long requesterId);
 
+  /**
+   * E-posta ile üye davet eder: e-posta grubun tenant DB'sinde aranır, bulunan
+   * kullanıcı {@link #addMember} ile aynı kurallara (hiyerarşi, mükerrer üyelik)
+   * tabi olarak eklenir. Bulunamazsa ResourceNotFoundException (404).
+   */
+  DtoChatMember addMemberByEmail(UUID groupId, String email, Long requesterId);
+
   void removeMember(UUID groupId, Long targetUserId, Long requesterId);
 
   void deleteGroup(UUID groupId, Long requesterId);

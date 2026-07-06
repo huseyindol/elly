@@ -6,6 +6,7 @@ import com.cms.dto.DtoChatBan;
 import com.cms.dto.DtoChatBanRequest;
 import com.cms.dto.DtoChatGroupCreate;
 import com.cms.dto.DtoChatMember;
+import com.cms.dto.DtoChatMemberInvite;
 import com.cms.entity.RootEntityResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +32,10 @@ public interface IChatGroupController {
 
   @Operation(summary = "Gruba üye ekle")
   ResponseEntity<RootEntityResponse<DtoChatMember>> addMember(UUID groupId, Long userId);
+
+  @Operation(summary = "Gruba e-posta ile üye davet et",
+      description = "E-posta grubun tenant DB'sinde aranır; bulunan kullanıcı userId ile davetle aynı kurallara tabi eklenir.")
+  ResponseEntity<RootEntityResponse<DtoChatMember>> addMemberByEmail(UUID groupId, DtoChatMemberInvite request);
 
   @Operation(summary = "Gruptan üye çıkar")
   ResponseEntity<Void> removeMember(UUID groupId, Long userId);

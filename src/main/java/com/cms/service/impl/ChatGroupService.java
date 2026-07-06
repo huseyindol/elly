@@ -135,6 +135,26 @@ public class ChatGroupService implements IChatGroupService {
     return selfProvider.getObject().addMemberInTenant(group, groupId, targetUserId, requesterId);
   }
 
+  @Override
+  @Transactional
+  public DtoChatMember addMemberByEmail(UUID groupId, String email, Long requesterId) {
+    ChatGroup group = tenantRouter.requireGroup(groupId);
+    return selfProvider.getObject().addMemberByEmailInTenant(group, groupId, email, requesterId);
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public DtoChatMember addMemberByEmailInTenant(
+      ChatGroup group, UUID groupId, String email, Long requesterId) {
+    tenantRouter.useGroupDatabase(group);
+    // E-posta, grubun ait olduğu tenant DB'sinde aranır — davet edilecek kullanıcı
+    // bu tenant'ta kayıtlı olmalı. Sonrası userId ile davetle birebir aynı akış
+    // (addMemberInTenant doğrudan çağrılır: aynı transaction + aynı tenant context).
+    Long targetUserId = userRepository.findByEmail(email.trim())
+        .map(User::getId)
+        .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
+    return addMemberInTenant(group, groupId, targetUserId, requesterId);
+  }
+
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public DtoChatMember addMemberInTenant(
       ChatGroup group, UUID groupId, Long targetUserId, Long requesterId) {

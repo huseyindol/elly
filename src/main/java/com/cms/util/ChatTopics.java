@@ -7,12 +7,9 @@ import java.util.UUID;
 /**
  * Chat WebSocket topic isimlerinin üretimini tek noktada tutar.
  *
- * <ul>
- *   <li>Admin chat (AC, basedb) → {@code /topic/group/{groupId}} (mevcut format)</li>
- *   <li>Tenant chat (TC, tenant DB) → {@code /topic/tenant/{tenantId}/group/{groupId}}</li>
- * </ul>
- *
- * Bu sayede broadcast eden tarafların if/else duplikasyonu önlenir.
+ * <p>AC=TC tek model: topic'ler daima tenant-aware —
+ * {@code /topic/tenant/{tenantId}/group/{groupId}}. Legacy {@code /topic/group/{id}}
+ * formatı yalnız tenant hiçbir şekilde çözülemezse üretilir (normalde olmamalı).
  */
 public final class ChatTopics {
 
@@ -20,9 +17,24 @@ public final class ChatTopics {
     // utility
   }
 
-  /** Group entity'sinden mesaj topic'i türetir. */
+  /**
+   * AC=TC: entity'de tenant_id NULL kalmış eski (basedb dönemi) satırlar için mevcut
+   * TenantContext'e düşülür — broadcast, panel'in abone olduğu tenant-aware topic'e
+   * gitsin. (Broadcast eden servisler zaten grubun DB'sine context switch etmiş olur.)
+   */
+  private static String tenantOf(ChatGroup group) {
+    String tid = group.getTenantId();
+    return (tid == null || tid.isBlank()) ? com.cms.config.TenantContext.getTenantId() : tid;
+  }
+
+  /** Group entity'sinden mesaj topic'i türetir (tenant NULL fallback'li). */
   public static String messageTopic(ChatGroup group) {
-    return messageTopic(group.getTenantId(), group.getId());
+    return messageTopic(tenantOf(group), group.getId());
+  }
+
+  /** Group entity'sinden ban topic'i türetir (tenant NULL fallback'li). */
+  public static String banTopic(ChatGroup group) {
+    return banTopic(tenantOf(group), group.getId());
   }
 
   public static String messageTopic(String tenantId, UUID groupId) {

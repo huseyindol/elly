@@ -46,19 +46,26 @@ public class ChatGroupService implements IChatGroupService {
   @Override
   @Transactional
   public DtoChatGroup createGroup(DtoChatGroupCreate dto, Long creatorId) {
-    String tenantId = normalizeTenantId(dto.getTenantId());
+    String requestedTenantId = normalizeTenantId(dto.getTenantId());
 
-    // Visitor erişimi yalnızca TC (tenant_id dolu) için anlamlıdır
+    // Açıkça farklı bir tenant hedefleyen istek (dto.tenantId): yalnızca ADMIN (3)+.
+    // dto tenant vermezse mevcut context'te oluşturulur — chat:manage yetkisi kafidir.
+    if (requestedTenantId != null && currentUserRoleLevel() < 3) {
+      throw new ForbiddenException(
+          "Tenant chat (TC) oluşturmak için ADMIN veya SUPER_ADMIN olmalısın");
+    }
+
+    // AC=TC: her grup ait olduğu tenant'ı taşır — tenant_id NULL grup KALMAMALI
+    // (panel WS aboneliği /topic/tenant/{tid}/... ister; null grup canlı yayın alamaz).
+    // dto tenant vermezse istek context'inin tenant'ı (JWT/URL'den çözülen) kullanılır.
+    String tenantId = requestedTenantId != null
+        ? requestedTenantId
+        : normalizeTenantId(TenantContext.getTenantId());
+
+    // Visitor erişimi tenant'ı belli gruplar için anlamlıdır
     if (Boolean.TRUE.equals(dto.getVisitorAccess()) && tenantId == null) {
       throw new ValidationException(
           "visitorAccess=true sadece tenant chat (TC) için geçerlidir — tenantId şart");
-    }
-
-    // TC oluşturma yetkisi: yalnızca ADMIN (3) ve üzeri.
-    // AC için (tenantId null) mevcut chat:read yetkisi kafidir.
-    if (tenantId != null && currentUserRoleLevel() < 3) {
-      throw new ForbiddenException(
-          "Tenant chat (TC) oluşturmak için ADMIN veya SUPER_ADMIN olmalısın");
     }
 
     ChatGroup group = new ChatGroup();
@@ -89,11 +96,14 @@ public class ChatGroupService implements IChatGroupService {
   public DtoChatGroup getOrCreateDm(Long currentUserId, Long targetUserId) {
     return groupRepository.findDmBetween(currentUserId, targetUserId, ChatGroupType.DM)
         .map(chatMapper::toGroupDto)
+        .map(this::fillTenantId)
         .orElseGet(() -> {
           ChatGroup dm = new ChatGroup();
           dm.setType(ChatGroupType.DM);
           dm.setCreatedBy(currentUserId);
           dm.setVisibilityLevel(4); // DMs are always private
+          // AC=TC: DM de ait olduğu tenant'ı taşır (WS topic aboneliği için şart)
+          dm.setTenantId(normalizeTenantId(TenantContext.getTenantId()));
           dm = groupRepository.save(dm);
           addMemberInternal(dm.getId(), currentUserId, ChatMemberRole.OWNER);
           addMemberInternal(dm.getId(), targetUserId, ChatMemberRole.MEMBER);
@@ -111,6 +121,7 @@ public class ChatGroupService implements IChatGroupService {
     return groupRepository.findGroupsByUserIdAndRole(userId, roleLevel)
         .stream()
         .map(chatMapper::toGroupDto)
+        .map(this::fillTenantId)
         .sorted(Comparator.comparing(DtoChatGroup::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
         .toList();
   }
@@ -125,7 +136,20 @@ public class ChatGroupService implements IChatGroupService {
     ChatGroup group = tenantRouter.requireGroup(groupId);
     tenantRouter.useGroupDatabase(group);
     checkReadAccess(group, groupId, requesterId);
-    return chatMapper.toGroupDto(group);
+    return fillTenantId(chatMapper.toGroupDto(group));
+  }
+
+  /**
+   * AC=TC: her grup ait olduğu tenant'ı taşır. Eski (basedb dönemi) satırlarda
+   * tenant_id NULL kalmış olabilir — bu DB'deki her grup zaten mevcut context'in
+   * tenant'ıdır; DTO'da doldurulur ki panel doğru WS topic'ine abone olabilsin.
+   * Kalıcı temizlik: UPDATE chat_groups SET tenant_id='{tid}' WHERE tenant_id IS NULL
+   */
+  private DtoChatGroup fillTenantId(DtoChatGroup dto) {
+    if (dto != null && (dto.getTenantId() == null || dto.getTenantId().isBlank())) {
+      dto.setTenantId(TenantContext.getTenantId());
+    }
+    return dto;
   }
 
   @Override

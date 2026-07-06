@@ -118,7 +118,7 @@ public class ChatBanService implements IChatBanService {
   private void broadcast(ChatGroup group, String action, DtoChatBan dto) {
     DtoChatBanEvent event = new DtoChatBanEvent(
         action, dto.getGroupId(), dto.getSessionId(), dto.getVisitorId(), dto.getBannedByUsername());
-    messagingTemplate.convertAndSend(ChatTopics.banTopic(group.getTenantId(), group.getId()), event);
+    messagingTemplate.convertAndSend(ChatTopics.banTopic(group), event);
   }
 
   private DtoChatBan toDto(ChatBan b) {

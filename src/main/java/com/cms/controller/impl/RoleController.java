@@ -36,7 +36,10 @@ public class RoleController extends BaseController implements IRoleController {
 
   @Override
   @GetMapping
-  @PreAuthorize("hasAuthority('roles:read')")
+  // roles:read (rol TANIM yönetimi, SUPER_ADMIN) VEYA users:manage (ADMIN): rol atama
+  // endpoint'i users:manage istediği için atama UI'sinin rol listesine ihtiyacı var.
+  // Rol tanımlarını değiştiren endpoint'ler (create/update/delete) roles:* olarak kalır.
+  @PreAuthorize("hasAuthority('roles:read') or hasAuthority('users:manage')")
   public RootEntityResponse<List<DtoRole>> getAllRoles() {
     return ok(roleService.getAllRoles());
   }

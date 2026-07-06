@@ -233,12 +233,19 @@ public class UserService implements IUserService {
           .orElseThrow(() -> new BadRequestException("TENANT rolü tanımlı değil (seed eksik)"));
       rolesToAssign.add(tenantRole);
     } else if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
+      // Hiyerarşi guard'ı (assignRolesToUser ile aynı kural): atanacak rol, çağıranın
+      // kendi seviyesini geçemez — ADMIN'in SUPER_ADMIN kullanıcı yaratması engellenir.
+      int requesterLevel = currentUserRoleLevel();
       for (Long roleId : request.getRoleIds()) {
         Role r = roleRepository.findById(roleId)
             .orElseThrow(() -> new BadRequestException("Role not found: " + roleId));
         // TENANT rolü panel-audience yolundan atanamaz — tenant kullanıcısı audience=tenant ile.
         if ("TENANT".equals(r.getName())) {
           throw new BadRequestException("TENANT rolü panel kullanıcısına atanamaz");
+        }
+        if (roleLevel(r.getName()) > requesterLevel) {
+          throw new com.cms.exception.ForbiddenException(
+              "Cannot assign role '" + r.getName() + "': exceeds your own permission level");
         }
         rolesToAssign.add(r);
       }
@@ -414,5 +421,23 @@ public class UserService implements IUserService {
   private User findUserByUsername(String username) {
     return userRepository.findByUsername(username)
         .orElseThrow(() -> new BadRequestException("User not found: " + username));
+  }
+
+  /** Çağıranın en yüksek rol seviyesi (SecurityContext'ten). SUPER_ADMIN=4, ADMIN=3, EDITOR=2, diğer=1. */
+  private int currentUserRoleLevel() {
+    Set<String> authorities = getAuthoritiesFromContext();
+    if (authorities.contains("ROLE_SUPER_ADMIN")) return 4;
+    if (authorities.contains("ROLE_ADMIN")) return 3;
+    if (authorities.contains("ROLE_EDITOR")) return 2;
+    return 1;
+  }
+
+  private static int roleLevel(String roleName) {
+    return switch (roleName) {
+      case "SUPER_ADMIN" -> 4;
+      case "ADMIN" -> 3;
+      case "EDITOR" -> 2;
+      default -> 1; // VIEWER, TENANT vb.
+    };
   }
 }

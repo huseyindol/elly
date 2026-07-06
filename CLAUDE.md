@@ -99,7 +99,7 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **WebSocket:** `${API}/ws` (SockJS+STOMP), CONNECT'te `Authorization: Bearer` zorunlu (guest token'la anonim de baglanir)
 - **Permission:** `chat:read` (tum kullanicilar), `chat:manage` (EDITOR+)
 - **Visibility:** VIEWER=1 (herkese acik) → EDITOR=2 → ADMIN=3 → SUPER_ADMIN=4 (gizli), DM her zaman 4
-- **Davet hiyerarsisi:** Davet eden, kendi rol seviyesinden dusuk kullanicilari davet edebilir; SUPER_ADMIN herkesi
+- **Davet hiyerarsisi:** Davet eden, KENDI SEVIYESI ve altindaki kullanicilari davet edebilir (admin→admin dahil); SUPER_ADMIN herkesi
 - **Topic'ler:** `/topic/tenant/{tid}/group/{groupId}` (mesaj/typing/read/bans), `/topic/groups/new`, `/topic/groups/deleted`, `/topic/user/{userId}/membership`, `/topic/presence`
 - **Detay:** `chat-patterns` skill'i acilir; query/topic ornekleri orada
 

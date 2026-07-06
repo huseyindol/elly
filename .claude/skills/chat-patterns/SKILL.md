@@ -85,21 +85,24 @@ ORDER BY g.updatedAt DESC
 
 ## Davet Hiyerarşisi
 
-`addMember()` enforcement:
+`addMemberInTenant()` enforcement — davet eden KENDİ SEVİYESİ ve altını davet edebilir:
 ```java
-int requesterLevel = getUserRoleLevel(requesterId);
-int targetLevel = getUserRoleLevel(targetUserId);
-if (requesterLevel < 4 && targetLevel >= requesterLevel) {
-  throw new ForbiddenException("You can only invite users with a lower role than yours");
+int requesterLevel = currentUserRoleLevel();
+int targetLevel = userRoleLevelFromBasedb(targetUserId);
+if (requesterLevel < 4 && targetLevel > requesterLevel) {
+  throw new ForbiddenException("You can only invite users with your role level or lower");
 }
 ```
 
 | Davet eden | Davet edebileceği |
 |---|---|
 | VIEWER | — (chat:manage yetkisi yok, controller seviyesinde bloklanır) |
-| EDITOR | VIEWER |
-| ADMIN | VIEWER, EDITOR |
+| EDITOR | EDITOR, VIEWER |
+| ADMIN | ADMIN, EDITOR, VIEWER |
 | SUPER_ADMIN | Herkes |
+
+Not: TENANT rollü kullanıcılar seviye-1'e düşer (VIEWER gibi) ama `/api/v1/chat/**`
+REST'ine hiç erişemez (`chat:read` izni yok) — yalnız `/api/v1/tenant-chat/**` kullanır.
 
 ## STOMP Topic Şeması
 

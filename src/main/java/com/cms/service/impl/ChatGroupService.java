@@ -141,12 +141,13 @@ public class ChatGroupService implements IChatGroupService {
     tenantRouter.useGroupDatabase(group);
     checkWriteAccess(group, groupId, requesterId);
 
-    // Invite hierarchy: requester can only invite users with a lower role level.
-    // SUPER_ADMIN (level 4) is exempt and may invite anyone.
+    // Invite hierarchy: requester can invite users at their OWN level or lower
+    // (admin→admin, editor→editor, viewer→viewer dahil). SUPER_ADMIN (level 4)
+    // is exempt and may invite anyone.
     int requesterLevel = currentUserRoleLevel();
     int targetLevel = userRoleLevelFromBasedb(targetUserId);
-    if (requesterLevel < 4 && targetLevel >= requesterLevel) {
-      throw new ForbiddenException("You can only invite users with a lower role than yours");
+    if (requesterLevel < 4 && targetLevel > requesterLevel) {
+      throw new ForbiddenException("You can only invite users with your role level or lower");
     }
 
     if (memberRepository.existsByIdGroupIdAndIdUserId(groupId, targetUserId)) {

@@ -123,6 +123,15 @@ public class RoleService implements IRoleService {
         }
       }
 
+      // TENANT münhasır roldür — başka bir rolle BİRLEŞEMEZ. Karma set, kullanıcıya hem
+      // panel hem tenant-site login kapısını açardı (login filtresi rol setine bakar).
+      // Tenant kullanıcısı panele API yoluyla bile giremesin diye burada da engellenir.
+      boolean hasTenant = roles.stream().anyMatch(r -> "TENANT".equals(r.getName()));
+      if (hasTenant && roles.size() > 1) {
+        throw new com.cms.exception.BadRequestException(
+            "TENANT rolü başka rollerle birleştirilemez (tenant kullanıcısı panel rolü alamaz)");
+      }
+
       User user = userRepository.findById(userId)
           .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
       user.setRoles(roles);

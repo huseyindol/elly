@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.cms.dto.DtoAssetsBulkDeleteResult;
 import com.cms.entity.Assets;
 
 public interface IAssetsService {
@@ -14,6 +15,12 @@ public interface IAssetsService {
   List<Assets> saveMultipleAssets(String subFolder, List<MultipartFile> files);
 
   Boolean deleteAssets(Long id);
+
+  /**
+   * Toplu silme — her id bağımsız silinir (biri başarısız olsa diğerleri devam eder);
+   * dosya + DB satırı + kota, tekil deleteAssets ile aynı akıştan geçer.
+   */
+  DtoAssetsBulkDeleteResult deleteAssetsBulk(List<Long> ids);
 
   Assets getAssetsById(Long id);
 

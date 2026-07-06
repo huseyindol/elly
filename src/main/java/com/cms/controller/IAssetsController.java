@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.cms.dto.DtoAssets;
+import com.cms.dto.DtoAssetsBulkDelete;
+import com.cms.dto.DtoAssetsBulkDeleteResult;
 import com.cms.dto.DtoAssetsIU;
 import com.cms.dto.PagedResponse;
 import com.cms.entity.RootEntityResponse;
@@ -17,6 +19,8 @@ public interface IAssetsController {
   RootEntityResponse<DtoAssets> updateAssets(Long id, MultipartFile file);
 
   RootEntityResponse<Boolean> deleteAssets(Long id);
+
+  RootEntityResponse<DtoAssetsBulkDeleteResult> bulkDeleteAssets(DtoAssetsBulkDelete request);
 
   RootEntityResponse<DtoAssets> getAssetsById(Long id);
 

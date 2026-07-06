@@ -19,8 +19,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import org.springframework.security.access.prepost.PreAuthorize;
 
+import org.springframework.web.bind.annotation.RequestBody;
+
 import com.cms.controller.IAssetsController;
 import com.cms.dto.DtoAssets;
+import com.cms.dto.DtoAssetsBulkDelete;
+import com.cms.dto.DtoAssetsBulkDeleteResult;
 import com.cms.dto.DtoAssetsIU;
 import com.cms.dto.PagedResponse;
 import com.cms.entity.Assets;
@@ -29,6 +33,7 @@ import com.cms.mapper.AssetsMapper;
 import com.cms.service.IAssetsService;
 import com.cms.service.IFileService;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -92,6 +97,14 @@ public class AssetsController extends BaseController implements IAssetsControlle
       return ok(deleted);
     }
     return error("Assets not deleted");
+  }
+
+  @Override
+  @PostMapping("/bulk-delete")
+  @PreAuthorize("hasAuthority('assets:delete')")
+  public RootEntityResponse<DtoAssetsBulkDeleteResult> bulkDeleteAssets(
+      @Valid @RequestBody DtoAssetsBulkDelete request) {
+    return ok(assetsService.deleteAssetsBulk(request.getIds()));
   }
 
   @Override

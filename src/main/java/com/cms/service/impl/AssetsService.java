@@ -14,12 +14,15 @@ import com.cms.entity.Assets;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.AssetsRepository;
 import com.cms.service.IAssetsService;
+import com.cms.dto.DtoAssetsBulkDeleteResult;
 import com.cms.service.IFileService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AssetsService implements IAssetsService {
 
   private final IFileService fileService;
@@ -92,6 +95,27 @@ public class AssetsService implements IAssetsService {
       return true;
     }
     return false;
+  }
+
+  @Override
+  public DtoAssetsBulkDeleteResult deleteAssetsBulk(List<Long> ids) {
+    // Bilinçli olarak TEK transaction DEĞİL: her silme bağımsız — biri patlarsa
+    // (dosya FS'de yok vb.) diğerleri geri alınmaz, başarısızlar failedIds'te raporlanır.
+    int deleted = 0;
+    List<Long> failed = new ArrayList<>();
+    for (Long id : new java.util.LinkedHashSet<>(ids)) {
+      try {
+        if (Boolean.TRUE.equals(deleteAssets(id))) {
+          deleted++;
+        } else {
+          failed.add(id);
+        }
+      } catch (Exception e) {
+        log.warn("Toplu silmede asset silinemedi: id={} hata={}", id, e.getMessage());
+        failed.add(id);
+      }
+    }
+    return new DtoAssetsBulkDeleteResult(deleted, failed);
   }
 
   @Override

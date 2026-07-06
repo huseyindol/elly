@@ -13,12 +13,15 @@ import com.cms.repository.ChatMessageEditRepository;
 import com.cms.repository.ChatMessageReadRepository;
 import com.cms.repository.ChatMessageRepository;
 import com.cms.repository.VisitorIdentityRepository;
+import com.cms.enums.NotificationType;
 import com.cms.service.IChatBanService;
 import com.cms.service.IChatMessageService;
+import com.cms.service.INotificationService;
 import com.cms.exception.ForbiddenException;
 import com.cms.exception.ResourceNotFoundException;
 import com.cms.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
 import org.springframework.beans.factory.ObjectProvider;
@@ -34,6 +37,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ChatMessageService implements IChatMessageService {
 
   private final ChatMessageRepository messageRepository;
@@ -50,6 +54,7 @@ public class ChatMessageService implements IChatMessageService {
    */
   private final ObjectProvider<ChatMessageService> selfProvider;
   private final IChatBanService chatBanService;
+  private final INotificationService notificationService;
 
   @Value("${chat.message.max-length:4000}")
   private int maxMessageLength;
@@ -68,6 +73,19 @@ public class ChatMessageService implements IChatMessageService {
     msg.setSenderDisplayName(senderUsername);
     msg = messageRepository.save(msg);
 
+    // TENANT rollü (tenant-site login'li, WS üzerinden yazan) gönderici → adminlere bildirim.
+    // Panel rollerinin (SUPER_ADMIN/ADMIN/EDITOR/VIEWER) mesajları bildirim üretmez (spam).
+    try {
+      boolean tenantSender = userRepository.findById(senderId)
+          .map(u -> u.getRoles().stream().anyMatch(r -> "TENANT".equals(r.getName())))
+          .orElse(false);
+      if (tenantSender) {
+        notifyAdminsOfTenantMessage(groupId, senderUsername, msg.getContent());
+      }
+    } catch (Exception e) {
+      log.warn("Chat bildirim kontrolü başarısız (mesaj kaydedildi): {}", e.getMessage());
+    }
+
     return toDto(msg);
   }
 
@@ -78,9 +96,8 @@ public class ChatMessageService implements IChatMessageService {
    */
   @Transactional
   public DtoChatMessage saveVisitorMessage(UUID groupId, Long visitorId, DtoChatMessageSend dto) {
-    if (!visitorIdentityRepository.existsById(visitorId)) {
-      throw new ResourceNotFoundException("VisitorIdentity not found: " + visitorId);
-    }
+    VisitorIdentity visitor = visitorIdentityRepository.findById(visitorId)
+        .orElseThrow(() -> new ResourceNotFoundException("VisitorIdentity not found: " + visitorId));
     if (chatBanService.isVisitorBanned(groupId, visitorId)) {
       throw new ForbiddenException("Bu sohbette yazma yetkiniz kaldırıldı", "CHAT_BANNED");
     }
@@ -90,6 +107,9 @@ public class ChatMessageService implements IChatMessageService {
     msg.setSenderId(null);
     msg.setVisitorId(visitorId);
     msg = messageRepository.save(msg);
+
+    // Tenant-site ziyaretçisinden gelen mesaj → adminlere bildirim
+    notifyAdminsOfTenantMessage(groupId, visitor.getDisplayName(), msg.getContent());
 
     return toDto(msg);
   }
@@ -117,7 +137,35 @@ public class ChatMessageService implements IChatMessageService {
     msg.setSenderDisplayName(displayName);
     msg = messageRepository.save(msg);
 
+    // Anonim guest'ten gelen mesaj → adminlere bildirim
+    notifyAdminsOfTenantMessage(groupId, displayName, msg.getContent());
+
     return toDto(msg);
+  }
+
+  /**
+   * Tenant tarafından (visitor/guest/TENANT rollü kullanıcı) gelen chat mesajında
+   * SUPER_ADMIN + ADMIN kullanıcılarına bildirim üretir: DB kaydı + WS push
+   * (/user/queue/notifications) → panel header rozeti + tarayıcı bildirimi.
+   * Fire-and-forget: bildirim hatası mesaj akışını ASLA bozmaz.
+   */
+  private void notifyAdminsOfTenantMessage(UUID groupId, String senderName, String content) {
+    try {
+      String who = (senderName != null && !senderName.isBlank()) ? senderName : "Ziyaretçi";
+      String preview = content == null ? ""
+          : (content.length() > 80 ? content.substring(0, 80) + "…" : content);
+      java.util.Map<String, Object> metadata = new java.util.HashMap<>();
+      metadata.put("groupId", groupId.toString());
+      notificationService.notifySuperAdminAndAdminUsers(
+          NotificationType.CHAT_MESSAGE,
+          "Yeni chat mesajı",
+          who + ": " + preview,
+          "/chat",
+          TenantContext.getTenantId(),
+          metadata);
+    } catch (Exception ex) {
+      log.warn("Chat mesaj bildirimi gönderilemedi: group={} hata={}", groupId, ex.getMessage());
+    }
   }
 
   private ChatMessage buildBaseMessage(UUID groupId, DtoChatMessageSend dto) {

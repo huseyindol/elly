@@ -15,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cms.config.DataSourceConfig;
 import com.cms.config.UserAuthCacheService;
 import com.cms.config.TenantContext;
 import com.cms.dto.DtoAdminUserUpdate;
@@ -54,9 +55,13 @@ public class UserService implements IUserService {
   private final UserMapper userMapper;
   private final UserAuthCacheService userAuthCacheService;
   private final IAuthService authService;
+  private final DataSourceConfig.TenantDataSourceProperties tenantProperties;
 
   @Value("${app.frontend-url.panel:http://localhost:3001}")
   private String panelFrontendUrl;
+
+  @Value("${app.frontend-url.tenant:http://localhost:3000}")
+  private String tenantFrontendUrlFallback;
 
   @Override
   public DtoUserResponse getMe(String username) {
@@ -211,14 +216,29 @@ public class UserService implements IUserService {
       throw new ConflictException("Username already exists: " + request.getUsername());
     }
 
+    // audience: "panel" (default) → panel kullanıcısı; "tenant" → tenant-site kullanıcısı.
+    boolean isTenantAudience = "tenant".equalsIgnoreCase(request.getAudience());
+    if (request.getAudience() != null && !request.getAudience().isBlank()
+        && !isTenantAudience && !"panel".equalsIgnoreCase(request.getAudience())) {
+      throw new BadRequestException("audience 'panel' veya 'tenant' olmalı");
+    }
+
     Set<Role> rolesToAssign = new HashSet<>();
-    if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
+    if (isTenantAudience) {
+      // Tenant kullanıcısı: TENANT rolü zorunlu ve tek — rol seçimi yok.
+      if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
+        throw new BadRequestException("Tenant kullanıcısına rol atanamaz (TENANT otomatik)");
+      }
+      Role tenantRole = roleRepository.findByName("TENANT")
+          .orElseThrow(() -> new BadRequestException("TENANT rolü tanımlı değil (seed eksik)"));
+      rolesToAssign.add(tenantRole);
+    } else if (request.getRoleIds() != null && !request.getRoleIds().isEmpty()) {
       for (Long roleId : request.getRoleIds()) {
         Role r = roleRepository.findById(roleId)
             .orElseThrow(() -> new BadRequestException("Role not found: " + roleId));
-        // TENANT rolü panel-create yolundan ASLA atanamaz — tenant kullanıcısı public register'la.
+        // TENANT rolü panel-audience yolundan atanamaz — tenant kullanıcısı audience=tenant ile.
         if ("TENANT".equals(r.getName())) {
-          throw new BadRequestException("TENANT rolü panel'den atanamaz");
+          throw new BadRequestException("TENANT rolü panel kullanıcısına atanamaz");
         }
         rolesToAssign.add(r);
       }
@@ -246,11 +266,22 @@ public class UserService implements IUserService {
 
     User saved = userRepository.save(user);
 
-    // Verification mail PANEL frontend URL'i ile — admin panel'den girecek.
-    authService.sendVerificationEmail(saved, tenantId, verificationToken, panelFrontendUrl);
+    // Verification mail: panel kullanıcısı → PANEL frontend URL; tenant kullanıcısı →
+    // o tenant'ın kendi frontend-url'i (app.tenants.datasources.{tid}.frontend-url,
+    // yoksa global fallback) — kullanıcı kendi domain'inden doğrular.
+    String mailFrontendUrl;
+    if (isTenantAudience) {
+      String tenantUrl = tenantProperties.getDatasources().get(tenantId).getFrontendUrl();
+      mailFrontendUrl = (tenantUrl != null && !tenantUrl.isBlank())
+          ? tenantUrl
+          : tenantFrontendUrlFallback;
+    } else {
+      mailFrontendUrl = panelFrontendUrl;
+    }
+    authService.sendVerificationEmail(saved, tenantId, verificationToken, mailFrontendUrl);
 
-    log.info("Admin user olusturuldu: id={} username={} tenant={}",
-        saved.getId(), saved.getUsername(), tenantId);
+    log.info("Kullanici olusturuldu (panel): id={} username={} tenant={} audience={}",
+        saved.getId(), saved.getUsername(), tenantId, isTenantAudience ? "tenant" : "panel");
     return userMapper.toDtoUserResponse(saved);
   }
 

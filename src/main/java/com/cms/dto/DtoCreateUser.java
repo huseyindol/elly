@@ -41,7 +41,14 @@ public class DtoCreateUser {
 
   /**
    * Atanacak rol id'leri. Null/boş bırakılırsa ADMIN rolü otomatik atanır
-   * (panel-create varsayılan davranışı).
+   * (panel-create varsayılan davranışı). audience="tenant" iken kullanılamaz.
    */
   private List<Long> roleIds;
+
+  /**
+   * "panel" (default) → panel kullanıcısı: roleIds/ADMIN default + PANEL frontend mail.
+   * "tenant" → tenant-site kullanıcısı: TENANT rolü + o tenant'ın kendi frontend-url'i
+   * ile doğrulama maili (app.tenants.datasources.{tid}.frontend-url).
+   */
+  private String audience;
 }

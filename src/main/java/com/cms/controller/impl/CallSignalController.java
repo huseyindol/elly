@@ -34,10 +34,14 @@ public class CallSignalController {
   public void startCall(@Payload DtoCallStart payload, SimpMessageHeaderAccessor accessor) {
     Long userId = WsSessionUtils.requireUserId(accessor);
     String username = WsSessionUtils.username(accessor);
+    String loginSource = WsSessionUtils.loginSource(accessor);
+    log.info("[rtc] /rtc/call reached: user={}({}) loginSource={} tenant={} callee={}",
+        username, userId, loginSource, WsSessionUtils.optionalTenant(accessor),
+        payload != null ? payload.getCalleeUserId() : null);
     // Panel araması yalnız panel oturumundan; tenant/guest ring-all endpoint'ini kullanır.
     // UI bu butonu tenant'a göstermez; yine de gelirse sessizce yok say.
-    if (!"admin".equals(WsSessionUtils.loginSource(accessor))) {
-      log.debug("Panel araması reddedildi (panel oturumu değil): user={}", username);
+    if (!"admin".equals(loginSource)) {
+      log.warn("[rtc] Panel araması reddedildi (loginSource!=admin): user={} loginSource={}", username, loginSource);
       return;
     }
     callSessionService.startPanelCall(userId, username, WsSessionUtils.optionalTenant(accessor), payload.getCalleeUserId());
@@ -50,9 +54,11 @@ public class CallSignalController {
     String username = WsSessionUtils.username(accessor);
     String sessionTenant = WsSessionUtils.optionalTenant(accessor);
     String loginSource = WsSessionUtils.loginSource(accessor);
+    log.info("[rtc] /tenant-rtc/{}/call reached: user={}({}) loginSource={} sessionTenant={}",
+        tenantId, username, userId, loginSource, sessionTenant);
     // Yalnız tenant-site kullanıcısı + path tenant == session tenant
     if (!"tenant".equals(loginSource) || sessionTenant == null || !sessionTenant.equals(tenantId)) {
-      log.debug("Geçersiz tenant çağrı isteği: user={} loginSource={} path={} session={}",
+      log.warn("[rtc] Tenant çağrısı reddedildi: user={} loginSource={} path={} session={}",
           username, loginSource, tenantId, sessionTenant);
       return;
     }

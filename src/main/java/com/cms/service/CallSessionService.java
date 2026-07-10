@@ -70,6 +70,8 @@ public class CallSessionService {
 
   /** Panel-içi arama: {@code /app/rtc/call}. Hiyerarşi + presence + busy kontrolü. */
   public void startPanelCall(Long callerUserId, String callerUsername, String callerTenant, Long calleeUserId) {
+    log.info("[rtc] startPanelCall: caller={}({}) tenant={} callee={}",
+        callerUsername, callerUserId, callerTenant, calleeUserId);
     if (calleeUserId == null || calleeUserId.equals(callerUserId)) {
       sendError(callerUsername, "Geçersiz arama hedefi");
       return;
@@ -106,7 +108,9 @@ public class CallSessionService {
       sendError(callerUsername, "Bu kullanıcıyı arama yetkiniz yok");
       return;
     }
-    if (!presenceService.isOnline(calleeUserId)) {
+    boolean calleeOnline = presenceService.isOnline(calleeUserId);
+    log.info("[rtc] presence check: callee={} online={}", calleeUserId, calleeOnline);
+    if (!calleeOnline) {
       sendSignal(callerUsername, sig(CallSignalType.UNAVAILABLE, null).reason("Kullanıcı çevrimdışı").build());
       return;
     }
@@ -142,6 +146,7 @@ public class CallSessionService {
 
   /** Tenant destek araması (ring-all): {@code /app/tenant-rtc/{tenantId}/call}. */
   public void startTenantRingAll(Long callerUserId, String callerUsername, String tenantId) {
+    log.info("[rtc] startTenantRingAll: caller={}({}) tenant={}", callerUsername, callerUserId, tenantId);
     if (tenantId == null || tenantId.isBlank()) {
       sendError(callerUsername, "Tenant context yok");
       return;
@@ -158,9 +163,12 @@ public class CallSessionService {
     } finally {
       TenantContext.clear();
     }
+    log.info("[rtc] ring-all panel users in {}: {}", tenantId,
+        panelUsers.stream().map(p -> p.username() + "(" + p.userId() + ",online=" + presenceService.isOnline(p.userId()) + ")").toList());
     List<PanelUserRef> online = panelUsers.stream()
         .filter(p -> presenceService.isOnline(p.userId()) && !busy.containsKey(p.userId()))
         .toList();
+    log.info("[rtc] ring-all online targets: {}", online.stream().map(PanelUserRef::username).toList());
     if (online.isEmpty()) {
       sendSignal(callerUsername, sig(CallSignalType.UNAVAILABLE, null).reason("Şu an müsait temsilci yok").build());
       // Cevaplanamadan biten çağrıyı da kaydet (MISSED)
@@ -354,6 +362,8 @@ public class CallSessionService {
   }
 
   private void sendSignal(String username, DtoCallSignal signal) {
+    // [rtc-diag] geçici tanı logu — teslim edilen her sinyal + hedef username
+    log.info("[rtc] SEND {} → user='{}' callId={}", signal.getType(), username, signal.getCallId());
     messagingTemplate.convertAndSendToUser(username, "/queue/rtc", signal);
   }
 

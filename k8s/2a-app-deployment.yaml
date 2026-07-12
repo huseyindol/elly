@@ -92,7 +92,9 @@ spec:
               port: http
             initialDelaySeconds: 30
             periodSeconds: 10
-            failureThreshold: 24
+            # Boot ~5dk sürebiliyor (30 JPA repo + Hibernate validate, tek CPU).
+            # 30 + 60*10 = 630sn bütçe. Az olursa startupProbe SIGKILL → CrashLoop.
+            failureThreshold: 60
             timeoutSeconds: 5
 
           readinessProbe:

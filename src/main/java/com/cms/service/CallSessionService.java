@@ -49,6 +49,9 @@ public class CallSessionService {
   private final Map<UUID, CallSession> calls = new ConcurrentHashMap<>();
   /** userId → aktif/çalan callId (aynı anda tek çağrı). */
   private final Map<Long, UUID> busy = new ConcurrentHashMap<>();
+  /** userId → client tarafı ref (tenant caller). Sinyaller ayrıca /topic/rtc-client/{ref}/rtc'ye
+   *  gönderilir; tenant userId bilmeden kendi sinyallerine abone olur (prod'da userId zinciri kırılgan). */
+  private final Map<Long, String> clientRefByUser = new ConcurrentHashMap<>();
 
   /** Çağrı durumu (registry değeri). */
   static final class CallSession {
@@ -149,10 +152,14 @@ public class CallSessionService {
   }
 
   /** Tenant destek araması (ring-all): {@code /app/tenant-rtc/{tenantId}/call}. */
-  public void startTenantRingAll(Long callerUserId, String callerUsername, String tenantId) {
+  public void startTenantRingAll(Long callerUserId, String callerUsername, String tenantId, String clientRef) {
     if (tenantId == null || tenantId.isBlank()) {
       sendError(callerUserId, callerUsername, "Tenant context yok");
       return;
+    }
+    // Caller sinyalleri (RINGING/ANSWERED/SDP/ICE/terminal) ayrıca clientRef topic'ine gitsin.
+    if (clientRef != null && !clientRef.isBlank()) {
+      clientRefByUser.put(callerUserId, clientRef);
     }
     if (busy.containsKey(callerUserId)) {
       sendSignal(callerUserId, callerUsername, sig(CallSignalType.BUSY, null).reason("Zaten bir çağrıdasınız").build());
@@ -346,6 +353,7 @@ public class CallSessionService {
     } finally {
       calls.remove(s.callId);
       busy.remove(s.callerUserId, s.callId);
+      clientRefByUser.remove(s.callerUserId);
       if (s.calleeUserId != null) {
         busy.remove(s.calleeUserId, s.callId);
       }
@@ -377,6 +385,11 @@ public class CallSessionService {
    */
   private void sendSignal(Long userId, String username, DtoCallSignal signal) {
     messagingTemplate.convertAndSend("/topic/user/" + userId + "/rtc", signal);
+    // Tenant caller: userId bilmeden kendi ref topic'inden alır.
+    String clientRef = clientRefByUser.get(userId);
+    if (clientRef != null) {
+      messagingTemplate.convertAndSend("/topic/rtc-client/" + clientRef + "/rtc", signal);
+    }
     if (username != null) {
       messagingTemplate.convertAndSendToUser(username, "/queue/rtc", signal);
     }

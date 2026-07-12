@@ -11,6 +11,7 @@ import org.springframework.stereotype.Controller;
 import com.cms.dto.DtoCallIce;
 import com.cms.dto.DtoCallSdp;
 import com.cms.dto.DtoCallStart;
+import com.cms.dto.DtoTenantCallStart;
 import com.cms.service.CallSessionService;
 import com.cms.util.WsSessionUtils;
 
@@ -47,7 +48,8 @@ public class CallSignalController {
 
   /** Tenant destek araması (ring-all). Yalnız tenant-site login (loginSource=tenant). */
   @MessageMapping("/tenant-rtc/{tenantId}/call")
-  public void startTenantCall(@DestinationVariable String tenantId, SimpMessageHeaderAccessor accessor) {
+  public void startTenantCall(@DestinationVariable String tenantId,
+      @Payload(required = false) DtoTenantCallStart payload, SimpMessageHeaderAccessor accessor) {
     Long userId = WsSessionUtils.requireUserId(accessor);
     String username = WsSessionUtils.username(accessor);
     String sessionTenant = WsSessionUtils.optionalTenant(accessor);
@@ -58,7 +60,8 @@ public class CallSignalController {
           username, loginSource, tenantId, sessionTenant);
       return;
     }
-    callSessionService.startTenantRingAll(userId, username, sessionTenant);
+    callSessionService.startTenantRingAll(userId, username, sessionTenant,
+        payload != null ? payload.getClientRef() : null);
   }
 
   @MessageMapping("/rtc/{callId}/answer")

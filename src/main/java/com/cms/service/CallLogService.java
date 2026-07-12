@@ -8,10 +8,12 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 import com.cms.entity.CallLog;
-import com.cms.entity.User;
 import com.cms.enums.CallStatus;
 import com.cms.repository.CallLogRepository;
+import com.cms.repository.ChatGroupMemberRepository;
 import com.cms.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,7 @@ public class CallLogService {
 
   private final CallLogRepository callLogRepository;
   private final UserRepository userRepository;
+  private final ChatGroupMemberRepository chatGroupMemberRepository;
 
   /** Bir kullanıcının çağrı için gereken bilgileri: username + rol seviyesi + TENANT mı. */
   public record UserCallInfo(Long userId, String username, int roleLevel, boolean isTenant) {
@@ -50,6 +53,13 @@ public class CallLogService {
       boolean isTenant = roleNames.contains("TENANT");
       return new UserCallInfo(u.getId(), u.getUsername(), roleLevel(roleNames), isTenant);
     });
+  }
+
+  /** İki kullanıcı da verilen grubun üyesi mi (aynı grupta arama hiyerarşiyi atlar). */
+  @Transactional(readOnly = true)
+  public boolean sharedGroupMember(UUID groupId, Long userA, Long userB) {
+    return chatGroupMemberRepository.existsByIdGroupIdAndIdUserId(groupId, userA)
+        && chatGroupMemberRepository.existsByIdGroupIdAndIdUserId(groupId, userB);
   }
 
   @Transactional(readOnly = true)

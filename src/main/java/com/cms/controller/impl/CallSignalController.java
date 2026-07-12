@@ -44,7 +44,8 @@ public class CallSignalController {
       log.warn("[rtc] Panel araması reddedildi (loginSource!=admin): user={} loginSource={}", username, loginSource);
       return;
     }
-    callSessionService.startPanelCall(userId, username, WsSessionUtils.optionalTenant(accessor), payload.getCalleeUserId());
+    callSessionService.startPanelCall(userId, username, WsSessionUtils.optionalTenant(accessor),
+        payload.getCalleeUserId(), payload.getGroupId());
   }
 
   /** Tenant destek araması (ring-all). Yalnız tenant-site login (loginSource=tenant). */

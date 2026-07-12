@@ -68,10 +68,12 @@ public class CallSessionService {
 
   // ─────────────────────────── Çağrı başlatma ───────────────────────────
 
-  /** Panel-içi arama: {@code /app/rtc/call}. Hiyerarşi + presence + busy kontrolü. */
-  public void startPanelCall(Long callerUserId, String callerUsername, String callerTenant, Long calleeUserId) {
-    log.info("[rtc] startPanelCall: caller={}({}) tenant={} callee={}",
-        callerUsername, callerUserId, callerTenant, calleeUserId);
+  /** Panel-içi arama: {@code /app/rtc/call}. Hiyerarşi + presence + busy kontrolü.
+   *  {@code groupId} verilir ve iki taraf da o grubun üyesiyse hiyerarşi atlanır. */
+  public void startPanelCall(Long callerUserId, String callerUsername, String callerTenant,
+      Long calleeUserId, String groupId) {
+    log.info("[rtc] startPanelCall: caller={}({}) tenant={} callee={} group={}",
+        callerUsername, callerUserId, callerTenant, calleeUserId, groupId);
     if (calleeUserId == null || calleeUserId.equals(callerUserId)) {
       sendError(callerUserId, callerUsername, "Geçersiz arama hedefi");
       return;
@@ -87,10 +89,15 @@ public class CallSessionService {
 
     UserCallInfo caller;
     UserCallInfo callee;
+    boolean sameGroup = false;
     try {
       TenantContext.setTenantId(callerTenant);
       caller = callLogService.lookupUser(callerUserId).orElse(null);
       callee = callLogService.lookupUser(calleeUserId).orElse(null);
+      UUID gid = parseUuid(groupId);
+      if (gid != null) {
+        sameGroup = callLogService.sharedGroupMember(gid, callerUserId, calleeUserId);
+      }
     } finally {
       TenantContext.clear();
     }
@@ -103,8 +110,9 @@ public class CallSessionService {
       sendError(callerUserId, callerUsername, "Tenant kullanıcısı panelden aranamaz");
       return;
     }
-    // Hiyerarşi: kendi seviyesi ve altı (SUPER_ADMIN=4 herkesi).
-    if (caller.roleLevel() < 4 && callee.roleLevel() > caller.roleLevel()) {
+    // Hiyerarşi: kendi seviyesi ve altı (SUPER_ADMIN=4 herkesi). Aynı grubun üyeleriyse
+    // hiyerarşi atlanır — o grupta herkes birbirini arayabilir (admin→superadmin dahil).
+    if (!sameGroup && caller.roleLevel() < 4 && callee.roleLevel() > caller.roleLevel()) {
       sendError(callerUserId, callerUsername, "Bu kullanıcıyı arama yetkiniz yok");
       return;
     }
@@ -387,5 +395,14 @@ public class CallSessionService {
 
   private DtoCallSignal.DtoCallSignalBuilder sig(CallSignalType type, UUID callId) {
     return DtoCallSignal.builder().type(type).callId(callId);
+  }
+
+  private static UUID parseUuid(String value) {
+    if (value == null || value.isBlank()) return null;
+    try {
+      return UUID.fromString(value);
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
   }
 }

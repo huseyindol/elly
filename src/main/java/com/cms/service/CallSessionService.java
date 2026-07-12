@@ -72,8 +72,6 @@ public class CallSessionService {
    *  {@code groupId} verilir ve iki taraf da o grubun üyesiyse hiyerarşi atlanır. */
   public void startPanelCall(Long callerUserId, String callerUsername, String callerTenant,
       Long calleeUserId, String groupId) {
-    log.info("[rtc] startPanelCall: caller={}({}) tenant={} callee={} group={}",
-        callerUsername, callerUserId, callerTenant, calleeUserId, groupId);
     if (calleeUserId == null || calleeUserId.equals(callerUserId)) {
       sendError(callerUserId, callerUsername, "Geçersiz arama hedefi");
       return;
@@ -116,9 +114,7 @@ public class CallSessionService {
       sendError(callerUserId, callerUsername, "Bu kullanıcıyı arama yetkiniz yok");
       return;
     }
-    boolean calleeOnline = presenceService.isOnline(calleeUserId);
-    log.info("[rtc] presence check: callee={} online={}", calleeUserId, calleeOnline);
-    if (!calleeOnline) {
+    if (!presenceService.isOnline(calleeUserId)) {
       sendSignal(callerUserId, callerUsername, sig(CallSignalType.UNAVAILABLE, null).reason("Kullanıcı çevrimdışı").build());
       return;
     }
@@ -154,7 +150,6 @@ public class CallSessionService {
 
   /** Tenant destek araması (ring-all): {@code /app/tenant-rtc/{tenantId}/call}. */
   public void startTenantRingAll(Long callerUserId, String callerUsername, String tenantId) {
-    log.info("[rtc] startTenantRingAll: caller={}({}) tenant={}", callerUsername, callerUserId, tenantId);
     if (tenantId == null || tenantId.isBlank()) {
       sendError(callerUserId, callerUsername, "Tenant context yok");
       return;
@@ -174,7 +169,6 @@ public class CallSessionService {
     List<PanelUserRef> online = panelUsers.stream()
         .filter(p -> presenceService.isOnline(p.userId()) && !busy.containsKey(p.userId()))
         .toList();
-    log.info("[rtc] ring-all online targets: {}", online.stream().map(PanelUserRef::username).toList());
     if (online.isEmpty()) {
       sendSignal(callerUserId, callerUsername, sig(CallSignalType.UNAVAILABLE, null).reason("Şu an müsait temsilci yok").build());
       // Cevaplanamadan biten çağrıyı da kaydet (MISSED)
@@ -382,7 +376,6 @@ public class CallSessionService {
    * gönderilir (ortam desteklerse). Client'lar {@code /topic/user/{kendiId}/rtc}'ye abone olur.
    */
   private void sendSignal(Long userId, String username, DtoCallSignal signal) {
-    log.info("[rtc] SEND {} → user={}({}) callId={}", signal.getType(), username, userId, signal.getCallId());
     messagingTemplate.convertAndSend("/topic/user/" + userId + "/rtc", signal);
     if (username != null) {
       messagingTemplate.convertAndSendToUser(username, "/queue/rtc", signal);

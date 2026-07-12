@@ -35,9 +35,6 @@ public class CallSignalController {
     Long userId = WsSessionUtils.requireUserId(accessor);
     String username = WsSessionUtils.username(accessor);
     String loginSource = WsSessionUtils.loginSource(accessor);
-    log.info("[rtc] /rtc/call reached: user={}({}) loginSource={} tenant={} callee={}",
-        username, userId, loginSource, WsSessionUtils.optionalTenant(accessor),
-        payload != null ? payload.getCalleeUserId() : null);
     // Panel araması yalnız panel oturumundan; tenant/guest ring-all endpoint'ini kullanır.
     // UI bu butonu tenant'a göstermez; yine de gelirse sessizce yok say.
     if (!"admin".equals(loginSource)) {
@@ -55,8 +52,6 @@ public class CallSignalController {
     String username = WsSessionUtils.username(accessor);
     String sessionTenant = WsSessionUtils.optionalTenant(accessor);
     String loginSource = WsSessionUtils.loginSource(accessor);
-    log.info("[rtc] /tenant-rtc/{}/call reached: user={}({}) loginSource={} sessionTenant={}",
-        tenantId, username, userId, loginSource, sessionTenant);
     // Yalnız tenant-site kullanıcısı + path tenant == session tenant
     if (!"tenant".equals(loginSource) || sessionTenant == null || !sessionTenant.equals(tenantId)) {
       log.warn("[rtc] Tenant çağrısı reddedildi: user={} loginSource={} path={} session={}",

@@ -1,6 +1,6 @@
 -- ============================================================
 -- v4 Email Templates Migration
--- Her tenant DB'sinde çalıştır (basedb, tenant1, tenant2, ...)
+-- Her tenant DB'sinde calistir (tenant1, tenant2, ...)
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS email_templates (

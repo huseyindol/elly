@@ -1,5 +1,5 @@
 -- ============================================================
--- Notification System Migration — basedb only
+-- Notification System Migration — HER tenant DB'sine uygulanir (tenant1, tenant2, ...)
 -- Table: notifications
 -- ============================================================
 

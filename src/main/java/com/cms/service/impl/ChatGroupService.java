@@ -114,10 +114,10 @@ public class ChatGroupService implements IChatGroupService {
   @Override
   public List<DtoChatGroup> getMyGroups(Long userId) {
     int roleLevel = currentUserRoleLevel();
-    // URL-tenant (TenantContext) modeli: JwtTenantFilter chat'i yonlendirir — AC'de basedb,
-    // TC'de URL path'indeki tenant (/api/v1/chat/tenant/{tid}). Burada yalnizca MEVCUT
-    // context'in gruplari dondurulur. Cross-DB aggregate (mapAllTenants) YOK; bu hem OSIV
-    // ile uyumludur hem de filter/panel ile ayni URL-tenant modeline oturur.
+    // AC=TC tek model: tenant, JWT tenantId claim'inden (JwtTenantFilter) gelir. Burada
+    // yalnizca MEVCUT context'in gruplari dondurulur. Cross-DB aggregate (mapAllTenants)
+    // YOK; bu hem OSIV ile uyumludur hem de her grubun kendi tenant DB'sinde yasadigi
+    // modele oturur.
     return groupRepository.findGroupsByUserIdAndRole(userId, roleLevel)
         .stream()
         .map(chatMapper::toGroupDto)
@@ -415,8 +415,8 @@ public class ChatGroupService implements IChatGroupService {
 
   /**
    * SecurityContext'te olmayan bir user için (ör. davet edilen target) role seviyesini
-   * basedb'den okur. TC group'unda iken bile TenantContext geçici olarak basedb'ye
-   * çevrilir ki tenant DB'sinde olmayan user kaydı için yanlış VIEWER düşmesin.
+   * MEVCUT tenant context'inden okur — kullanıcı kendi tenant DB'sinde yaşar (basedb yok).
+   * (Metot adındaki "FromBasedb" eski mimariden kalma — davranış artık tenant-scoped.)
    *
    * <p>{@code Propagation.REQUIRES_NEW} kullanılarak ayrı bir transaction açılır —
    * çünkü mevcut transaction çoktan bir tenant DataSource'a bağlanmış olabilir.

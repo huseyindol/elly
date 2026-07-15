@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Migration: Chat Bans (TC ban/unban)
 -- Versiyon : 2026-06-05
--- Hedef    : basedb + her tenant DB (basedb, tenant1, tenant2, ...)
+-- Hedef    : HER tenant DB (tenant1, tenant2, ...)
 --
 -- Amaç: Tenant chat (TC) gruplarında bir guest (session_id) veya kayıtlı visitor
 --       (visitor_id) yazma yetkisinin kaldırılması. Banlı kişi mesajları OKUYABİLİR

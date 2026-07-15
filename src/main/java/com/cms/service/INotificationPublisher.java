@@ -5,7 +5,7 @@ import com.cms.enums.NotificationType;
 
 import java.util.Map;
 
-/** Bildirim yazma + WebSocket push — REQUIRES_NEW transaction ile basedb'ye yazar. */
+/** Bildirim yazma + WebSocket push — REQUIRES_NEW transaction ile mevcut tenant DB'sine yazar. */
 public interface INotificationPublisher {
 
   void createAndPush(

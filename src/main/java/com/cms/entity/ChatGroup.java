@@ -45,10 +45,11 @@ public class ChatGroup {
   private int visibilityLevel = 1;
 
   /**
-   * Tenant Chat (TC) için: hangi tenant'a ait (tenant DB'sinde). NULL ise basedb'deki
-   * mevcut admin chat (AC) kayıtlarıdır. Bu alan denormalize olabilir gibi durur fakat
-   * group'un hangi DB'de tutulduğu bilgisini servis katmanının yan veriden hızlıca
-   * elde edebilmesi için tutulur (örn. çapraz DB lookup yapmadan).
+   * Grubun ait olduğu tenant (AC=TC tek model — her grup kendi tenant DB'sinde yaşar).
+   * Yeni kayıtlarda DAİMA dolu (createGroup/getOrCreateDm TenantContext'ten set eder);
+   * NULL yalnız eski (basedb dönemi) satırlarda görülebilir — ChatTopics fallback'i var.
+   * Alan, grubun hangi DB'de tutulduğunu servis katmanının çapraz DB lookup yapmadan
+   * bilmesi için tutulur (ChatGroupTenantRouter.useGroupDatabase).
    */
   @Column(name = "tenant_id", length = 64)
   private String tenantId;

@@ -19,8 +19,8 @@ public class DtoChatGroupCreate {
   private List<Long> memberIds;
 
   /**
-   * TC (Tenant Chat) için: hangi tenant'a ait olacağı. NULL ise klasik AC akışı (basedb'de tutulur).
-   * Dolu ise group ilgili tenant DB'sine yazılır.
+   * Grubun ait olacağı tenant. NULL bırakılırsa servis TenantContext'ten doldurur
+   * (AC=TC — grup daima bir tenant DB'sine yazılır, basedb yok).
    */
   private String tenantId;
 

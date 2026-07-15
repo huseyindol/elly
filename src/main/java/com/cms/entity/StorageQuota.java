@@ -16,9 +16,9 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.util.Date;
 
 /**
- * Tenant başına depolama kotası — HER tenant DB'sinde (basedb + tenant1 + tenant2) tutulur.
+ * Tenant başına depolama kotası — HER tenant DB'sinde (tenant1, tenant2, ...) tutulur.
  * Enforcement upload anındaki (tenant) context'te çalıştığı için cross-DB / OSIV sorunu yok.
- * tenant_id = o context (ör. "tenant1" / "basedb"); pratikte her DB'de tek satır.
+ * tenant_id = o context (ör. "tenant1"); pratikte her DB'de tek satır.
  */
 @Entity
 @Table(name = "storage_quota")

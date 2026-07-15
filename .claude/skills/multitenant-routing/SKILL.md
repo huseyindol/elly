@@ -1,32 +1,50 @@
 ---
 name: multitenant-routing
 description: Multi-tenant veri yönlendirme, tenant context yönetimi ve tenant izolasyonu. Tenant routing, DataSource değiştirme, tenant-specific query veya tenant context hataları ile ilgili konularda otomatik aktif et.
-version: 1.0.0
+version: 2.0.0
 ---
 
 # Elly Multi-Tenant Routing
 
-## Mimari
+## Mimari — tamamen tenant-scoped (basedb YOK)
 - **Strateji:** Database-per-tenant (her tenant ayrı PostgreSQL DB'si)
-- **Tenant'lar:** `basedb` (varsayılan), `tenant1`, `tenant2`
+- **Tenant'lar:** `tenant1`, `tenant2` — merkezi/varsayılan bir "basedb" YOKTUR (d4ad211'de kaldırıldı)
 - **DataSource Routing:** `TenantRoutingDataSource extends AbstractRoutingDataSource`
 - **Context Holder:** `TenantContext` (ThreadLocal tabanlı)
+- **Strict routing:** Boot bitince (`RoutingStrictModeActivator`, ApplicationReadyEvent) strict mode aktifleşir: context boşsa sessiz fallback YERİNE `TenantRequiredException` (errorCode=TENANT_REQUIRED) fırlar
+- **default-tenant** (`app.tenants.default-tenant`, varsayılan `tenant1`): YALNIZ boot/Hibernate dialect tespiti ve seed hedefi. Request fallback DEĞİLDİR. Config'te tanımlı değilse `DataSourceConfig` ilk datasource'a düşer (boot çökmesin diye)
 
 ## Request Akışı
 ```
 HTTP Request
-  → JwtTenantFilter
-      → JWT'den tenantId claim'ini çıkar
+  → JwtTenantFilter (@Order(1))
+      → Authorization: Bearer JWT'den tenantId claim'ini çıkar
       → TenantContext.setTenantId(tenantId)
+      (public istekler shouldNotFilter ile atlanır)
+  → PublicApiFilter (anonim akış)
+      → /api/v1/public/{tid}/... path'inden tenant çözer, path'i rewrite eder
+      → GET açık + allowlist'li POST (forms submit, auth register/login/guest-token)
   → TenantRoutingDataSource.determineCurrentLookupKey()
       → TenantContext.getTenantId() döndürür
+      → context boş + strict mode → TenantRequiredException
   → Doğru PostgreSQL DB'sine bağlan
   → İşlem tamamlanınca TenantContext.clear()  ← finally bloğunda!
 ```
 
+## Tenant Nereden Çözülür? (tek kural)
+- **Authenticated:** JWT `tenantId` claim'i (ZORUNLU — claim yoksa JwtAuthenticationFilter TENANT_REQUIRED/400 döner)
+- **Anonim:** `/api/v1/public/{tid}/...` URL'i (PublicApiFilter)
+- **WS CONNECT:** token `tenantId` claim'i (admin/tenant/guest hepsi için zorunlu)
+- **URL-tenant (admin):** `/api/v1/chat/tenant/{tid}/...` gibi path'ler — yalnız `loginSource=admin`
+- X-Tenant-Id header ve tenant-switch token DESTEKLENMEZ
+
 ## Kritik Notlar
 
-**@Async kullanımında:**
+**@Transactional auth endpoint'lerinde (login/register/refresh/verify/mfa-verify):**
+TenantContext, `@Transactional` servis çağrısından ÖNCE CONTROLLER'da kurulmalı — aksi halde
+transaction begin aşamasında routing yanlış hedefe düşer (commit 602af2a, ddc573b).
+
+**@Async / RabbitMQ consumer kullanımında:**
 Async method'larda ThreadLocal kaybolur. Tenant'ı manuel aktar:
 ```java
 String tenantId = TenantContext.getTenantId();
@@ -36,17 +54,14 @@ CompletableFuture.runAsync(() -> {
 });
 ```
 
-**Cache key'lerinde:**
-Multi-tenant cache'ler için tenantId'yi key'e ekle:
-```java
-@Cacheable(value = "users", key = "#tenantId + ':' + #userId")
-```
+**Cache:** Tenant izolasyonu otomatik — `computePrefixWith` → `{tenantId}::{cacheName}::{key}`.
+Ek olarak key'e tenantId gömmek gerekmiyor.
 
 **Test'lerde:**
 ```java
 @BeforeEach
 void setUp() {
-    TenantContext.setTenantId("basedb");
+    TenantContext.setTenantId("tenant1");
 }
 @AfterEach
 void tearDown() {
@@ -54,76 +69,52 @@ void tearDown() {
 }
 ```
 
-## User Routing — Kritik Bilgi (2026-04-29'dan itibaren)
+## Kullanıcı Nerede Saklanır?
+```
+tenant1  → tenant1'in TÜM kullanıcıları (panel adminleri + site kullanıcıları)
+tenant2  → tenant2'nin TÜM kullanıcıları
+```
+Panel/tenant ayrımı DB ile değil ROL ile yapılır: panel rolleri (SUPER_ADMIN/ADMIN/EDITOR/VIEWER)
+vs TENANT rolü (münhasır). Login simetrik: admin login panel rolü ister, tenant login TENANT rolü ister.
+Cross-tenant kullanıcı yönetimi YOKTUR — `TenantUserService`/`TenantController` silindi (1e0c44c, 6e4b506);
+panel yalnız kendi JWT context'indeki tenant'ı yönetir.
 
-### Kullanıcı Nerede Saklanır?
-```
-basedb   → Panel admin kullanıcıları  (loginSource="admin")
-tenant1  → Tenant1 site kullanıcıları (loginSource="tenant", tenantId="tenant1")
-tenant2  → Tenant2 site kullanıcıları
-```
-
-### JwtAuthenticationFilter — loadUserFromDbAndCache()
-Artık **hardcoded basedb kullanmıyor**. JwtTenantFilter'ın set ettiği TenantContext geçerli:
-- Admin JWT → JwtTenantFilter null set eder → defaultDataSource (basedb) → user basedb'den yüklenir
-- Tenant JWT → JwtTenantFilter "tenant1" set eder → tenant1 DataSource → user tenant1'den yüklenir
-
-### register() — Tenant DB'sine Kayıt
-```json
-POST /api/v1/auth/register
-{
-  "username": "ali",
-  "email": "ali@site.com",
-  "password": "123456",
-  "tenantId": "tenant1"   ← bu alan varsa tenant1 DB'sine kaydeder
-}
-```
-`tenantId` verilmezse mevcut TenantContext kullanılır (genellikle basedb).
-
-### Admin Panel → Tenant Kullanıcı Yönetimi
-Panel admin JWT ile tenant DB'lerindeki kullanıcılara erişim:
-```
-GET/POST/PUT/DELETE /api/v1/admin/tenants/{tenantId}/users
-PATCH               /api/v1/admin/tenants/{tenantId}/users/{id}/status
-```
-`TenantUserService.inTenantContext(tenantId, ...)` — her metod geçici switch yapar, finally'de restore eder.
+## Seed (DataInitializer)
+- Varsayılan KAPALI: `app.startup.rbac-seed=false`
+- Her tenant AYRI transaction'da seed edilir (TransactionTemplate) — tek `@Transactional`
+  bağlantıyı ilk tenant'a pinler, diğer tenant'lara yazamaz
+- Her tenant'a env-tabanlı ilk SUPER_ADMIN: SEED_ADMIN_USER/PASSWORD/EMAIL (prod'da MUTLAKA override)
 
 ## Hata Senaryoları
-- `TenantContext` null ise → `basedb`'ye fallback (DataSourceConfig'de tanımlı)
-- Bilinmeyen tenant adı → `IllegalArgumentException` fırlatılır
-- Transaction içinde tenant değiştirme → **Tehlikeli**, kaçın
+- Context boş (boot sonrası) → `TenantRequiredException` (400, errorCode=TENANT_REQUIRED) — fallback YOK
+- Bilinmeyen tenant adı (URL'de) → 400 Bad Request (PublicApiFilter / JwtTenantFilter)
+- Transaction içinde tenant değiştirme → **Tehlikeli**, kaçın (bağlantı transaction başında pinlenir)
 
-## Cross-Tenant Query — Geçici Context Switch Pattern
+## Geçici Context Switch Pattern (aynı istekte farklı tenant DB'si)
 
-Bir tenant context'inde çalışırken farklı bir tenant'ın DB'sine sorgu yapmak için (örn. tenant1 kaydında basedb'deki mail hesabını bulmak):
+Nadiren gerekir (örn. `ChatGroupTenantRouter.useGroupDatabase` grubu kendi tenant'ına sabitler):
 
 ```java
 String currentTenant = TenantContext.getTenantId();
 try {
-  TenantContext.setTenantId("basedb");
-  var account = mailAccountRepository.findByTenantIdAndIsPrimaryTrueAndActiveTrue(tenantId);
-  // ... iş mantığı
+  TenantContext.setTenantId(targetTenant);
+  // ... hedef tenant DB'sinde iş
 } finally {
   TenantContext.setTenantId(currentTenant);   // ZORUNLU restore — clear() değil
 }
 ```
 
-**Kullanım yerleri:**
-- `AuthService.sendVerificationEmail()` — tenant kaydı sırasında basedb'deki primary mail hesabı
-- `TenantUserService.inTenantContext(tenantId, ...)` — admin panelden tenant user yönetimi
-
-**Kural:** `finally` bloğu mutlaka restore etmeli. `TenantContext.clear()` kullanma — JwtTenantFilter outer finally'de zaten clear ediyor, içeride clear edersen önceki context'i kaybedersin.
+**Kural:** `finally` bloğu mutlaka restore etmeli. `TenantContext.clear()` kullanma — JwtTenantFilter
+outer finally'de zaten clear ediyor, içeride clear edersen önceki context'i kaybedersin.
+Ayrıca `@Transactional` sınırı içinde switch işe yaramaz — switch, transaction AÇILMADAN önce yapılmalı
+(örn. ayrı bean + REQUIRES_NEW veya transaction dışı kod yolu).
 
 ## Migration Kapsamı — Entity vs DB Eşleşmesi (kritik)
 
-Bir entity'ye yeni alan eklendiğinde, **entity sınıfının erişilebildiği tüm tenant DB'lerinde** kolon olmalıdır. Veri sadece basedb'de saklansa bile.
+Bir entity'ye yeni alan eklendiğinde kolon **TÜM tenant DB'lerinde** (tenant1 + tenant2 + gelecekte
+eklenenler) olmalıdır.
 
-**Neden:** `hbm2ddl.auto=validate` sadece basedb'i doğrular (startup başarılı) ama runtime'da Hibernate her tenant context'inde aynı SQL'i üretir:
-```sql
-SELECT id, name, ..., yeni_kolon FROM tablo WHERE ...
-```
-Tenant1'de `yeni_kolon` yoksa runtime'da `column "yeni_kolon" does not exist` → 500.
+**Neden:** Prod `hbm2ddl.auto=validate` tek DB'yi doğrular ama runtime'da Hibernate her tenant
+context'inde aynı SQL'i üretir. Bir tenant'ta kolon eksikse ilk istek `column does not exist` → 500.
 
-**Tipik tuzak:** "Bu kolon sadece basedb'de kullanılacak" → sadece basedb'de migration → tenant1 üzerinden gelen ilk istek patlar.
-
-**Çözüm:** `com.cms.entity.*` altındaki entity değişiklikleri için migration **basedb + tenant1 + tenant2** üzerinde çalıştırılır. Veri içeriği basedb'ye özelse, tenant1/tenant2'deki kolonlar boş kalır — sorun değil.
+**Çözüm:** `src/main/resources/migration/` altındaki SQL'ler deploy öncesi HER tenant DB'sinde çalıştırılır.

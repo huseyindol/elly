@@ -41,8 +41,9 @@ public class ChatWebSocketController {
   private final SimpMessagingTemplate messagingTemplate;
 
   /**
-   * AC mesajı: {@code /app/chat/{groupId}/send}.
-   * TenantContext basedb'ye sabitlenir (mevcut davranış).
+   * Legacy mesaj yolu: {@code /app/chat/{groupId}/send}.
+   * TenantContext session tenant'ına set edilir (CONNECT token tenantId'sinden).
+   * Yeni client'lar {@code /app/tenant-chat/{tid}/{groupId}/send} kullanmalı.
    */
   @MessageMapping("/chat/{groupId}/send")
   public void sendMessage(@DestinationVariable UUID groupId,

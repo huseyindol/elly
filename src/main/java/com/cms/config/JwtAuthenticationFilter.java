@@ -162,8 +162,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   /**
    * DB'den User'ı yükle, CachedUserDetails'a dönüştür ve Redis'e yaz.
    * TenantContext JwtTenantFilter tarafından zaten set edilmiş olur:
-   * - admin JWT → null → defaultDataSource (basedb)
-   * - tenant JWT → tenantId → ilgili tenant DB'si
+   * JWT tenantId claim'i → ilgili tenant DB'si (admin dahil herkes kendi tenant DB'sinde).
    */
   private CachedUserDetails loadUserFromDbAndCache(String username, String loginSource) {
     // User, MEVCUT tenant context'inde (JWT tenantId claim'inden — JwtTenantFilter set eder)

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Migration: Storage Quota (tenant başına dosya depolama kotası)
 -- Versiyon : 2026-06-09
--- Hedef    : basedb + her tenant DB (basedb, tenant1, tenant2, ...)
+-- Hedef    : HER tenant DB (tenant1, tenant2, ...)
 --
 -- Her DB kendi tenant'ının kotasını tutar (enforcement upload anındaki tenant
 -- context'inde çalışır → cross-DB yok). Pratikte her DB'de tek satır.

@@ -1,8 +1,9 @@
 package com.cms.enums;
 
 /**
- * WebRTC sinyalleşme mesaj tipleri — {@code /user/queue/rtc} üzerinden client'a gider
- * ({@code com.cms.dto.DtoCallSignal.type}).
+ * WebRTC sinyalleşme mesaj tipleri — esas yol {@code /topic/user/{userId}/rtc}
+ * ({@code /user/queue/rtc} yedek; tenant caller ayrıca {@code /topic/rtc-client/{clientRef}/rtc})
+ * üzerinden client'a gider ({@code com.cms.dto.DtoCallSignal.type}).
  */
 public enum CallSignalType {
   /** Gelen çağrı (callee'ye / ring-all'da tüm panel kullanıcılarına). */

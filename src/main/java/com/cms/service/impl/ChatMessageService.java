@@ -267,7 +267,7 @@ public class ChatMessageService implements IChatMessageService {
   /**
    * DTO'ya çevirir + sender display name'i zenginleştirir.
    * <ul>
-   *   <li>ADMIN sender → username basedb'den çekilir (gerekirse tenant context geçici switch)</li>
+   *   <li>ADMIN sender → yazarken denormalize edilen isim; eski mesajlarda users lookup fallback</li>
    *   <li>VISITOR sender → display_name aynı tenant DB visitor_identities'ten çekilir</li>
    * </ul>
    */
@@ -281,7 +281,7 @@ public class ChatMessageService implements IChatMessageService {
           .ifPresent(v -> dto.setSenderUsername(v.getDisplayName()));
     } else if (msg.getSenderId() != null) {
       // Admin sender: yazarken denormalize edilen isim (DB lookup yok → OSIV sorunu yok).
-      // Eski mesajlarda (sender_display_name boş) basedb lookup'a fallback.
+      // Eski mesajlarda (sender_display_name boş) users lookup fallback'i (REQUIRES_NEW).
       String adminUsername = msg.getSenderDisplayName() != null
           ? msg.getSenderDisplayName()
           : selfProvider.getObject().lookupAdminUsername(msg.getSenderId());
@@ -291,8 +291,8 @@ public class ChatMessageService implements IChatMessageService {
   }
 
   /**
-   * Admin user'ının username'ini basedb'den okur. TC akışında TenantContext tenant'a
-   * set olduğu için query basedb'ye yönlendirilmek üzere geçici switch yapılır.
+   * Admin user'ının username'ini MEVCUT tenant context'inden okur — kullanıcı kendi
+   * tenant DB'sinde yaşar (basedb yok).
    *
    * <p>{@code public} olarak işaretlendi çünkü VisitorChatService gibi başka servisler
    * Spring proxy üzerinden bu method'u çağırabilsin ({@code REQUIRES_NEW} davranışı

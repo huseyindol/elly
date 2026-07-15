@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Migration: Chat Guest (anonim ziyaretçi) — VISITOR + GUEST birleşimi
 -- Versiyon : 2026-05-28
--- Hedef    : basedb + her tenant DB (basedb, tenant1, tenant2, ...)
+-- Hedef    : HER tenant DB (tenant1, tenant2, ...)
 --
 -- Amaç:
 --   chat_messages tablosuna anonim guest sender alanları eklemek:

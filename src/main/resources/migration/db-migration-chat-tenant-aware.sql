@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Migration: Chat Tenant-Aware (Faz 1 — DB hazırlığı)
 -- Versiyon : 2026-04-28
--- Hedef    : basedb + her tenant DB (basedb, tenant1, tenant2, ...)
+-- Hedef    : HER tenant DB (tenant1, tenant2, ...) — not: basedb donemi gecis migrationi
 --
 -- Amaç:
 --   1) Mevcut admin chat (AC) tablolarına iki yeni kolon eklemek:

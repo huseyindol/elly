@@ -60,7 +60,7 @@ public class MailAccount extends BaseEntity {
 
   /**
    * Bu hesabın ait olduğu tenant (ör. "tenant1", "tenant2").
-   * basedb'de saklanır; null ise tenant ataması yoktur.
+   * Kayıt, tenant'ın kendi DB'sindeki mail_accounts tablosunda saklanır.
    */
   @Column(name = "tenant_id", length = 50)
   private String tenantId;

@@ -34,13 +34,19 @@ Bunu yaptıktan sonra kullanıcıya şunu sun:
 
 ---
 
-## PROJE DURUM SNAPSHOTU (2026-04-29)
+## PROJE DURUM SNAPSHOTU (2026-07-15 güncellendi)
 
 ### Tamamlanan Büyük Özellikler
 
 | Tarih | Özellik | Durum | Detay Dosyası |
 |-------|---------|-------|---------------|
-| 2026-04-29 | Multi-Tenant User Routing + Admin Tenant User Management | ✅ | changelog.md, docs/USER_ADMIN_GUIDE.md |
+| 2026-07 | WebRTC arama sinyalleşme Faz 1 (STOMP, call_logs, ring-all) | ✅ | CLAUDE.md "WebRTC Arama" |
+| 2026-07 | basedb kaldırıldı — tamamen tenant-scoped mimari + strict routing | ✅ | multitenant-routing skill |
+| 2026-07 | 2FA (TOTP) — isteğe bağlı, Google Authenticator uyumlu | ✅ | spring-security-patterns skill |
+| 2026-07 | Guest WebSocket chat + per-tenant chat routing (AC=TC) | ✅ | chat-patterns skill |
+| 2026-07 | OAuth2 login tamamen kaldırıldı | ✅ | spring-security-patterns skill |
+| 2026-07 | Panel'den tam user CRUD + TENANT rolü + audience filtresi | ✅ | changelog.md |
+| 2026-04-29 | Multi-Tenant User Routing (NOT: TenantUserService sonradan silindi — 1e0c44c) | ✅ | changelog.md |
 | 2026-04-23 | v4 Email Templates — DB-hosted, tenant-aware, panel CRUD + preview | ✅ | changelog.md |
 | 2026-04-23 | RabbitMQ Admin Proxy API — CMS thin proxy, JWT korumalı | ✅ | rabbitmq-admin-api-design.md |
 | 2026-04-23 | Mail v3 — Email retry endpoint | ✅ | changelog.md |
@@ -72,19 +78,20 @@ Mail Flow (v2 — DB-based, AES-encrypted):
   → EmailQueueService → TenantMailSenderFactory.getMailSender(account) [decrypt] → Gmail SMTP
   → Hata: retry-queue (30sn TTL) → tekrar email-queue (max 3 kez) → DLQ
 
-Auth Flow:
-  Admin: POST /api/auth/admin/login → AdminLoginInterceptor
-  Tenant: POST /api/auth/login → TenantLoginInterceptor
-  OAuth2: Google/Facebook/GitHub → OAuth2AuthenticationSuccessHandler
+Auth Flow (OAuth2 KALDIRILDI — 7e160df):
+  Panel:  POST /api/v1/auth/login + loginType:"admin"  → panel rolü zorunlu
+  Tenant: POST /api/v1/public/{tid}/auth/login + loginType:"tenant" → TENANT rolü zorunlu
+  2FA:    login → mfaToken (5dk) → POST /api/v1/auth/mfa/verify + TOTP → tam JWT
+  Token okuma: SADECE Authorization: Bearer header (cookie okunmaz, yazılır)
 ```
 
 ### Aktif Teknoloji Stack
 
 - **Runtime:** Java 21, Spring Boot 3.5.7
-- **DB:** PostgreSQL (database-per-tenant: basedb, tenant1, tenant2)
+- **DB:** PostgreSQL (database-per-tenant: tenant1, tenant2 — basedb YOK, strict routing)
 - **Cache:** Redis (`auth:user:{username}` TTL=30dk, genel cache TTL=10dk)
 - **Queue:** RabbitMQ (email-queue, email-retry-queue, email-dlq)
-- **Auth:** JWT + OAuth2 (Google, Facebook, GitHub)
+- **Auth:** JWT (JWE) + isteğe bağlı 2FA/TOTP — OAuth2 kaldırıldı
 - **Mail:** DB-based (`mail_accounts` tablosu, smtp_password AES-256-CBC), form-level sender/recipient secimi — v2 (2026-04-21)
 - **Security:** RBAC (@PreAuthorize + Permission entity, 40+ permission)
 - **Exception:** BaseException hiyerarsisi + GlobalExceptionHandler
@@ -119,7 +126,7 @@ Auth Flow:
 src/main/java/com/cms/config/
 ├── DataSourceConfig.java          — Multi-tenant DataSource routing
 ├── RabbitMQConfig.java            — Queue/Exchange tanımları + retry
-├── SecurityConfig.java            — JWT filter, OAuth2, permitAll listesi
+├── SecurityConfig.java            — JWT filter, permitAll listesi (OAuth2 yok)
 ├── TenantMailSenderFactory.java   — Tenant-based JavaMailSender factory
 └── RedisConfig.java               — Cache konfigürasyonu
 ```
@@ -127,10 +134,12 @@ src/main/java/com/cms/config/
 ### Auth & Security
 ```
 src/main/java/com/cms/
-├── filter/JwtTenantFilter.java         — Tenant context kurulumu
-├── filter/JwtAuthenticationFilter.java — JWT doğrulama + Redis cache
-├── security/CustomUserDetailsService.java
-├── util/JwtUtil.java                   — Token üretimi (loginSource, tenantId)
+├── config/JwtTenantFilter.java         — Tenant context kurulumu (JWT tenantId claim)
+├── config/JwtAuthenticationFilter.java — JWT doğrulama + Redis cache + tokenVersion
+├── config/CustomUserDetailsService.java
+├── util/JwtUtil.java                   — Token üretimi (loginSource, tenantId, mfa/guest)
+├── service/TotpService.java            — 2FA TOTP (RFC 6238, harici kütüphanesiz)
+├── controller/impl/MfaController.java  — /api/v1/auth/mfa/** endpoint'leri
 └── entity/Role.java / Permission.java  — RBAC entity'leri
 ```
 

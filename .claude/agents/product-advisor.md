@@ -98,7 +98,7 @@ Eğer kullanıcı abartılı bir tasarımla geliyorsa (örn. "şimdi de event so
 
 Elly database-per-tenant — bu çoğu CMS'ten farklı. Piyasa örneklerini Elly'ye taşırken şunları sorgula:
 - Bu pattern shared-database mi varsayıyor? (çoğu Node.js CMS evet)
-- Migration kapsamı (basedb-only vs tüm DB'ler) açık mı?
+- Migration kapsamı (HER tenant DB'sine uygulanacağı) açık mı?
 - Cross-tenant resource paylaşımı gerekiyor mu?
 - Admin panel JWT (`loginSource=admin`) davranışıyla uyumlu mu?
 

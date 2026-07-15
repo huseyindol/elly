@@ -1,7 +1,7 @@
 -- Migration: Add tenant_id and is_primary columns to mail_accounts table
--- Tüm DB'lerde çalıştır: basedb, tenant1, tenant2
+-- Tum tenant DB'lerinde calistir: tenant1, tenant2
 -- (tenant_id ve is_primary alanları entity'de tanımlı — şema eşleşmeli)
--- tenant1/tenant2'de kayıtlar boş kalır; mail hesapları sadece basedb'de yönetilir.
+-- Mail hesaplari her tenant'in kendi DB'sinde yonetilir (basedb kaldirildi).
 
 ALTER TABLE mail_accounts
   ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(50),

@@ -11,7 +11,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Server → client tek sinyal zarfı ({@code /user/queue/rtc}). Tipe göre alanlar kısmen dolar:
+ * Server → client tek sinyal zarfı (esas yol {@code /topic/user/{userId}/rtc},
+ * {@code /user/queue/rtc} yedek). Tipe göre alanlar kısmen dolar:
  * INCOMING_CALL → callId + peer + ringAll; SDP → sdpType/sdp; ICE → candidate...; ERROR → reason.
  */
 @Getter

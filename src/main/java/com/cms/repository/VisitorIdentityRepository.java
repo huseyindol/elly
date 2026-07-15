@@ -8,9 +8,7 @@ import java.util.UUID;
 
 /**
  * Tenant DB'sinde visitor kimliklerini yönetir.
- * <p>NOT: Bu repository her zaman TenantContext'in işaret ettiği DB'de çalışır —
- * yani basedb için anlamlı sonuç dönmez (tenant chat'in doğası gereği tenant DB
- * bazlı kullanılır).
+ * <p>NOT: Bu repository her zaman TenantContext'in işaret ettiği tenant DB'sinde çalışır.
  */
 public interface VisitorIdentityRepository extends JpaRepository<VisitorIdentity, Long> {
 

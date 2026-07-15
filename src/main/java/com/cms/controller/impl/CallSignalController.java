@@ -21,7 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * WebRTC sinyalleşme WS controller'ı. İş mantığı tamamen {@link CallSessionService}'te;
  * burada yalnız session attribute çözümü + yön (panel/tenant) ayrımı yapılır.
- * Yanıtlar {@code /user/queue/rtc} üzerinden {@link CallSessionService} tarafından gönderilir.
+ * Yanıtlar esas olarak {@code /topic/user/{userId}/rtc} üzerinden ({@code /user/queue/rtc}
+ * yedek) {@link CallSessionService} tarafından gönderilir.
  */
 @Controller
 @RequiredArgsConstructor

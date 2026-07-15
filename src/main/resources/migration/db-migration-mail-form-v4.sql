@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Migration: Mail+Form v4 — Optional Notification Config
 -- Versiyon : 2026-04-27
--- Hedef    : Her tenant DB'sine uygulanir (basedb, tenant1, tenant2, ...)
+-- Hedef    : HER tenant DB (tenant1, tenant2, ...)
 --
 -- Degisiklikler:
 --   form_definitions.sender_mail_account_id NOT NULL constraint'i kaldirildi.

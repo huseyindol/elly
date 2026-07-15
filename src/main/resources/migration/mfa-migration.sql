@@ -1,5 +1,5 @@
 -- 2FA (TOTP) Migration
--- Tüm tenant DB'lerine (basedb, tenant1, tenant2) uygulanmalı
+-- Tum tenant DB'lerine (tenant1, tenant2) uygulanmali
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,

@@ -30,7 +30,7 @@ public class ChatMessage {
   private UUID groupId;
 
   /**
-   * Admin gönderdiyse basedb users.id; visitor gönderdiyse NULL.
+   * Admin gönderdiyse kendi tenant DB'sindeki users.id; visitor gönderdiyse NULL.
    * Polymorphic sender — bkz. {@link #senderType}.
    */
   @Column(name = "sender_id")

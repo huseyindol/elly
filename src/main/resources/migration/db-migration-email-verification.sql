@@ -1,5 +1,5 @@
 -- Migration: Add email verification columns to users table
--- Run on all tenant DBs: basedb, tenant1, tenant2
+-- Run on all tenant DBs: tenant1, tenant2
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE,

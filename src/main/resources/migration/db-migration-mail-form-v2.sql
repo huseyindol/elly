@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Migration: Mail+Form v2 — DB-Based SMTP + Form Submission Notifications
 -- Versiyon : 2026-04-21
--- Hedef    : Her tenant DB'sine uygulanir (basedb, tenant1, tenant2, ...)
+-- Hedef    : HER tenant DB (tenant1, tenant2, ...)
 --
 -- Onceki durum (db-migration-mail-accounts.sql sonrasi):
 --   mail_accounts: id, name, from_address, smtp_host, smtp_port, smtp_username,

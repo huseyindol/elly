@@ -11,7 +11,7 @@ import java.util.UUID;
 public class DtoChatMessage {
   private UUID id;
   private UUID groupId;
-  /** Admin gönderdiyse basedb users.id; visitor gönderdiyse null. */
+  /** Admin gönderdiyse kendi tenant DB'sindeki users.id; visitor gönderdiyse null. */
   private Long senderId;
   /** Visitor gönderdiyse visitor_identities.id (tenant DB); admin gönderdiyse null. */
   private Long visitorId;

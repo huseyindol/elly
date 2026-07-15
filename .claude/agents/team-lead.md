@@ -16,7 +16,7 @@ Skill'ler `.claude/skills/` altında, her biri bir SKILL.md dosyasıdır. Teamma
 | `karpathy-guidelines` | **Davranışsal kurallar** (think, simplicity, surgical, goal) | **tüm agent'lar** |
 | `elly-conventions` | Paket yapısı, katman kuralları | java-architect, code-reviewer |
 | `multitenant-routing` | TenantContext, DataSource | java-architect, security-guard |
-| `spring-security-patterns` | JWT, OAuth2, SecurityConfig | security-guard, java-architect |
+| `spring-security-patterns` | JWT, 2FA (TOTP), SecurityConfig | security-guard, java-architect |
 | `redis-cache-patterns` | Cache key, TTL, invalidation | java-architect, code-reviewer |
 | `rabbitmq-patterns` | Queue, retry, DLQ | java-architect, devops-engineer |
 | `error-handling-patterns` | Exception, GlobalExceptionHandler | java-architect, code-reviewer |
@@ -31,7 +31,7 @@ Skill'ler `.claude/skills/` altında, her biri bir SKILL.md dosyasıdır. Teamma
   - `java-architect`: Entity, Service, Controller tasarımı ve mimari kararlar
   - `code-reviewer`: Kod kalitesi, pattern uyumu, performance review
   - `devops-engineer`: K8s, Docker, CI/CD, deployment
-  - `security-guard`: JWT, OAuth2, multi-tenant güvenlik analizi
+  - `security-guard`: JWT, 2FA (TOTP), multi-tenant güvenlik analizi
 - Teammate'ler arası bağımlılıkları belirle ve sıralı/paralel çalışmayı planla
 
 **Koordinasyon:**

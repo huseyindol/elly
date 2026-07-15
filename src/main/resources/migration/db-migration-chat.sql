@@ -1,5 +1,5 @@
 -- ============================================================
--- Chat System Migration — basedb only
+-- Chat System Migration — HER tenant DB'sine uygulanir (tenant1, tenant2, ...) — AC=TC
 -- Tables: chat_groups, chat_group_members, chat_messages,
 --         chat_message_reads, chat_message_edits
 -- ============================================================

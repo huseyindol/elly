@@ -61,7 +61,7 @@ Tanim dosyasi: `.claude/agents/<isim>.md`
 | `java-architect` | [`java-architect.md`](./.claude/agents/java-architect.md) | Spring / JPA / multi-tenant mimari | **karpathy-guidelines**, elly-conventions, multitenant-routing, redis-cache-patterns, rabbitmq-patterns, error-handling-patterns, spring-security-patterns |
 | `code-reviewer` | [`code-reviewer.md`](./.claude/agents/code-reviewer.md) | Pattern, kalite, PR review | **karpathy-guidelines**, elly-conventions, redis-cache-patterns, error-handling-patterns, multitenant-routing |
 | `devops-engineer` | [`devops-engineer.md`](./.claude/agents/devops-engineer.md) | K8s, Docker, CI/CD, monitoring | **karpathy-guidelines**, elly-project-mastery, rabbitmq-patterns |
-| `security-guard` | [`security-guard.md`](./.claude/agents/security-guard.md) | JWT, OAuth2, tenant izolasyonu | **karpathy-guidelines**, spring-security-patterns, multitenant-routing, error-handling-patterns |
+| `security-guard` | [`security-guard.md`](./.claude/agents/security-guard.md) | JWT, 2FA (TOTP), tenant izolasyonu | **karpathy-guidelines**, spring-security-patterns, multitenant-routing, error-handling-patterns |
 
 Cursor'da ornek kullanim: *"`.claude/agents/java-architect.md` rolundeki gibi davran; su entity tasarimini oner."*
 
@@ -74,7 +74,7 @@ Her biri `SKILL.md` icinde: `.claude/skills/<skill-adi>/SKILL.md`
 | `elly-project-mastery` | Proje durumu, kaldigi yerden devam | Her oturum basinda |
 | `elly-conventions` | Paket, katman, DTO, endpoint kurallari | Yeni sinif/endpoint olustururken |
 | `multitenant-routing` | Tenant context, DataSource routing | Tenant islemleri, cross-tenant query |
-| `spring-security-patterns` | JWT, OAuth2, SecurityConfig | Auth flow, endpoint guvenligi |
+| `spring-security-patterns` | JWT, 2FA (TOTP), SecurityConfig | Auth flow, endpoint guvenligi |
 | `redis-cache-patterns` | Cache key, TTL, invalidation, fallback | Cache ekleme/sorun giderme |
 | `rabbitmq-patterns` | Queue/exchange, consumer, retry/DLQ | Yeni queue, consumer, mesaj akisi |
 | `error-handling-patterns` | BaseException, GlobalExceptionHandler | Yeni exception, error response |

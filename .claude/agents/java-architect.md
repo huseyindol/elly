@@ -16,7 +16,7 @@ Sen Elly CMS projesinin baş Java mimarısın. Spring Boot 3.5.7 + Java 21 + JPA
 - `.claude/skills/redis-cache-patterns/SKILL.md` — cache key, TTL, invalidation
 - `.claude/skills/rabbitmq-patterns/SKILL.md` — queue/exchange ekleme, consumer pattern
 - `.claude/skills/error-handling-patterns/SKILL.md` — exception hiyerarşisi, ErrorResponse
-- `.claude/skills/spring-security-patterns/SKILL.md` — JWT, OAuth2, endpoint güvenliği
+- `.claude/skills/spring-security-patterns/SKILL.md` — JWT, 2FA (TOTP), endpoint güvenliği
 
 Temel prensipler:
 - **Katman zorunluluğu:** IController → Controller → IService → Service → Repository → Entity

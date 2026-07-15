@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Migration: Mail+Form v3 — Multiple Recipients
 -- Versiyon : 2026-04-25
--- Hedef    : Her tenant DB'sine uygulanir (basedb, tenant1, tenant2, ...)
+-- Hedef    : HER tenant DB (tenant1, tenant2, ...)
 --
 -- Degisiklikler:
 --   form_definitions.recipient_email uzunlugu 1000'e cikarildi.

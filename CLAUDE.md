@@ -44,7 +44,7 @@ Eger mevcut kodun bu kurala uymadigi gorulurse (orn. feature-package mevcut) kul
 Coklu agent rolleri, is akislari ve dosya haritasi icin repo kokundeki **[`AGENTS.md`](./AGENTS.md)** dosyasina bak. Cursor odakli kisa workflow'lar **[`.agents/workflows/`](./.agents/workflows/)** altinda; uzun tanimlar bu repoda **`.claude/agents/`** icinde kalir (tek kaynak).
 
 ## Proje Ozeti
-Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-tenant), Redis cache, RabbitMQ, JWT auth (JWE-encrypted). OAuth2 kaldirildi (gerekirse tekrar eklenir).
+Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-tenant), Redis cache, RabbitMQ, JWT auth (JWE-encrypted) + istege bagli 2FA (TOTP), WebRTC arama sinyallesme (Faz 1). OAuth2 kaldirildi (gerekirse tekrar eklenir).
 
 ## Mimari
 - **Pattern:** Monolith, katmanli mimari
@@ -71,7 +71,10 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Util:** `JwtUtil.generateToken(user, loginSource, tenantId)`
 - **RBAC:** User -> ManyToMany -> Role -> ManyToMany -> Permission
 - **Method Security:** `@EnableMethodSecurity` + `@PreAuthorize` ile method-level authorization
-- **Roller:** Panel: SUPER_ADMIN, ADMIN, EDITOR, VIEWER; Tenant-site: TENANT (izinsiz "tag" rol) + 40+ permission (`PermissionConstants.java`)
+- **Roller:** Panel: SUPER_ADMIN, ADMIN, EDITOR, VIEWER; Tenant-site: TENANT (izinsiz "tag" rol, MUNHASIR — baska rolle birlesemez) + 40+ permission (`PermissionConstants.java`)
+- **Hiyerarsi guard:** SUPER_ADMIN=4, ADMIN=3, EDITOR=2, VIEWER/TENANT=1 — kimse kendi seviyesinden yuksek rol atayamaz/kullanici yaratamaz (`UserService.createUser`, `RoleService.assignRolesToUser`)
+- **2FA (TOTP):** Istege bagli, Google Authenticator uyumlu (RFC 6238, harici kutuphanesiz `TotpService`). Aktifse login iki adimli: parola -> `mfaToken` (5dk) -> `POST /api/v1/auth/mfa/verify` + TOTP kodu -> tam JWT. Setup/status/disable: `/api/v1/auth/mfa/**` (`MfaController`). Secret AES sifreli saklanir (`User.mfa_*` kolonlari)
+- **Token okuma:** SADECE `Authorization: Bearer` header (cookie'den token OKUNMAZ; login'de HttpOnly cookie yine YAZILIR — BFF/SSR icin)
 - **Auth Cache:** Redis `auth:user:{username}` TTL=30dk (her request'te 3 SQL yerine 1 Redis GET)
 
 ## Mail Sistemi
@@ -101,7 +104,17 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Visibility:** VIEWER=1 (herkese acik) → EDITOR=2 → ADMIN=3 → SUPER_ADMIN=4 (gizli), DM her zaman 4
 - **Davet hiyerarsisi:** Davet eden, KENDI SEVIYESI ve altindaki kullanicilari davet edebilir (admin→admin dahil); SUPER_ADMIN herkesi
 - **Topic'ler:** `/topic/tenant/{tid}/group/{groupId}` (mesaj/typing/read/bans), `/topic/groups/new`, `/topic/groups/deleted`, `/topic/user/{userId}/membership`, `/topic/presence`
+- **Guest chat:** `POST /auth/guest-token` (tenantId + sessionId ZORUNLU, `loginSource=website`); guest yazma kapisi: grup `tenantId` dolu + `visitorAccess=true`
+- **Bildirim:** Tenant tarafindan gelen mesajlar (guest/visitor/TENANT rollu) o tenant'in SUPER_ADMIN+ADMIN'lerine `CHAT_MESSAGE` bildirimi uretir; panel rolu gonderirse bildirim YOK (spam onlemi)
 - **Detay:** `chat-patterns` skill'i acilir; query/topic ornekleri orada
+
+## WebRTC Arama (Faz 1 — sinyallesme)
+- **Kapsam:** Backend yalniz SINYALLESME (SDP/ICE relay) + cagri orkestrasyonu; medya P2P, backend gormez. STUN/TURN backend'de YOK (client sorumlulugu)
+- **Iki mod:** (1) panel-ici admin→admin (hiyerarsi kurali; ayni chat grubunun uyeleriyse hiyerarsi ATLANIR), (2) tenant destek cagrisi = ring-all (tum online panel kullanicilari calar, ilk cevaplayan kazanir, digerlerine CALL_TAKEN)
+- **Client gonderir:** `/app/rtc/call`, `/app/tenant-rtc/{tid}/call`, `/app/rtc/{callId}/{answer,reject,cancel,hangup,sdp,ice}`
+- **Client abone olur:** `/topic/user/{userId}/rtc` (ESAS yol), `/user/queue/rtc` (yedek); tenant caller ayrica `/topic/rtc-client/{clientRef}/rtc` (userId bilmeden abone olmak icin)
+- **Durum:** In-memory registry (`CallSessionService`, ConcurrentHashMap) — TEK instance varsayimi, yatay olcekleme icin Faz 2 (Redis + broker relay) gerekir. 30sn ring timeout, busy/presence kontrolu
+- **call_logs:** Her tenant DB'sinde metadata (`CallLog`, status: RINGING→ANSWERED/REJECTED/CANCELLED/MISSED, ANSWERED→COMPLETED); migration `db-migration-call-logs.sql` her tenant'a uygulanmali. Henuz okuyan REST endpoint yok (sonraki faz)
 
 ## Build & Calistirma
 ```bash
@@ -118,8 +131,8 @@ kubectl rollout restart deployment/elly-app -n elly  # Yeniden baslat
 ```
 
 ## Veritabani
-- PostgreSQL multi-DB: `elly_basedb`, `elly_tenant1`, `elly_tenant2`
-- Migrations: `src/main/resources/` altindaki `.sql` dosyalari
+- PostgreSQL multi-DB: `elly_tenant1`, `elly_tenant2` (basedb kaldirildi — her tenant kendi DB'sinde)
+- Migrations: `src/main/resources/migration/` altindaki `.sql` dosyalari — HER tenant DB'sine uygulanir (prod `JPA_DDL_AUTO=validate`, deploy oncesi calistirilmali)
 - Backup: `make backup` / `make restore`
 
 ## Kod Standartlari
@@ -140,7 +153,7 @@ Proje-spesifik bilgi birikimi `.claude/skills/` altinda tutulur. Agent'lar gorev
 | `elly-project-mastery` | Proje durumu, mimari kararlar, oturum surekliligi |
 | `elly-conventions` | Paket yapisi, katman kurallari, zorunlu pattern'ler |
 | `multitenant-routing` | TenantContext, DataSource routing, async kullanimi |
-| `spring-security-patterns` | JWT, OAuth2, SecurityConfig, filter sirasi |
+| `spring-security-patterns` | JWT, 2FA (TOTP), SecurityConfig, filter sirasi |
 | `redis-cache-patterns` | Cache key, TTL, invalidation, graceful fallback |
 | `rabbitmq-patterns` | Queue/exchange ekleme, consumer pattern, retry/DLQ |
 | `error-handling-patterns` | BaseException hiyerarsisi, GlobalExceptionHandler |

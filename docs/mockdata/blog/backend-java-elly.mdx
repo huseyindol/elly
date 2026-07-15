@@ -1,47 +1,47 @@
 ---
 title: 'Java ve Spring Boot ile Master Proje: Elly Mimarisi'
-description: 'Spring Boot 3.5 + Java 21 üzerine kurulu Elly CMS projesinin derinlemesine backend mimarisi: multitenancy, RBAC, Redis, RabbitMQ, OAuth2, JWT, Zipkin dağıtık izleme ve MapStruct.'
+description: 'Spring Boot 3.5 + Java 21 üzerine kurulu Elly CMS projesinin derinlemesine backend mimarisi: database-per-tenant multitenancy, RBAC, JWE şifreli JWT, Redis, RabbitMQ, WebSocket/STOMP chat, WebRTC sinyalleşme ve MapStruct.'
 publishedAt: '2026-04-15'
 category: 'Backend'
 author: 'Hüseyin DOL'
 coverImage: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=2000&auto=format&fit=crop'
-readingTime: '14'
+readingTime: '15'
 ---
 
 Bu makalede, geliştirdiğim [`elly`](https://github.com/huseyindol/elly) projesi etrafında şekillenen **Backend (Arka Yüz)** mimarisinin zorluklarını ve çözüm yollarını sizlerle paylaşıyorum. Bir projenin tek tıkla ayağa kalkması, milyonlarca veriyi saniyeler içinde işleyebilmesi ve çoklu müşteri (multitenant) bir yapıda tek JAR ile çalışabilmesinin mimari gerekliliklerini **Spring Boot 3.5.7 + Java 21** ekosistemi üzerinden anlatacağım.
 
 ## 1. Elly Backend Mimarisine Genel Bakış
 
-`elly`, tamamen **Mikroservis** esnekliklerine açık, ancak katmanlı monolit yapısının birleşimi gibi hareket eden modern bir Spring Boot API'sidir. Paket yapısını incelediğinizde klasik "layered architecture" prensiplerine sadık kaldığını göreceksiniz:
+`elly`, tamamen **Mikroservis** esnekliklerine açık, ancak katmanlı monolit yapısının birleşimi gibi hareket eden modern bir Spring Boot API'sidir. Paket yapısı katı bir "layer-based architecture" kuralına oturur — feature-package yoktur; her yeni özellik katmanlara dağıtılır:
 
 ```
 com.cms
-├── advice        # @RestControllerAdvice ile global exception handling
-├── config        # Spring, Security, Redis, RabbitMQ, OpenAPI konfigürasyonları
-├── controller    # REST endpoint'ler
-├── dto           # Request / Response DTO sınıfları
-├── elly          # Tenant-aware core modül
-├── entity        # JPA Entity'ler (Hibernate 6, JSONB dahil)
-├── enums         # Rol, Durum, Queue isimleri vb. sabitler
-├── exception    # Custom BusinessException, NotFoundException, UnauthorizedException
-├── filter        # JwtAuthenticationFilter, TenantContextFilter
-├── mapper        # MapStruct ile Entity ↔ DTO dönüşümü
-├── repository    # Spring Data JPA repository'leri
-├── service       # İş kuralları, transaction yönetimi
-└── util          # Slug, date, crypto, JSONB helper'ları
+├── controller        # IController interface'leri
+│   └── impl          # @RestController implementasyonları
+├── service           # IService interface'leri + yardımcı @Service'ler
+│   └── impl          # Service implementasyonları
+├── repository        # Spring Data JPA repository'leri
+├── entity            # JPA Entity'ler (Hibernate 6, JSONB dahil)
+├── enums             # Rol, durum, queue isimleri vb. sabitler
+├── dto               # Dto* prefix'li Request / Response sınıfları
+├── mapper            # MapStruct ile Entity ↔ DTO dönüşümü
+├── config            # Security, Redis, RabbitMQ, WebSocket, DataSource routing + filter'lar
+├── exception         # BaseException hiyerarşisi + GlobalExceptionHandler
+└── util              # JwtUtil, slug, date, crypto helper'ları
 ```
 
 Mimaride hedeflenen noktalar:
 
-- %100 Güvenlik (Role-Based Access Control + OAuth2 + JWT)
-- Tenant-Based System (tenant1, tenant2 ve basedb ile izole veritabanları)
-- Hızlı tepki süreleri (Redis AOF + LRU eviction)
-- Asenkron görev işleyici (RabbitMQ üzerinden Email Worker)
-- Observability (Actuator + Prometheus + Zipkin distributed tracing)
+- Sıkı güvenlik: Role-Based Access Control + **JWE şifreli JWT** + opsiyonel **MFA (TOTP)**
+- **Database-per-tenant** izolasyon (tenant1, tenant2, ... — merkezi/paylaşımlı DB yok)
+- Hızlı tepki süreleri (Redis AOF + LRU eviction, tenant-izoleli cache)
+- Asenkron görev işleyici (RabbitMQ üzerinden Email Worker, retry + DLQ)
+- Gerçek zamanlı katman (WebSocket/STOMP chat + WebRTC görüntülü görüşme sinyalleşmesi)
+- Observability (Actuator + Prometheus + Grafana)
 
 ## 2. Güvenlik ve RBAC (Role-Based Access Control)
 
-Kullanıcıların ne yapabileceğini belirleyen yetki hiyerarşisi (RBAC) tasarladık. **Spring Security** + **`spring-boot-starter-oauth2-client`** üzerine JJWT (`jjwt-api`, `jjwt-impl`, `jjwt-jackson`) ile token üretip doğrulayarak stateless bir authentication akışı kurduk. `@PreAuthorize` anotasyonunu method seviyesine indirgeyerek, endpoint'te hangi kullanıcının izni olduğunu veritabanındaki rolleriyle yönetebiliyoruz.
+Kullanıcıların ne yapabileceğini belirleyen yetki hiyerarşisi (RBAC) tasarladık. **Spring Security** üzerine JJWT (`jjwt-api`, `jjwt-impl`, `jjwt-jackson`) ile token üretip doğrulayarak stateless bir authentication akışı kurduk. `@PreAuthorize` anotasyonunu method seviyesine indirgeyerek, endpoint'te hangi kullanıcının izni olduğunu veritabanındaki rolleriyle yönetebiliyoruz. Panel rolleri (SUPER_ADMIN / ADMIN / EDITOR / VIEWER) ile site kullanıcısı rolü (TENANT) birbirinden kesin çizgiyle ayrılır: panel kullanıcısı tenant sitesine, tenant kullanıcısı panele giremez.
 
 ```java
 @PreAuthorize("hasRole('ADMIN') or hasAuthority('POST_PUBLISH')")
@@ -55,13 +55,13 @@ Ancak burada devasa bir problem doğuyor: Her istekte 3 SQL sorgusu atmak!
 
 - `Users` tablosu kontrolü
 - `Roles` ve `Permissions` join'leri
-- `User_Tenants` ilişkisi
+- Rol-permission ilişkileri
 
-Request başına bu 3 sorgu, saniyede 1000 req alan bir endpoint'te DB'yi anlık 3000 query'ye boğuyor. Çözümü `filter/JwtAuthenticationFilter.java` içinde Redis cache ile entegre ederek çözdük — ayrıntıları bir sonraki bölümde.
+Request başına bu 3 sorgu, saniyede 1000 req alan bir endpoint'te DB'yi anlık 3000 query'ye boğuyor. Çözümü `config/JwtAuthenticationFilter` içinde Redis cache ile entegre ederek çözdük — ayrıntıları bir sonraki bölümde.
 
-### OAuth2 Sosyal Giriş
+### JWE Şifreli JWT + MFA
 
-`spring-boot-starter-oauth2-client` sayesinde Google / GitHub girişlerini de aynı JWT akışı içinde eritiyoruz. Ingress üzerinde `/login/oauth2` ve `/oauth2` path'leri özel olarak route ediliyor; callback sonrası kullanıcı resolve edilip bizim kendi JWT'miz issue ediliyor.
+Klasik imzalı (JWS) token yerine **JWE ile şifrelenmiş** JWT kullanıyoruz: payload'daki claim'ler (`loginSource`, `tenantId`, `tokenVersion`) client tarafında `atob` ile bile okunamaz. Access + refresh token ikilisi body-based taşınır; refresh sırasında tenant, refresh token'ın kendi claim'inden çözülür. `tokenVersion` claim'i sayesinde tek hamlede kullanıcının tüm eski token'ları geçersiz kılınabilir. İsteyen kullanıcı için **TOTP tabanlı MFA** akışı da mevcut — login sonrası `mfa-verify` adımıyla tamamlanır. (Sosyal giriş/OAuth2 bilinçli olarak kaldırıldı: aktif kullanımı yoktu ve tamamen tenant-scoped mimaride kullanıcı hedef DB'si belirsizleşiyordu.)
 
 ## 3. Performans Kurtarıcısı: Redis Cache
 
@@ -72,51 +72,54 @@ Yukarıdaki yoğun SQL sorgularını çözmek adına araya **Redis 7 (Alpine)** 
 - **Tenant-prefix key scheme:** `tenantId::cacheName::key` formatıyla tek Redis instance üzerinde onlarca tenant'ı birbirine karıştırmadan tutuyorum.
 - **AOF (Append-Only File) persistence:** `--appendonly yes` ile restart sonrası cache'i koruyorum; cold-start senaryosunda DB'ye ani yük binmesini engelliyor.
 - **LRU eviction:** `maxmemory 256mb` + `allkeys-lru` politikası — cache şişerse en az kullanılanı düşürüyor.
-- **CachedUserDetails DTO:** `JwtAuthenticationFilter` içinde her istekte DB yerine Redis'ten user + rol + permission bilgisini alıyorum. DB'ye inmeden, saniyenin binde biri sürelerde yetkilendirme tamamlanıyor.
-- **Event-driven invalidation:** Bir kullanıcının rolü değiştiğinde Spring'in `ApplicationEventPublisher`'ı ile event yayınlanıyor; ilgili key'ler Redis'ten siliniyor.
+- **Auth cache:** `JwtAuthenticationFilter` her istekte DB yerine `auth:user:{username}` key'inden (TTL 30 dk) user + rol + permission bilgisini alıyor. DB'ye inmeden, saniyenin binde biri sürelerde yetkilendirme tamamlanıyor.
+- **Graceful fallback:** Redis düşerse `GracefulCacheErrorHandler` devreye girer — uygulama çökmez, sorgular DB'den okunarak devam eder.
 
 ```java
-@Cacheable(value = "user-permissions", key = "#tenantId + '::' + #userId")
-public CachedUserDetails loadCachedPermissions(UUID tenantId, UUID userId) {
-    return userRepository.findWithRolesAndPermissions(userId)
+@Cacheable(value = "user-permissions", key = "#username")
+public CachedUserDetails loadCachedPermissions(String username) {
+    return userRepository.findWithRolesAndPermissions(username)
         .map(mapper::toCachedDetails)
         .orElseThrow(() -> new NotFoundException("User not found"));
 }
 ```
 
-## 4. Multitenancy: tenant1, tenant2 ve basedb
+## 4. Multitenancy: Database-per-Tenant (Merkezi DB Yok)
 
-`k8s/2c-postgres.yaml` manifesto'sunda üç ayrı PostgreSQL 16 StatefulSet göreceksiniz: **tenant1**, **tenant2** ve **basedb**. Her biri 8Gi PVC ile kendi verisini izole ediyor.
+`k8s/2c-postgres.yaml` manifestosunda her tenant için ayrı bir PostgreSQL 16 StatefulSet göreceksiniz: **tenant1** ve **tenant2**. Her biri 8Gi PVC ile kendi verisini izole ediyor. Projenin ilk sürümlerinde auth verilerini tutan merkezi bir `basedb` vardı; mimariyi sadeleştirmek ve izolasyonu tamamlamak için **basedb'yi tamamen kaldırdık** — artık kullanıcılar, roller ve tüm veriler her tenant'ın kendi DB'sinde yaşıyor.
 
-Spring tarafında bu yapıyı destekleyebilmek için:
+Spring tarafında bu yapıyı destekleyen zincir:
 
-1. `filter/TenantContextFilter` — Host header veya JWT `tid` claim'inden tenant kimliğini okuyarak `ThreadLocal` tenant context oluşturuyor.
-2. `AbstractRoutingDataSource` — Spring'in native mekanizması ile `determineCurrentLookupKey()` içinden tenant context'ini DataSource seçimine çeviriyor.
-3. Hibernate `MultiTenancyStrategy.DATABASE` — aynı JAR, aynı entity'ler; ama farklı schema/database üzerinde çalışıyor.
-4. Flyway ya da elle yazılmış `init.sql` script'leri — her tenant DB'si kendi migration'ını çalıştırıyor.
+1. `config/JwtTenantFilter` — tenant kimliğini **JWT `tenantId` claim'inden** veya public istekler için **`/api/v1/public/{tid}` URL'inden** okuyarak `ThreadLocal` tabanlı `TenantContext`'i kurar. Güvensiz `X-Tenant-Id` gibi header'lar kullanılmaz.
+2. `TenantRoutingDataSource` (`AbstractRoutingDataSource`) — `determineCurrentLookupKey()` içinde tenant context'ini DataSource seçimine çevirir. **Strict routing:** boot sonrası context boşsa sessiz bir fallback yerine `TenantRequiredException` fırlatılır — "yanlış tenant'a yazma" sınıfı hatalar tasarımla engellenir.
+3. Hibernate DATABASE stratejisi — aynı JAR, aynı entity'ler; farklı database üzerinde çalışır.
+4. Migration'lar elle yazılmış SQL script'leriyle **her tenant DB'sine** uygulanır; prod'da `ddl-auto=validate` şemayı boot'ta doğrular.
 
-Bu yaklaşım sayesinde tek bir JAR deploy ederek N tane müşteriyi izole şekilde yönetebiliyorum.
+Kritik bir disiplin: `@Transactional` açılmadan **önce** tenant context kurulmalı (auth endpoint'lerinde context CONTROLLER'da set edilir) ve RabbitMQ consumer'larında başta `setTenantId()`, `finally`'de `clear()` zorunludur. Bu yaklaşım sayesinde tek bir JAR deploy ederek N tane müşteriyi izole şekilde yönetebiliyorum.
 
 ## 5. SMTP Sorunları ve RabbitMQ Asenkron İşlemleri
 
-`elly` projesi kapsamında çoklu müşteri (tenant-based) mimarisinden ötürü, Spring'in varsayılan `JavaMailSender` konfigürasyonunu kapatıp runtime'da veritabanından dinamik olarak okunan SMTP hesaplarını devreye aldım. `MAIL_ACCOUNT_PANEL_GUIDE.md` dokümanında yönetim paneli üzerinden SMTP hesabı ekleme akışı detaylı anlatılıyor.
+`elly` projesi kapsamında çoklu müşteri (tenant-based) mimarisinden ötürü, Spring'in varsayılan `JavaMailSender` konfigürasyonunu kapatıp runtime'da veritabanından dinamik olarak okunan SMTP hesaplarını devreye aldım (hesap şifreleri AES-256 ile şifreli). `MAIL_ACCOUNT_PANEL_GUIDE.md` dokümanında yönetim paneli üzerinden SMTP hesabı ekleme akışı detaylı anlatılıyor.
 
 Kullanıcı kayıt olduğunda ya da email onayı gerektiğinde sisteme binen yük, Java'nın synchronous akışını tamamen yavaşlatır. Bu yüzden `spring-boot-starter-amqp` ile **RabbitMQ 3.13 Management Alpine** Message Broker'ı devreye aldım:
 
 ```java
-@RabbitListener(queues = RabbitQueues.EMAIL_OUTBOUND, concurrency = "3-10")
+@RabbitListener(queues = "email-queue")
 public void consumeEmail(EmailMessage msg) {
     try {
+        TenantContext.setTenantId(msg.getTenantId()); // consumer'da tenant context ZORUNLU
         mailService.send(msg);
     } catch (MailException ex) {
         retryHandler.scheduleDelayedRetry(msg, ex);
+    } finally {
+        TenantContext.clear();
     }
 }
 ```
 
-- İstek `elly.email.outbound` queue'suna `CorrelationId` ile atılır.
-- Arka plandaki Consumer'lar (3-10 concurrency) Thymeleaf template'i render edip SMTP'ye gönderim dener.
-- K8s ortamında geçici SMTP bağlantı retleri (`connection refused`) ile karşılaşmıştık. `Delayed Retry Mechanism` + **Dead Letter Exchange (DLX)** kombinasyonu ile başarısız gönderimlerin sonsuz bir sıkı döngü (tight loop) yaratmasını engelledik. 3 deneme sonrası mesaj `elly.email.dlq` kuyruğuna düşer, manuel inceleme için Management UI'da görünür.
+- İstek `email-queue`'ya atılır; mail kaydı önce `PENDING` statüsüyle DB'ye düşer.
+- Consumer, tenant'ın kendi SMTP hesabıyla (`TenantMailSenderFactory`) gönderim dener.
+- K8s ortamında geçici SMTP bağlantı retleri (`connection refused`) ile karşılaşmıştık. **TTL'li retry kuyruğu** (`email-retry-queue`, 30 sn) + **Dead Letter Queue** kombinasyonu ile başarısız gönderimlerin sonsuz bir sıkı döngü (tight loop) yaratmasını engelledik. 3 deneme sonrası mesaj `FAILED` işaretlenip `email-dead-letter-queue`'ya düşer, manuel inceleme için Management UI'da görünür.
 
 ## 6. JSONB + Hibernate 6
 
@@ -140,35 +143,44 @@ Ardından Postgres tarafında `CREATE INDEX idx_post_meta ON post USING GIN (met
 
 Entity ↔ DTO dönüşümünü elle yazmak hem hataya açık hem sıkıcı. `MapStruct` compile-time'da bu sınıfları üretiyor; Lombok ise `@Getter`, `@Builder`, `@RequiredArgsConstructor` ile boilerplate'i siliyor. İkisini kullanırken `lombok-mapstruct-binding` dependency'sini unutmamak gerekiyor — yoksa Lombok getter/setter'ları MapStruct tarafından görünmüyor.
 
-## 8. Observability: Actuator + Micrometer + Zipkin
+## 8. Gerçek Zamanlı Katman: WebSocket/STOMP Chat + WebRTC
+
+CMS'in en canlı modülü gerçek zamanlı iletişim: tek bir **SockJS + STOMP** bağlantısı üzerinden chat, bildirim ve görüntülü görüşme sinyalleşmesi taşınıyor.
+
+- **Chat:** Her chat grubu ait olduğu tenant DB'sinde yaşar; topic'ler tenant-aware'dir (`/topic/tenant/{tid}/group/{groupId}`). Typing, okundu bilgisi ve anonim ziyaretçi (guest token) desteği var. Presence takibi Redis üzerinde TTL'li sayaçlarla yapılır — pod restart'ında hayalet "online" kullanıcı kalmaz.
+- **Bildirimler:** Kalıcı bildirim + aynı WS bağlantısından push; kullanıcıya özel teslimat `/topic/user/{userId}/...` topic'leriyle yapılır.
+- **WebRTC görüntülü görüşme:** Backend yalnız **sinyalleşme sunucusu** — SDP offer/answer ve ICE candidate'ları iki taraf arasında opak şekilde relay eder; medya (ses/görüntü) tarayıcılar arasında P2P akar, sunucuya hiç uğramaz. Panel kullanıcıları birbirini arayabilir (aynı gruptakiler hiyerarşiden muaf); tenant kullanıcısı destek hattını aradığında ise **ring-all** modeli çalışır: tüm online panel kullanıcılarına zil gider, ilk cevaplayan çağrıyı alır, diğerlerinin zili `CALL_TAKEN` ile anında kapanır. Çağrı yaşam döngüsü (RINGING → ANSWERED → COMPLETED/MISSED/REJECTED) in-memory atomik registry ile yönetilir, `call_logs` tablosuna metadata yazılır.
+
+## 9. Observability: Actuator + Micrometer + Prometheus + Grafana
 
 `elly`'nin en önemli farklarından biri **gözlemlenebilirlik** katmanının başından itibaren kurulmuş olması:
 
 - `spring-boot-starter-actuator` → `/actuator/health`, `/actuator/metrics`, `/actuator/prometheus` endpoint'leri.
-- `micrometer-registry-prometheus` → Metric'leri Prometheus formatında expose eder.
-- `micrometer-tracing-bridge-brave` + `zipkin-reporter-brave` → Her HTTP request'e `traceId` + `spanId` atar, RabbitMQ consumer'larına propagate eder ve Zipkin'e raporlar.
+- `micrometer-registry-prometheus` → Metric'leri Prometheus formatında expose eder; K8s'teki Prometheus scrape edip **Grafana** dashboard'larında görselleştirir.
+- Distributed tracing (Zipkin) başlangıçta denendi; tek-instance monolit için maliyet/fayda dengesi tutmadığından prod'da bilinçli olarak **kapatıldı** — gerektiğinde tek konfigürasyonla geri açılabilir.
 
-Dockerfile'daki `HEALTHCHECK` bile `wget http://localhost:8080/actuator/health` üzerine kurulu — yani K8s `liveness/readiness probe`'ları ile tam uyumlu.
+Dockerfile'daki `HEALTHCHECK` bile `wget http://localhost:8080/actuator/health` üzerine kurulu — yani K8s `liveness/readiness/startup probe`'ları ile tam uyumlu.
 
-## 9. OpenAPI / Swagger UI
+## 10. OpenAPI / Swagger UI
 
 `springdoc-openapi-starter-webmvc-ui` sayesinde `/swagger-ui.html` ve `/api-docs` endpoint'leri otomatik açılır. Ingress konfigürasyonunda bu path'lerin route edildiğini de göreceksiniz:
 
 ```
-/api, /swagger-ui, /api-docs, /actuator, /login/oauth2, /oauth2, /assets, /
+/api, /swagger-ui, /api-docs, /actuator, /ws, /assets, /
 ```
 
-Bu sayede frontend ekibine ayrı Postman koleksiyonu göndermek yerine "buradan interaktif olarak dene" diyebiliyorum.
+Bu sayede frontend ekibine ayrı Postman koleksiyonu göndermek yerine "buradan interaktif olarak dene" diyebiliyorum. (`/ws` path'i SockJS/STOMP handshake'i içindir — WebSocket endpoint'leri doğası gereği Swagger'da görünmez.)
 
-## 10. Global Exception Handling
+## 11. Global Exception Handling
 
-`advice/GlobalExceptionHandler` içinde `@RestControllerAdvice` ile:
+`exception/GlobalExceptionHandler` içinde `@RestControllerAdvice` ile:
 
 - `MethodArgumentNotValidException` → 400 + field-level validation mesajları
 - `BusinessException` → 409 + custom error code
 - `NotFoundException` → 404
 - `AccessDeniedException` → 403
-- `Exception` → 500 + trace-id ekleyerek (Zipkin ile eşleşiyor) logluyor
+- `TenantRequiredException` → 400 (tenant context'i olmayan istekler — strict routing'in görünür yüzü)
+- `Exception` → 500 + korele edilebilir log kaydı
 
 Tüm hatalar tek bir `ErrorResponse` şemasına oturuyor, frontend tarafı da bunu tek bir interceptor ile yakalayabiliyor.
 
@@ -176,10 +188,11 @@ Tüm hatalar tek bir `ErrorResponse` şemasına oturuyor, frontend tarafı da bu
 
 `elly` projesi; güçlü Java/Spring Boot backend dinamikleri ile modern "Cloud Native" araçlarının harmanlandığı oldukça keyifli bir platform hâline geldi:
 
-- Verilerin **PostgreSQL 16** üzerinde tenant bazlı izole tutulduğu,
-- Asenkron yüklerin **RabbitMQ** ile azaltıldığı,
+- Verilerin **PostgreSQL 16** üzerinde database-per-tenant tam izole tutulduğu,
+- Asenkron yüklerin **RabbitMQ** (retry + DLQ) ile azaltıldığı,
 - Saniyelik statik verilerin **Redis + AOF + LRU** ile şahlandığı,
-- **OAuth2 + JWT + RBAC** ile sıkı güvenlik katmanlarına sahip,
-- **Actuator + Prometheus + Zipkin** ile tam gözlemlenebilir,
+- **JWE şifreli JWT + RBAC + MFA** ile sıkı güvenlik katmanlarına sahip,
+- **WebSocket/STOMP chat + WebRTC** ile gerçek zamanlı iletişim sunan,
+- **Actuator + Prometheus + Grafana** ile tam gözlemlenebilir,
 
 tam donanımlı bir DevOps & Backend harikasıdır. Bir sonraki yazıda bu yapının Kubernetes'te nasıl ayağa kaldırıldığını detaylıca inceleyeceğiz.

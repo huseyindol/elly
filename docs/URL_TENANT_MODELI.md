@@ -40,8 +40,11 @@ modele neden geçtiğimizi anlatır. Backend (`elly`) commit `5e94674`, panel
 
 ## 2. Endpoint kalıbı
 
-| Bağlam | AC / basedb | TC / hedef tenant |
-|--------|-------------|-------------------|
+> Not (AC=TC): basedb kaldırıldı. Soldaki "varsayılan" yollar artık admin'in **kendi tenant DB'sinde**
+> çalışır (JWT `tenantId` claim'i); sağdaki `{tid}` yolları başka bir tenant hedeflemek içindir.
+
+| Bağlam | Varsayılan (kendi tenant'ı) | TC / hedef tenant |
+|--------|-----------------------------|-------------------|
 | Chat REST | `/api/v1/chat/...` | `/api/v1/chat/tenant/{tid}/...` |
 | Storage kota | `/api/v1/storage/quota` | `/api/v1/storage/tenant/{tid}/quota` |
 | WebSocket (send/typing/read) | `/app/chat/{groupId}/...` | `/app/tenant-chat/{tid}/{groupId}/...` |
@@ -59,8 +62,8 @@ yanıtlar.
   kullanıcısı URL'ye başka bir tenant yazarak oraya **sıçrayamaz** (kendi JWT
   claim'indeki tenant'a kilitli kalır).
 - Bilinmeyen tenant → `400 Bad Request` (PublicApiFilter ile aynı davranış).
-- Admin kimliği her zaman **basedb**'den yüklenir (`JwtAuthenticationFilter`),
-  veri işlemleri ise URL'deki tenant DB'sinde olur → kimlik ve veri ayrışması net.
+- Admin kimliği **kendi tenant DB'sinden** yüklenir (`JwtAuthenticationFilter`, JWT `tenantId`
+  claim'i; basedb yok), veri işlemleri ise URL'deki tenant DB'sinde olur → kimlik ve veri ayrışması net.
 
 ---
 
@@ -68,7 +71,7 @@ yanıtlar.
 
 - **`JwtTenantFilter`** (`com.cms.config`): `^/api/v1/(chat|storage)/tenant/{tid}/...`
   kalıbını yakalar; yalnız admin kimliğiyle `TenantContext`'i o tenant'a set eder,
-  bilinmeyen tenant'ta 400 döner. Diğer her şey eskisi gibi (JWT claim / basedb).
+  bilinmeyen tenant'ta 400 döner. Diğer her şey JWT `tenantId` claim'inden yönlenir (basedb yok).
 - **Controller'lar** çift `@RequestMapping` aldı (`{"/...", "/tenant/{tid}/..."}`)
   → eski AC yolları korundu, TC için yeni varyant eklendi. **Migration gerekmedi.**
   - `ChatGroupController`, `ChatHistoryController`, `StorageQuotaController`.

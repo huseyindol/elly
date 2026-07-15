@@ -17,7 +17,7 @@ Login response'unda kullanıcının rolleri ve izinleri doğrudan döner. **Ek A
 {
   "usernameOrEmail": "admin",
   "password": "123456",
-  "tenantId": "basedb",
+  "tenantId": "tenant1",
   "loginType": "admin"
 }
 ```
@@ -666,7 +666,7 @@ api.interceptors.response.use(
       "lastName": "User",
       "provider": "local",
       "isActive": true,
-      "managedTenants": ["basedb", "tenant1"],
+      "managedTenants": ["tenant1", "tenant2"],
       "roles": ["SUPER_ADMIN"],
       "createdAt": "2026-01-15T10:30:00.000+00:00"
     },
@@ -678,7 +678,7 @@ api.interceptors.response.use(
       "lastName": "User",
       "provider": "local",
       "isActive": true,
-      "managedTenants": ["basedb"],
+      "managedTenants": ["tenant1"],
       "roles": ["EDITOR"],
       "createdAt": "2026-03-20T14:00:00.000+00:00"
     }

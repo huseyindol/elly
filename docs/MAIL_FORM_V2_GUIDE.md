@@ -53,9 +53,9 @@ AES_SECRET_KEY=12345678901234567890123456789012
 ### 2.1 Migration’ı çalıştır (her tenant DB’si için)
 
 ```bash
-psql -h localhost -p 31432 -U postgres -d elly_basedb  -f src/main/resources/db-migration-mail-form-v2.sql
 psql -h localhost -p 31433 -U postgres -d elly_tenant1 -f src/main/resources/db-migration-mail-form-v2.sql
 psql -h localhost -p 31434 -U postgres -d elly_tenant2 -f src/main/resources/db-migration-mail-form-v2.sql
+# (basedb kaldırıldı — yalnız tenant DB'leri)
 ```
 
 > ⚠️ `form_definitions` **TRUNCATE** edilir (CASCADE ile `form_submissions` de). Production’da önce yedek al. `mail_accounts` dokunulmaz (sadece `is_default` kolonu düşer).

@@ -858,7 +858,7 @@
       <div class="rule-card" style="border-left:4px solid #6366f1;">
         <h4><span style="color:#818cf8;">&#9632;</span> Auth & User Kurallari</h4>
         <ul>
-          <li><span class="rule-icon" style="background:#6366f1;"></span> User her zaman <b style="color:#818cf8;">basedb</b> uzerinden sorgulanir</li>
+          <li><span class="rule-icon" style="background:#6366f1;"></span> User <b style="color:#818cf8;">kendi tenant DB'sinden</b> sorgulanir (JWT tenantId claim'i — basedb KALDIRILDI)</li>
           <li><span class="rule-icon" style="background:#6366f1;"></span> RefreshToken &harr; User (1:1)</li>
           <li><span class="rule-icon" style="background:#94a3b8;"></span> User.managedTenants ile erisim yetkili tenant listesi tutulur</li>
           <li><span class="rule-icon" style="background:#94a3b8;"></span> tokenVersion ile token invalidation yapilabilir</li>
@@ -921,10 +921,8 @@
         <h3 style="color:#e2e8f0;">Database-per-Tenant Architecture</h3>
         <p style="color:#94a3b8; margin-bottom:20px;">Her tenant icin ayri PostgreSQL veritabani</p>
         <div class="tenant-dbs">
-          <div class="tenant-db db-base">
-            <div>elly_basedb</div>
-            <div style="font-size:0.75rem; font-weight:400; margin-top:4px; opacity:0.8;">Users, RefreshTokens<br>(Auth - merkezi)</div>
-          </div>
+          <!-- elly_basedb KALDIRILDI — tamamen tenant-scoped mimari; auth dahil tum tablolar her tenant DB'sinde -->
+
           <div class="tenant-db db-t1">
             <div>elly_tenant1</div>
             <div style="font-size:0.75rem; font-weight:400; margin-top:4px; opacity:0.8;">Pages, Components,<br>Posts, Banners...</div>
@@ -973,7 +971,7 @@
 
       <div style="margin-top:10px;">
         <div class="tenant-box" style="border-color:#6366f1; max-width:400px;">
-          <h3 style="color:#818cf8; font-size:1rem;">Auth Entities (basedb'de)</h3>
+          <h3 style="color:#818cf8; font-size:1rem;">Auth Entities (her tenant DB'sinde — basedb kaldırıldı)</h3>
           <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:16px;">
             <span style="background:#1e2a4f; border:1px solid #6366f1; padding:6px 14px; border-radius:8px; font-size:0.85rem;">User</span>
             <span style="background:#1e2a4f; border:1px solid #6366f1; padding:6px 14px; border-radius:8px; font-size:0.85rem;">RefreshToken</span>

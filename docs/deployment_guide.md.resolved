@@ -82,18 +82,10 @@ cat ~/.ssh/id_ecdsa
 openssl rand -base64 48
 ```
 
-#### 🌐 OAuth2 Social Login (Opsiyonel)
+#### 🌐 OAuth2 Social Login — KALDIRILDI
 
-Henüz OAuth2 ayarlamadıysanız, geçici placeholder değerler koyabilirsiniz:
-
-| # | Name | Secret Değeri |
-|---|------|---------------|
-| 10 | `GOOGLE_CLIENT_ID` | `placeholder` |
-| 11 | `GOOGLE_CLIENT_SECRET` | `placeholder` |
-| 12 | `FACEBOOK_CLIENT_ID` | `placeholder` |
-| 13 | `FACEBOOK_CLIENT_SECRET` | `placeholder` |
-| 14 | `GITHUB_CLIENT_ID` | `placeholder` |
-| 15 | `GH_OAUTH_CLIENT_SECRET` | `placeholder` |
+OAuth2 projeden tamamen kaldırıldı (commit `7e160df`); GOOGLE_/FACEBOOK_/GH_OAUTH_ secret'ları
+artık GEREKMEZ. Canlı `elly-secret`'ta eski anahtarlar duruyorsa temizlenebilir (bkz. docs/OAUTH2_SETUP.md).
 
 #### 📧 Email
 

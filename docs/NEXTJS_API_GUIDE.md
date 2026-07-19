@@ -113,10 +113,13 @@ Mevcut token'ın claim'lerini çözer. Token geçerliliğini ve içeriğini kont
 
 ---
 
-### OAuth2 Login — KALDIRILDI
-Sosyal giriş (Google / Facebook / GitHub / X) projeden tamamen kaldırıldı (commit `7e160df`).
-`/oauth2/**` endpoint'leri artık yok; giriş yalnız username/email + şifre (+ opsiyonel MFA) iledir.
-Detay: `docs/OAUTH2_SETUP.md`.
+### Sosyal Giriş (Google / GitHub)
+
+Tenant sitede sosyal kayıt/giriş vardır (Tem 2026'da tenant-scoped olarak yeniden eklendi).
+Akış: `/api/auth/social/start/{provider}` (Next route, state cookie + provider redirect) →
+callback → backend `POST /api/v1/public/{tid}/auth/social/{provider}` `{ code, redirectUri }` —
+code takası BACKEND'de yapılır, yanıt normal login ile aynıdır (httpOnly cookie zinciri).
+Yalnız TENANT rolü; panelde sosyal giriş yoktur. Detay: backend `docs/OAUTH2_SETUP.md`.
 
 ---
 

@@ -44,7 +44,7 @@ Eger mevcut kodun bu kurala uymadigi gorulurse (orn. feature-package mevcut) kul
 Coklu agent rolleri, is akislari ve dosya haritasi icin repo kokundeki **[`AGENTS.md`](./AGENTS.md)** dosyasina bak. Cursor odakli kisa workflow'lar **[`.agents/workflows/`](./.agents/workflows/)** altinda; uzun tanimlar bu repoda **`.claude/agents/`** icinde kalir (tek kaynak).
 
 ## Proje Ozeti
-Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-tenant), Redis cache, RabbitMQ, JWT auth (JWE-encrypted) + istege bagli 2FA (TOTP), WebRTC arama sinyallesme (Faz 1). OAuth2 kaldirildi (gerekirse tekrar eklenir).
+Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-tenant), Redis cache, RabbitMQ, JWT auth (JWE-encrypted) + istege bagli 2FA (TOTP), WebRTC arama sinyallesme (Faz 1), sosyal giris (Google/GitHub — yalniz tenant-site, code takasi backend'de).
 
 ## Mimari
 - **Pattern:** Monolith, katmanli mimari
@@ -66,6 +66,7 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Panel login:** `POST /api/v1/auth/login` + body `{ usernameOrEmail, password, tenantId, loginType:"admin" }` — panel rolu (SUPER_ADMIN/ADMIN/EDITOR/VIEWER) zorunlu
 - **Tenant login:** `POST /api/v1/public/{tid}/auth/login` + `loginType:"tenant"` — TENANT rolu zorunlu (simetrik ayrim: panel kullanicisi tenant site'a giremez, tersi de)
 - **Register:** public `/auth/register` -> TENANT rolu atar; admin user yalniz panel'den `POST /api/v1/users` (SUPER_ADMIN) ile olusur
+- **Sosyal giris (Google/GitHub):** `POST /api/v1/public/{tid}/auth/social/{provider}` + `{ code, redirectUri }` — code takasi BACKEND'de (`OAuthProviderClient`, secret'lar backend'de; env: GOOGLE_CLIENT_ID/SECRET, GH_OAUTH_CLIENT_ID/SECRET). Kullanici bul (provider+providerId) -> e-posta eslesirse OTOMATIK BAGLA (panel rollu hesap reddedilir) -> yoksa yeni TENANT user (password NULL, emailVerified=true). YALNIZ tenant-site; panel'de sosyal giris YOK (bilinçli karar). GitHub'da dogrulanmis e-posta zorunlu. Detay: `docs/OAUTH2_SETUP.md`
 - **JWT:** Access + refresh token (JWE-encrypted), `loginSource` ve `tenantId` claim'leri; refresh body-based, tenant refresh token claim'inden cozulur
 - **Cookie max-age:** JWT surelerinden turetilir (JWT_EXPIRATION/JWT_REFRESH_EXPIRATION tek kaynak)
 - **Util:** `JwtUtil.generateToken(user, loginSource, tenantId)`

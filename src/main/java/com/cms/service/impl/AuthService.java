@@ -34,9 +34,12 @@ import com.cms.dto.DtoMfaStatusResponse;
 import com.cms.dto.DtoMfaVerifyRequest;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.dto.DtoSocialLogin;
 import com.cms.dto.DtoGuestTokenRequest;
 import com.cms.dto.DtoGuestTokenResponse;
 import com.cms.dto.EmailRequest;
+import com.cms.service.OAuthProviderClient;
+import com.cms.service.OAuthProviderClient.SocialProfile;
 import com.cms.service.TotpService;
 import com.cms.util.AesEncryptor;
 import com.cms.entity.RefreshToken;
@@ -78,6 +81,7 @@ public class AuthService implements IAuthService {
   private final INotificationService notificationService;
   private final TotpService totpService;
   private final AesEncryptor aesEncryptor;
+  private final OAuthProviderClient oAuthProviderClient;
 
   @Value("${jwt.refresh.expiration:3600000}")
   private Long refreshTokenExpiration;
@@ -339,6 +343,107 @@ public class AuthService implements IAuthService {
     }
 
     return issueFullAuthToken(user, loginSource, effectiveTenantId);
+  }
+
+  @Override
+  @Transactional
+  public DtoAuthResponse socialLogin(String provider, DtoSocialLogin dto) {
+    // Tenant context AuthController tarafından @Transactional ÖNCESİ kurulur
+    // (public URL veya body tenantId'si). Burada yalnız doğrula.
+    String tenantId = TenantContext.getTenantId();
+    if (tenantId == null || tenantId.isBlank()) {
+      throw new TenantRequiredException("Sosyal giriş için tenant gerekli (/api/v1/public/{tid})");
+    }
+    if (!tenantProperties.getDatasources().containsKey(tenantId)) {
+      throw new BadRequestException("Tenant not found: " + tenantId);
+    }
+
+    // code → provider takası + doğrulanmış profil (dış HTTP; hata durumları anlaşılır mesajlarla)
+    SocialProfile profile = oAuthProviderClient.fetchProfile(provider, dto.getCode(), dto.getRedirectUri());
+
+    // 1) provider+providerId ile mevcut hesap
+    User user = userRepository
+        .findByProviderAndProviderId(profile.provider(), profile.providerId())
+        .orElse(null);
+
+    if (user == null) {
+      // 2) E-posta eşleşmesi → OTOMATİK BAĞLAMA (provider e-postayı doğrulamış kabul edilir).
+      //    Panel rollü hesaplara sosyal girişle DOKUNULMAZ — panel/tenant simetrisi korunur.
+      User byEmail = userRepository.findByEmail(profile.email()).orElse(null);
+      if (byEmail != null) {
+        if (isPanelUser(byEmail)) {
+          throw new ForbiddenException("Panel hesapları sosyal girişle kullanılamaz");
+        }
+        byEmail.setProvider(profile.provider());
+        byEmail.setProviderId(profile.providerId());
+        byEmail.setEmailVerified(true);
+        user = userRepository.save(byEmail);
+        log.info("Sosyal hesap bağlandı: {} → {} ({})", profile.provider(), user.getUsername(), tenantId);
+      } else {
+        // 3) Yeni kayıt: TENANT rolü, şifresiz (password NULL), e-posta doğrulanmış.
+        Role tenantRole = roleRepository.findByName("TENANT").orElse(null);
+        User newUser = new User();
+        newUser.setUsername(uniqueUsername(profile.usernameHint()));
+        newUser.setEmail(profile.email());
+        newUser.setPassword(null);
+        newUser.setFirstName(profile.firstName());
+        newUser.setLastName(profile.lastName());
+        newUser.setProvider(profile.provider());
+        newUser.setProviderId(profile.providerId());
+        newUser.setIsActive(true);
+        newUser.setEmailVerified(true); // provider doğruladı → verification maili atlanır
+        if (tenantRole != null) {
+          newUser.getRoles().add(tenantRole);
+        }
+        user = userRepository.save(newUser);
+        triggerUserRegisteredNotification(user, tenantId);
+        log.info("Sosyal kayıt: {} kullanıcı={} ({})", profile.provider(), user.getUsername(), tenantId);
+      }
+    }
+
+    if (!user.getIsActive()) {
+      throw new BadRequestException("User account is deactivated");
+    }
+    // provider+providerId ile bulunan hesap panel rollüyse de reddet (tutarlılık)
+    if (isPanelUser(user)) {
+      throw new ForbiddenException("Panel hesapları sosyal girişle kullanılamaz");
+    }
+
+    // MFA: normal login ile aynı davranış — aktifse önce mfaToken.
+    if (Boolean.TRUE.equals(user.getMfaEnabled()) && Boolean.TRUE.equals(user.getMfaSetupVerified())) {
+      String mfaToken = jwtUtil.generateMfaToken(user.getId(), "tenant", tenantId);
+      DtoAuthResponse mfaResponse = new DtoAuthResponse();
+      mfaResponse.setMfaRequired(true);
+      mfaResponse.setMfaToken(mfaToken);
+      return mfaResponse;
+    }
+
+    return issueFullAuthToken(user, "tenant", tenantId);
+  }
+
+  /** Panel rolü (SUPER_ADMIN/ADMIN/EDITOR/VIEWER) taşıyor mu — sosyal giriş bu hesaplara kapalı. */
+  private boolean isPanelUser(User user) {
+    Set<String> panelRoleNames = Set.of("SUPER_ADMIN", "ADMIN", "EDITOR", "VIEWER");
+    return user.getRoles() != null && user.getRoles().stream()
+        .anyMatch(r -> panelRoleNames.contains(r.getName()));
+  }
+
+  /** E-posta local-part'ından benzersiz username üretir (çakışmada sayısal ek). */
+  private String uniqueUsername(String hint) {
+    String base = (hint == null || hint.isBlank()) ? "user" : hint.replaceAll("[^a-zA-Z0-9._-]", "");
+    if (base.isBlank()) {
+      base = "user";
+    }
+    String candidate = base;
+    int suffix = 1;
+    while (userRepository.existsByUsername(candidate)) {
+      candidate = base + suffix++;
+      if (suffix > 500) { // pratik güvenlik sınırı
+        candidate = base + UUID.randomUUID().toString().substring(0, 8);
+        break;
+      }
+    }
+    return candidate;
   }
 
   /**

@@ -108,6 +108,11 @@ jobs:
           export JWT_SECRET_B64=$(echo -n "${{ secrets.JWT_SECRET }}" | base64)
           export JWT_ENCRYPTION_SECRET_B64=$(echo -n "${{ secrets.JWT_ENCRYPTION_SECRET }}" | base64)
           export EMAIL_API_KEY_B64=$(echo -n "${{ secrets.EMAIL_API_KEY }}" | base64)
+          # Sosyal giriş (Google/GitHub) — boşsa özellik backend'de kapalı kalır
+          export GOOGLE_CLIENT_ID_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_ID }}" | base64)
+          export GOOGLE_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GOOGLE_CLIENT_SECRET }}" | base64)
+          export GH_OAUTH_CLIENT_ID_B64=$(echo -n "${{ secrets.GH_OAUTH_CLIENT_ID }}" | base64)
+          export GH_OAUTH_CLIENT_SECRET_B64=$(echo -n "${{ secrets.GH_OAUTH_CLIENT_SECRET }}" | base64)
           export REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64)
           export RABBITMQ_USER_B64=$(echo -n "${{ secrets.RABBITMQ_USER }}" | base64)
           export RABBITMQ_PASSWORD_B64=$(echo -n "${{ secrets.RABBITMQ_PASSWORD }}" | base64)

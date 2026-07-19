@@ -78,6 +78,8 @@ public class PublicApiFilter extends OncePerRequestFilter {
       new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/forms/\\d+/submit$")),
       new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/register$")),
       new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/login$")),
+      // Sosyal giriş (Google/GitHub) — code takası backend'de, yalnız tenant akışı
+      new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/social/(google|github)$")),
       new PublicWriteEndpoint(HttpMethod.POST, Pattern.compile("^/auth/guest-token$")));
 
   private final DataSourceConfig.TenantDataSourceProperties tenantDataSourceProperties;

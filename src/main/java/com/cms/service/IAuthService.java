@@ -11,12 +11,19 @@ import com.cms.dto.DtoMfaStatusResponse;
 import com.cms.dto.DtoMfaVerifyRequest;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.dto.DtoSocialLogin;
 import com.cms.entity.User;
 
 public interface IAuthService {
   DtoAuthResponse register(DtoRegister dtoRegister);
 
   DtoAuthResponse login(DtoLogin dtoLogin);
+
+  /**
+   * Sosyal giriş (Google/GitHub) — authorization code backend'de takas edilir; kullanıcı
+   * bulunur/bağlanır/oluşturulur (yalnız TENANT rolü) ve normal login ile aynı yanıt döner.
+   */
+  DtoAuthResponse socialLogin(String provider, DtoSocialLogin dto);
 
   DtoAuthResponse refreshToken(DtoRefreshToken dtoRefreshToken);
 

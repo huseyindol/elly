@@ -15,6 +15,7 @@ import com.cms.dto.DtoAuthResponse;
 import com.cms.dto.DtoLogin;
 import com.cms.dto.DtoRefreshToken;
 import com.cms.dto.DtoRegister;
+import com.cms.dto.DtoSocialLogin;
 import com.cms.dto.DtoGuestTokenRequest;
 import com.cms.dto.DtoGuestTokenResponse;
 import com.cms.entity.RootEntityResponse;
@@ -99,6 +100,29 @@ public class AuthController extends BaseController implements IAuthController {
       authCookieWriter.writeAuthCookies(httpResponse, response);
     }
 
+    return ok(response);
+  }
+
+  /**
+   * Sosyal giriş (Google/GitHub) — yalnız tenant-site akışı; code takası backend'de.
+   * Public URL ile çağrılır: {@code POST /api/v1/public/{tid}/auth/social/{provider}}
+   * (PublicApiFilter tenant context'i URL'den kurar; body tenantId fallback'tir).
+   */
+  @PostMapping("/social/{provider}")
+  public RootEntityResponse<DtoAuthResponse> socialLogin(
+      @org.springframework.web.bind.annotation.PathVariable String provider,
+      @Valid @RequestBody DtoSocialLogin dtoSocialLogin,
+      HttpServletResponse httpResponse) {
+    // Tenant context'i @Transactional servis çağrısından ÖNCE kur (login/register ile aynı kural).
+    if (dtoSocialLogin.getTenantId() != null && !dtoSocialLogin.getTenantId().isBlank()) {
+      TenantContext.setTenantId(dtoSocialLogin.getTenantId());
+    }
+    DtoAuthResponse response = authService.socialLogin(provider, dtoSocialLogin);
+
+    // MFA'lı tenant kullanıcısı: cookie yazılmaz, mfaToken döner (normal login ile aynı).
+    if (!Boolean.TRUE.equals(response.getMfaRequired())) {
+      authCookieWriter.writeAuthCookies(httpResponse, response);
+    }
     return ok(response);
   }
 

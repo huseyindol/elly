@@ -59,3 +59,6 @@ k8s/1-secret.remote.yaml
 
 # Claude - proje kuralları (repo'da kalsın, ignore ETMEYİN)
 # CLAUDE.md
+/db_clean_dump.sql
+/db_dump.sql
+/temp_dump.sql

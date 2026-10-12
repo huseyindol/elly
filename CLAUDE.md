@@ -162,6 +162,8 @@ Proje-spesifik bilgi birikimi `.claude/skills/` altinda tutulur. Agent'lar gorev
 | `mail-smoke-test` | Mail gonderim akisini end-to-end dogrulama playbook'u |
 | `dev-session-tracker` | Uzun gorevlerde ilerleme takibi, changelog |
 | `karpathy-guidelines` | Davranissal kurallar: overengineering'i onle, surgical degisim, goal-driven loop |
+| `ponytail` | Lazy senior dev modu: isi tam cozen en kucuk degisiklik (`/ponytail lite\|full\|ultra`; Cursor `.cursor/rules/ponytail.mdc`, Antigravity `.agents/rules/ponytail.md`) |
+| `ponytail-review` | Diff kalite review'u: dogruluk, guvenlik, yuk, test, gereksiz satir |
 
 ## Agent Teams
 Agent Teams aktif (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Buyuk gorevlerde paralel calisma icin takim kurulabilir.

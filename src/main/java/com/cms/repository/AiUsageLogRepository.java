@@ -1,5 +1,6 @@
 package com.cms.repository;
 
+import java.util.Date;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -46,6 +47,20 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, Long> {
       FROM AiUsageLog l
       """)
   List<Object[]> aggregateTotals();
+
+  @Query("""
+      SELECT
+        COUNT(l),
+        COALESCE(SUM(CASE WHEN l.status = 'SUCCESS' THEN 1 ELSE 0 END), 0),
+        COALESCE(SUM(l.inputTokens), 0),
+        COALESCE(SUM(l.outputTokens), 0),
+        COALESCE(SUM(l.thoughtTokens), 0),
+        COALESCE(SUM(l.cachedTokens), 0),
+        COALESCE(SUM(l.totalTokens), 0)
+      FROM AiUsageLog l
+      WHERE l.createdAt >= :since
+      """)
+  List<Object[]> aggregateSince(@Param("since") Date since);
 
   @Query("""
       SELECT

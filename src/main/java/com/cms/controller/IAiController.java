@@ -10,6 +10,8 @@ import com.cms.dto.DtoAiBlogInfoRequest;
 import com.cms.dto.DtoAiBlogInfoResponse;
 import com.cms.dto.DtoAiDescriptionRequest;
 import com.cms.dto.DtoAiDescriptionResponse;
+import com.cms.dto.DtoAiQuota;
+import com.cms.dto.DtoAiQuotaLimitRequest;
 import com.cms.dto.DtoAiSeoResponse;
 import com.cms.dto.DtoAiSlugResponse;
 import com.cms.dto.DtoAiTitleRequest;
@@ -37,4 +39,8 @@ public interface IAiController {
   RootEntityResponse<DtoAiUsageLog> getUsageLogById(Long id);
 
   RootEntityResponse<DtoAiUsageStats> getUsageStats();
+
+  RootEntityResponse<DtoAiQuota> getQuota();
+
+  RootEntityResponse<DtoAiQuota> updateQuotaLimits(DtoAiQuotaLimitRequest request);
 }

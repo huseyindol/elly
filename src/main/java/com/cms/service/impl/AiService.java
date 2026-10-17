@@ -1,7 +1,10 @@
 package com.cms.service.impl;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,16 +34,20 @@ import com.cms.dto.DtoAiBlogInfoRequest;
 import com.cms.dto.DtoAiBlogInfoResponse;
 import com.cms.dto.DtoAiDescriptionRequest;
 import com.cms.dto.DtoAiDescriptionResponse;
+import com.cms.dto.DtoAiQuota;
+import com.cms.dto.DtoAiQuotaLimitRequest;
 import com.cms.dto.DtoAiSeoResponse;
 import com.cms.dto.DtoAiSlugResponse;
 import com.cms.dto.DtoAiTitleRequest;
 import com.cms.dto.DtoAiUsageLog;
 import com.cms.dto.DtoAiUsageStats;
 import com.cms.dto.DtoAiUsageStats.DtoAiActionStat;
+import com.cms.entity.AiQuota;
 import com.cms.entity.AiUsageLog;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.BaseException;
 import com.cms.exception.ResourceNotFoundException;
+import com.cms.repository.AiQuotaRepository;
 import com.cms.repository.AiUsageLogRepository;
 import com.cms.service.IAiService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -49,7 +56,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Google Gemini Interactions API (/v1/interactions) üzerinden AI içerik üretim servisi.
+ * Google Gemini Interactions API (/v1beta/interactions) üzerinden AI içerik üretim servisi.
  * Model varsayılan olarak {@code gemini-3.8-flash} kullanır.
  * API anahtarı sadece backend'de tutulur ve hata mesajlarında asla dışarı sızdırılmaz.
  * Her Gemini alt çağrısı (istek, prompt, yanıt, token kırılımı, süre, durum) ai_usage_logs tablosuna kaydedilir.
@@ -60,6 +67,10 @@ public class AiService implements IAiService {
 
   private static final String INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
   private static final int MAX_PLAIN_CONTENT_LEN = 4000;
+  private static final long DEFAULT_MONTHLY_TOKEN_LIMIT = 1_000_000L;
+  private static final long DEFAULT_DAILY_REQUEST_LIMIT = 250L;
+  private static final double INPUT_USD_PER_1M = 0.75;
+  private static final double OUTPUT_USD_PER_1M = 3.75;
 
   private final ObjectMapper objectMapper;
   private final RestClient restClient;
@@ -67,12 +78,14 @@ public class AiService implements IAiService {
   private final String modelName;
   private final AiUsageLogRepository aiUsageLogRepository;
   private final AiUsageLogWriter aiUsageLogWriter;
+  private final AiQuotaRepository aiQuotaRepository;
 
   @Autowired
   public AiService(
       ObjectMapper objectMapper,
       AiUsageLogRepository aiUsageLogRepository,
       AiUsageLogWriter aiUsageLogWriter,
+      AiQuotaRepository aiQuotaRepository,
       @Value("${app.ai.gemini.api-key:}") String apiKey,
       @Value("${app.ai.gemini.model:gemini-3.8-flash}") String modelName,
       @Value("${app.ai.gemini.connect-timeout-ms:10000}") int connectTimeoutMs,
@@ -83,7 +96,8 @@ public class AiService implements IAiService {
         apiKey,
         modelName,
         aiUsageLogRepository,
-        aiUsageLogWriter);
+        aiUsageLogWriter,
+        aiQuotaRepository);
   }
 
   public AiService(
@@ -91,7 +105,7 @@ public class AiService implements IAiService {
       RestClient restClient,
       String apiKey,
       String modelName) {
-    this(objectMapper, restClient, apiKey, modelName, null, null);
+    this(objectMapper, restClient, apiKey, modelName, null, null, null);
   }
 
   public AiService(
@@ -101,12 +115,24 @@ public class AiService implements IAiService {
       String modelName,
       AiUsageLogRepository aiUsageLogRepository,
       AiUsageLogWriter aiUsageLogWriter) {
+    this(objectMapper, restClient, apiKey, modelName, aiUsageLogRepository, aiUsageLogWriter, null);
+  }
+
+  public AiService(
+      ObjectMapper objectMapper,
+      RestClient restClient,
+      String apiKey,
+      String modelName,
+      AiUsageLogRepository aiUsageLogRepository,
+      AiUsageLogWriter aiUsageLogWriter,
+      AiQuotaRepository aiQuotaRepository) {
     this.objectMapper = objectMapper;
     this.restClient = restClient;
     this.apiKey = apiKey != null ? apiKey.trim() : "";
     this.modelName = (modelName != null && !modelName.isBlank()) ? modelName.trim() : "gemini-3.8-flash";
     this.aiUsageLogRepository = aiUsageLogRepository;
     this.aiUsageLogWriter = aiUsageLogWriter;
+    this.aiQuotaRepository = aiQuotaRepository;
   }
 
   private static RestClient createDefaultRestClient(int connectTimeoutMs, int readTimeoutMs) {
@@ -501,7 +527,184 @@ public class AiService implements IAiService {
         .build();
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public DtoAiQuota getQuota() {
+    String tenant = resolveTenantIdOrDefault();
+    AiQuota quotaEntity =
+        aiQuotaRepository != null ? aiQuotaRepository.findById(tenant).orElse(null) : null;
+    long monthlyTokenLimit = effectiveMonthlyTokenLimit(quotaEntity);
+    long dailyRequestLimit = effectiveDailyRequestLimit(quotaEntity);
+
+    if (aiUsageLogRepository == null) {
+      return DtoAiQuota.builder()
+          .tenantId(tenant)
+          .monthlyTokenLimit(monthlyTokenLimit)
+          .monthlyTokensRemaining(monthlyTokenLimit)
+          .dailyRequestLimit(dailyRequestLimit)
+          .dailyRequestsRemaining(dailyRequestLimit)
+          .build();
+    }
+
+    ZoneId zone = ZoneId.systemDefault();
+    Date monthStart = Date.from(LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant());
+    Date dayStart = Date.from(LocalDate.now(zone).atStartOfDay(zone).toInstant());
+
+    List<Object[]> monthRows = aiUsageLogRepository.aggregateSince(monthStart);
+    Object[] month = (monthRows != null && !monthRows.isEmpty()) ? monthRows.get(0) : null;
+    long monthlyInput = toLong(month, 2);
+    long monthlyOutput = toLong(month, 3);
+    long monthlyThought = toLong(month, 4);
+    long monthlyCached = toLong(month, 5);
+    long monthlyTokensUsed = toLong(month, 6);
+
+    List<Object[]> dayRows = aiUsageLogRepository.aggregateSince(dayStart);
+    Object[] day = (dayRows != null && !dayRows.isEmpty()) ? dayRows.get(0) : null;
+    long dailyRequestsUsed = toLong(day, 1);
+    long dailyTokensUsed = toLong(day, 6);
+
+    List<Object[]> allRows = aiUsageLogRepository.aggregateTotals();
+    Object[] all = (allRows != null && !allRows.isEmpty()) ? allRows.get(0) : null;
+    long totalInput = toLong(all, 3);
+    long totalOutput = toLong(all, 4);
+    long totalThought = toLong(all, 5);
+
+    long monthlyRemaining = Math.max(monthlyTokenLimit - monthlyTokensUsed, 0L);
+    double monthlyPct =
+        monthlyTokenLimit > 0
+            ? Math.round((monthlyTokensUsed * 100.0 / monthlyTokenLimit) * 10.0) / 10.0
+            : 0.0;
+
+    long dailyRemaining = Math.max(dailyRequestLimit - dailyRequestsUsed, 0L);
+    double dailyPct =
+        dailyRequestLimit > 0
+            ? Math.round((dailyRequestsUsed * 100.0 / dailyRequestLimit) * 10.0) / 10.0
+            : 0.0;
+
+    return DtoAiQuota.builder()
+        .tenantId(tenant)
+        .monthlyTokenLimit(monthlyTokenLimit)
+        .monthlyTokensUsed(monthlyTokensUsed)
+        .monthlyTokensRemaining(monthlyRemaining)
+        .monthlyTokenUsedPercent(monthlyPct)
+        .dailyRequestLimit(dailyRequestLimit)
+        .dailyRequestsUsed(dailyRequestsUsed)
+        .dailyRequestsRemaining(dailyRemaining)
+        .dailyRequestUsedPercent(dailyPct)
+        .dailyTokensUsed(dailyTokensUsed)
+        .monthlyInputTokens(monthlyInput)
+        .monthlyOutputTokens(monthlyOutput)
+        .monthlyThoughtTokens(monthlyThought)
+        .monthlyCachedTokens(monthlyCached)
+        .monthlyEstimatedCostUsd(estimateCostUsd(monthlyInput, monthlyOutput, monthlyThought))
+        .totalEstimatedCostUsd(estimateCostUsd(totalInput, totalOutput, totalThought))
+        .build();
+  }
+
+  @Override
+  @Transactional
+  public DtoAiQuota updateQuotaLimits(DtoAiQuotaLimitRequest request) {
+    if (request == null) {
+      throw new BadRequestException("Limit bilgileri boş olamaz.");
+    }
+    Long monthlyLimit = request.getMonthlyTokenLimit();
+    Long dailyLimit = request.getDailyRequestLimit();
+    if (monthlyLimit != null && monthlyLimit <= 0) {
+      throw new BadRequestException("Aylık token limiti 0'dan büyük olmalıdır.");
+    }
+    if (dailyLimit != null && dailyLimit <= 0) {
+      throw new BadRequestException("Günlük istek limiti 0'dan büyük olmalıdır.");
+    }
+    String tenant = resolveTenantIdOrDefault();
+    if (aiQuotaRepository != null) {
+      AiQuota q =
+          aiQuotaRepository
+              .findById(tenant)
+              .orElseGet(() -> AiQuota.builder().tenantId(tenant).build());
+      if (monthlyLimit != null) {
+        q.setMonthlyTokenLimit(monthlyLimit);
+      }
+      if (dailyLimit != null) {
+        q.setDailyRequestLimit(dailyLimit);
+      }
+      aiQuotaRepository.save(q);
+    }
+    return getQuota();
+  }
+
   // ==================== INTERNAL HELPERS ====================
+
+  private static String resolveTenantIdOrDefault() {
+    String t = TenantContext.getTenantId();
+    if (t == null || t.isBlank()) {
+      return "default";
+    }
+    return t.replaceAll("[^a-zA-Z0-9_-]", "_");
+  }
+
+  private static long effectiveMonthlyTokenLimit(AiQuota q) {
+    return (q != null && q.getMonthlyTokenLimit() != null && q.getMonthlyTokenLimit() > 0)
+        ? q.getMonthlyTokenLimit()
+        : DEFAULT_MONTHLY_TOKEN_LIMIT;
+  }
+
+  private static long effectiveDailyRequestLimit(AiQuota q) {
+    return (q != null && q.getDailyRequestLimit() != null && q.getDailyRequestLimit() > 0)
+        ? q.getDailyRequestLimit()
+        : DEFAULT_DAILY_REQUEST_LIMIT;
+  }
+
+  private static double estimateCostUsd(long inputTokens, long outputTokens, long thoughtTokens) {
+    double raw =
+        (inputTokens * INPUT_USD_PER_1M + (outputTokens + thoughtTokens) * OUTPUT_USD_PER_1M)
+            / 1_000_000.0;
+    return Math.round(raw * 10000.0) / 10000.0;
+  }
+
+  private void ensureWithinQuota(GeminiCallSpec spec, AiUsageLog entry, long startNanos) {
+    if (aiUsageLogRepository == null) {
+      return;
+    }
+    String tenant = resolveTenantIdOrDefault();
+    AiQuota quotaEntity =
+        aiQuotaRepository != null ? aiQuotaRepository.findById(tenant).orElse(null) : null;
+    long monthlyTokenLimit = effectiveMonthlyTokenLimit(quotaEntity);
+    long dailyRequestLimit = effectiveDailyRequestLimit(quotaEntity);
+
+    ZoneId zone = ZoneId.systemDefault();
+    Date monthStart = Date.from(LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant());
+    List<Object[]> monthRows = aiUsageLogRepository.aggregateSince(monthStart);
+    Object[] month = (monthRows != null && !monthRows.isEmpty()) ? monthRows.get(0) : null;
+    long monthlyTokensUsed = toLong(month, 6);
+
+    if (monthlyTokensUsed >= monthlyTokenLimit) {
+      String msg =
+          "Aylık AI token kotası doldu ("
+              + monthlyTokensUsed
+              + " / "
+              + monthlyTokenLimit
+              + " token). Limit artışı için Süper Admin ile iletişime geçin.";
+      recordError(entry, startNanos, 429, "MONTHLY_TOKEN_QUOTA_EXCEEDED", msg);
+      throw new AiServiceException(msg);
+    }
+
+    if (spec.stepOrder() <= 1) {
+      Date dayStart = Date.from(LocalDate.now(zone).atStartOfDay(zone).toInstant());
+      List<Object[]> dayRows = aiUsageLogRepository.aggregateSince(dayStart);
+      Object[] day = (dayRows != null && !dayRows.isEmpty()) ? dayRows.get(0) : null;
+      long dailyRequestsUsed = toLong(day, 1);
+      if (dailyRequestsUsed >= dailyRequestLimit) {
+        String msg =
+            "Günlük AI istek kotası doldu ("
+                + dailyRequestsUsed
+                + " / "
+                + dailyRequestLimit
+                + " istek). Yarın tekrar deneyin veya limit artışı için Süper Admin ile iletişime geçin.";
+        recordError(entry, startNanos, 429, "DAILY_REQUEST_QUOTA_EXCEEDED", msg);
+        throw new AiServiceException(msg);
+      }
+    }
+  }
 
   private record GeminiCallSpec(
       String requestId,
@@ -535,6 +738,8 @@ public class AiService implements IAiService {
         .durationMs(0L)
         .status("ERROR")
         .build();
+
+    ensureWithinQuota(spec, entry, startNanos);
 
     if (apiKey.isBlank()) {
       recordError(

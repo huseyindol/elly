@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,6 +22,8 @@ import com.cms.dto.DtoAiBlogInfoRequest;
 import com.cms.dto.DtoAiBlogInfoResponse;
 import com.cms.dto.DtoAiDescriptionRequest;
 import com.cms.dto.DtoAiDescriptionResponse;
+import com.cms.dto.DtoAiQuota;
+import com.cms.dto.DtoAiQuotaLimitRequest;
 import com.cms.dto.DtoAiSeoResponse;
 import com.cms.dto.DtoAiSlugResponse;
 import com.cms.dto.DtoAiTitleRequest;
@@ -45,8 +48,6 @@ public class AiController extends BaseController implements IAiController {
       "hasAnyAuthority('banners:create','banners:update')";
   private static final String CAN_EDIT_POSTS =
       "hasAnyAuthority('posts:create','posts:update')";
-  private static final String CAN_READ_AI_LOGS =
-      "hasAnyAuthority('posts:read','pages:read','components:read','widgets:read','banners:read','users:manage')";
 
   private final IAiService aiService;
 
@@ -96,7 +97,7 @@ public class AiController extends BaseController implements IAiController {
 
   @Override
   @GetMapping("/logs")
-  @PreAuthorize(CAN_READ_AI_LOGS)
+  @PreAuthorize("isAuthenticated()")
   public RootEntityResponse<Page<DtoAiUsageLog>> listUsageLogs(
       @RequestParam(value = "action", required = false) String action,
       @RequestParam(value = "status", required = false) String status,
@@ -108,15 +109,29 @@ public class AiController extends BaseController implements IAiController {
 
   @Override
   @GetMapping("/logs/{id}")
-  @PreAuthorize(CAN_READ_AI_LOGS)
+  @PreAuthorize("isAuthenticated()")
   public RootEntityResponse<DtoAiUsageLog> getUsageLogById(@PathVariable("id") Long id) {
     return ok(aiService.getUsageLogById(id));
   }
 
   @Override
   @GetMapping("/stats")
-  @PreAuthorize(CAN_READ_AI_LOGS)
+  @PreAuthorize("isAuthenticated()")
   public RootEntityResponse<DtoAiUsageStats> getUsageStats() {
     return ok(aiService.getUsageStats());
+  }
+
+  @Override
+  @GetMapping({"/quota", "/tenant/{tenantId}/quota"})
+  @PreAuthorize("isAuthenticated()")
+  public RootEntityResponse<DtoAiQuota> getQuota() {
+    return ok(aiService.getQuota());
+  }
+
+  @Override
+  @PutMapping({"/quota/limit", "/tenant/{tenantId}/quota/limit"})
+  @PreAuthorize("hasAuthority('ROLE_SUPER_ADMIN')")
+  public RootEntityResponse<DtoAiQuota> updateQuotaLimits(@RequestBody DtoAiQuotaLimitRequest request) {
+    return ok(aiService.updateQuotaLimits(request));
   }
 }

@@ -233,6 +233,12 @@ public class JpaConfig {
         CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_status     ON ai_usage_logs (status);
         CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_request_id ON ai_usage_logs (request_id);
         CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_username   ON ai_usage_logs (username);
+        CREATE TABLE IF NOT EXISTS ai_quota (
+          tenant_id           VARCHAR(64) PRIMARY KEY,
+          monthly_token_limit BIGINT,
+          daily_request_limit BIGINT,
+          updated_at          TIMESTAMP(6)
+        );
         """;
 
     tenantProperties.getDatasources().forEach((tenantId, config) -> {

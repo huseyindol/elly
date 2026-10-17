@@ -34,15 +34,20 @@ import com.cms.dto.DtoAiBlogInfoRequest;
 import com.cms.dto.DtoAiBlogInfoResponse;
 import com.cms.dto.DtoAiDescriptionRequest;
 import com.cms.dto.DtoAiDescriptionResponse;
+import com.cms.dto.DtoAiQuota;
+import com.cms.dto.DtoAiQuotaLimitRequest;
 import com.cms.dto.DtoAiSeoResponse;
 import com.cms.dto.DtoAiSlugResponse;
 import com.cms.dto.DtoAiTitleRequest;
 import com.cms.dto.DtoAiUsageStats;
+import com.cms.entity.AiQuota;
 import com.cms.entity.AiUsageLog;
 import com.cms.exception.BadRequestException;
+import com.cms.repository.AiQuotaRepository;
 import com.cms.repository.AiUsageLogRepository;
 import com.cms.service.impl.AiService.AiServiceException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Optional;
 
 class AiServiceTest {
 
@@ -53,6 +58,7 @@ class AiServiceTest {
   private RestClient.Builder builder;
   private MockRestServiceServer mockServer;
   private AiUsageLogRepository logRepository;
+  private AiQuotaRepository quotaRepository;
   private AiUsageLogWriter logWriter;
   private AiService aiService;
 
@@ -62,10 +68,17 @@ class AiServiceTest {
     builder = RestClient.builder();
     mockServer = MockRestServiceServer.bindTo(builder).build();
     logRepository = mock(AiUsageLogRepository.class);
+    quotaRepository = mock(AiQuotaRepository.class);
     logWriter = mock(AiUsageLogWriter.class);
     when(logWriter.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(quotaRepository.findById(any())).thenReturn(Optional.empty());
+    when(quotaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    when(logRepository.aggregateSince(any()))
+        .thenReturn(List.<Object[]>of(new Object[] {0L, 0L, 0L, 0L, 0L, 0L, 0L}));
+    when(logRepository.aggregateTotals())
+        .thenReturn(List.<Object[]>of(new Object[] {0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0.0}));
     aiService = new AiService(
-        objectMapper, builder.build(), TEST_API_KEY, "gemini-3.8-flash", logRepository, logWriter);
+        objectMapper, builder.build(), TEST_API_KEY, "gemini-3.8-flash", logRepository, logWriter, quotaRepository);
   }
 
   private String interactionJson(String text) {
@@ -201,7 +214,7 @@ class AiServiceTest {
 
   @Test
   void missingApiKey_throwsSanitizedMessageWithoutLeakingKey() {
-    AiService noKeyService = new AiService(objectMapper, builder.build(), "", "gemini-3.8-flash", logRepository, logWriter);
+    AiService noKeyService = new AiService(objectMapper, builder.build(), "", "gemini-3.8-flash", logRepository, logWriter, quotaRepository);
     AiServiceException ex = assertThrows(AiServiceException.class,
         () -> noKeyService.generateSlug(new DtoAiTitleRequest("Test")));
     assertNotNull(ex.getMessage());
@@ -274,4 +287,76 @@ class AiServiceTest {
     assertEquals("slug", stats.getByAction().get(0).getAction());
     assertEquals(900L, stats.getByAction().get(0).getTotalTokens());
   }
+
+  @Test
+  void getQuota_calculatesRemainingTokensPercentageAndEstimatedCost() {
+    AiQuota stored = AiQuota.builder().tenantId("default").monthlyTokenLimit(500_000L).dailyRequestLimit(100L).build();
+    when(quotaRepository.findById("default")).thenReturn(Optional.of(stored));
+    when(logRepository.aggregateSince(any()))
+        .thenReturn(List.<Object[]>of(new Object[] {25L, 24L, 40_000L, 10_000L, 50_000L, 2_000L, 100_000L}))
+        .thenReturn(List.<Object[]>of(new Object[] {10L, 10L, 4_000L, 1_000L, 5_000L, 200L, 10_000L}));
+
+    DtoAiQuota quota = aiService.getQuota();
+    assertEquals("default", quota.getTenantId());
+    assertEquals(100_000L, quota.getMonthlyTokensUsed());
+    assertEquals(500_000L, quota.getMonthlyTokenLimit());
+    assertEquals(400_000L, quota.getMonthlyTokensRemaining());
+    assertEquals(20.0, quota.getMonthlyTokenUsedPercent());
+    assertEquals(10L, quota.getDailyRequestsUsed());
+    assertEquals(100L, quota.getDailyRequestLimit());
+    assertEquals(90L, quota.getDailyRequestsRemaining());
+    assertEquals(10.0, quota.getDailyRequestUsedPercent());
+    // 40k * $0.75/1M ($0.03) + (10k + 50k) * $3.75/1M ($0.225) = $0.255
+    assertEquals(0.255, quota.getMonthlyEstimatedCostUsd());
+  }
+
+  @Test
+  void updateQuotaLimits_updatesAndPersistsLimits() {
+    AiQuota existing = AiQuota.builder().tenantId("default").monthlyTokenLimit(1_000_000L).dailyRequestLimit(250L).build();
+    when(quotaRepository.findById("default")).thenReturn(Optional.of(existing));
+
+    DtoAiQuota updated = aiService.updateQuotaLimits(new DtoAiQuotaLimitRequest(2_000_000L, 500L));
+    assertEquals(2_000_000L, updated.getMonthlyTokenLimit());
+    assertEquals(500L, updated.getDailyRequestLimit());
+    verify(quotaRepository).save(existing);
+  }
+
+  @Test
+  void monthlyTokenQuotaExceeded_blocksGeminiCallAndLogsError() {
+    AiQuota stored = AiQuota.builder().tenantId("default").monthlyTokenLimit(10_000L).dailyRequestLimit(250L).build();
+    when(quotaRepository.findById("default")).thenReturn(Optional.of(stored));
+    when(logRepository.aggregateSince(any()))
+        .thenReturn(List.<Object[]>of(new Object[] {5L, 5L, 3_000L, 2_000L, 5_500L, 0L, 10_500L}));
+
+    AiServiceException ex = assertThrows(AiServiceException.class,
+        () -> aiService.generateSlug(new DtoAiTitleRequest("Kota Test")));
+    assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
+    assertTrue(ex.getMessage().contains("Aylık AI token kotası doldu"));
+
+    ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+    verify(logWriter).save(captor.capture());
+    assertEquals("ERROR", captor.getValue().getStatus());
+    assertEquals("MONTHLY_TOKEN_QUOTA_EXCEEDED", captor.getValue().getErrorCode());
+    assertEquals(429, captor.getValue().getHttpStatus());
+  }
+
+  @Test
+  void dailyRequestQuotaExceeded_blocksGeminiCallAndLogsError() {
+    AiQuota stored = AiQuota.builder().tenantId("default").monthlyTokenLimit(1_000_000L).dailyRequestLimit(10L).build();
+    when(quotaRepository.findById("default")).thenReturn(Optional.of(stored));
+    when(logRepository.aggregateSince(any()))
+        .thenReturn(List.<Object[]>of(new Object[] {10L, 10L, 1_000L, 500L, 1_500L, 0L, 3_000L}));
+
+    AiServiceException ex = assertThrows(AiServiceException.class,
+        () -> aiService.generateSlug(new DtoAiTitleRequest("Günlük Kota Test")));
+    assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
+    assertTrue(ex.getMessage().contains("Günlük AI istek kotası doldu"));
+
+    ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+    verify(logWriter).save(captor.capture());
+    assertEquals("ERROR", captor.getValue().getStatus());
+    assertEquals("DAILY_REQUEST_QUOTA_EXCEEDED", captor.getValue().getErrorCode());
+    assertEquals(429, captor.getValue().getHttpStatus());
+  }
 }
+

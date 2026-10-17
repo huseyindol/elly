@@ -2514,6 +2514,49 @@ Tekil AI kullanım log kaydının tüm detaylarını döner.
 ### GET /api/v1/ai/stats
 AI kullanım özet istatistiklerini (`totalCalls`, `successCalls`, `errorCalls`, `totalInputTokens`, `totalOutputTokens`, `totalThoughtTokens`, `totalCachedTokens`, `totalTokens`, `avgDurationMs`) ve `byAction` kırılımını döner.
 
+### GET /api/v1/ai/quota (veya `/api/v1/ai/tenant/{tenantId}/quota`)
+Tenant bazlı aylık AI token kotası, günlük istek kotası, kullanım yüzdeleri, aylık token kırılımı ve tahmini USD maliyetini (`gemini-3.8-flash` tarifesi: input `$0.75 / 1M`, output + thought `$3.75 / 1M`) döner.
+
+**Permission:** `isAuthenticated()`
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "tenantId": "tenant1",
+    "monthlyTokenLimit": 1000000,
+    "monthlyTokensUsed": 124500,
+    "monthlyTokensRemaining": 875500,
+    "monthlyTokenUsedPercent": 12.5,
+    "dailyRequestLimit": 250,
+    "dailyRequestsUsed": 18,
+    "dailyRequestsRemaining": 232,
+    "dailyRequestUsedPercent": 7.2,
+    "dailyTokensUsed": 9400,
+    "monthlyInputTokens": 42000,
+    "monthlyOutputTokens": 18500,
+    "monthlyThoughtTokens": 64000,
+    "monthlyCachedTokens": 3200,
+    "monthlyEstimatedCostUsd": 0.3409,
+    "totalEstimatedCostUsd": 1.125
+  }
+}
+```
+
+### PUT /api/v1/ai/quota/limit (veya `/api/v1/ai/tenant/{tenantId}/quota/limit`)
+Tenant'ın aylık AI token limitini ve günlük istek limitini günceller. Limit aşıldığında AI üretim çağrıları (`slug`, `seo`, `description`, `alt-text`, `blog-info`, `article`) `422 Unprocessable Entity` (`MONTHLY_TOKEN_QUOTA_EXCEEDED` veya `DAILY_REQUEST_QUOTA_EXCEEDED`) döner.
+
+**Permission:** `ROLE_SUPER_ADMIN`
+
+**Body:**
+```json
+{
+  "monthlyTokenLimit": 1000000,
+  "dailyRequestLimit": 250
+}
+```
+
 ---
 
 ## Response Format

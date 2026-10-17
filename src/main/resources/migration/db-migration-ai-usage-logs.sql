@@ -41,4 +41,11 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_status     ON ai_usage_logs (status
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_request_id ON ai_usage_logs (request_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_username   ON ai_usage_logs (username);
 
+CREATE TABLE IF NOT EXISTS ai_quota (
+  tenant_id           VARCHAR(100) PRIMARY KEY,
+  monthly_token_limit BIGINT       NOT NULL DEFAULT 1000000,
+  daily_request_limit INTEGER      NOT NULL DEFAULT 250,
+  updated_at          TIMESTAMP(6) NOT NULL DEFAULT NOW()
+);
+
 COMMIT;

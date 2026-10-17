@@ -125,6 +125,7 @@ jobs:
           # pod'lara ENV olarak verilir, run-time'da decrypt icin kullanilir.
           # 32 ASCII karakter olmali. Key rotation plansa re-encrypt gerekli.
           export AES_SECRET_KEY_B64=$(echo -n "${{ secrets.AES_SECRET_KEY }}" | base64)
+          export GEMINI_API_KEY_B64=$(echo -n "${{ secrets.GEMINI_API_KEY }}" | base64)
 
           # Template'i doldur
           envsubst < k8s/1-secret.template.yaml > k8s/1-secret.yaml

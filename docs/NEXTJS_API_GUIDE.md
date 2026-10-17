@@ -2340,6 +2340,162 @@ Modüle göre izinleri listele.
 
 ---
 
+## AI Content Generation (Google Gemini)
+
+Backend üzerinden Google Gemini Interactions API (`gemini-3.8-flash`) ile içerik üretimi. API anahtarı (`GEMINI_API_KEY`) yalnızca backend'de tutulur; admin panel ve mobil uygulama bu endpoint'leri çağırır.
+
+### POST /api/v1/ai/slug
+Başlıktan SEO dostu URL slug üretir.
+
+**Permission:** `pages:create`, `pages:update`, `posts:create` veya `posts:update`
+
+**Body:**
+```json
+{
+  "title": "Spring Boot 3 ile Multi-Tenant Mimari"
+}
+```
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "slug": "spring-boot-3-ile-multi-tenant-mimari"
+  }
+}
+```
+
+---
+
+### POST /api/v1/ai/seo
+Başlıktan Türkçe SEO başlığı, meta açıklaması ve anahtar kelimeler üretir.
+
+**Permission:** `pages:create`, `pages:update`, `posts:create` veya `posts:update`
+
+**Body:**
+```json
+{
+  "title": "Spring Boot 3 ile Multi-Tenant Mimari"
+}
+```
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "seoTitle": "Spring Boot 3 ile Multi-Tenant Mimari Rehberi",
+    "seoDescription": "Spring Boot 3 üzerinde database-per-tenant mimarisini adım adım öğrenin.",
+    "seoKeywords": "spring boot, multi-tenant, postgresql, java, mimari"
+  }
+}
+```
+
+---
+
+### POST /api/v1/ai/description
+Sayfa, bileşen (component) veya widget adı için 1-2 cümlelik Türkçe açıklama üretir.
+
+**Permission:** `pages:create|update`, `components:create|update` veya `widgets:create|update`
+
+**Body:**
+```json
+{
+  "name": "Hero Banner Bileşeni",
+  "context": "component"
+}
+```
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "description": "Ana sayfada öne çıkan kampanya ve duyuruları sergileyen üst alan bileşenidir."
+  }
+}
+```
+
+---
+
+### POST /api/v1/ai/alt-text
+Banner başlığından SEO dostu görsel alt metni (max 10 kelime) üretir.
+
+**Permission:** `banners:create` veya `banners:update`
+
+**Body:**
+```json
+{
+  "title": "Yaz İndirimi Kampanyası"
+}
+```
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "altText": "Yaz indirimi kampanyası fırsatlarını gösteren tanıtım görseli"
+  }
+}
+```
+
+---
+
+### POST /api/v1/ai/blog-info
+Blog yazısının başlığı ve HTML/metin içeriğinden özet açıklama, kategori, okuma süresi ve kapak görseli prompt'u üretir.
+
+**Permission:** `posts:create` veya `posts:update`
+
+**Body:**
+```json
+{
+  "title": "Spring Boot 3 ile Multi-Tenant Mimari",
+  "content": "<p>Bu yazıda multi-tenant mimariyi inceliyoruz...</p>"
+}
+```
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "description": "Tek bir uygulama ile birden fazla müşteriyi izole veritabanlarında nasıl yönetirsiniz?",
+    "category": "Backend Mimari",
+    "readingTime": "5 dk okuma",
+    "imagePrompt": "modern cloud database architecture diagram glowing nodes professional blog cover"
+  }
+}
+```
+
+---
+
+### POST /api/v1/ai/article
+Konu ve anahtar kelimelerden 3 aşamalı pipeline (Outline → İçerik → HTML Sanitize) ile görsel destekli tam HTML makale üretir.
+
+**Permission:** `posts:create` veya `posts:update`
+
+**Body:**
+```json
+{
+  "topic": "Spring Boot ile Multi-Tenant Mimari",
+  "keywords": "PostgreSQL, Hibernate, RoutingDataSource"
+}
+```
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "html": "<h1>Spring Boot ile Multi-Tenant Mimari</h1><p>...</p>"
+  }
+}
+```
+
+---
+
 ## Response Format
 
 Tüm API'ler şu formatta döner:

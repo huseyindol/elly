@@ -5,6 +5,21 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-10-17] Gemini Interactions API (gemini-3.8-flash) ile Merkezi AI Üretim Endpoint'leri
+**Tip:** 🆕 Özellik | **Boyut:** Orta
+
+### Özet
+Admin panel ve mobil uygulamada kullanılan AI içerik üretimi (slug, SEO, açıklama, alt metin, blog meta bilgileri ve 3 aşamalı makale üretimi) backend'e (`/api/v1/ai/**`) taşındı. Google Gemini Interactions API (`/v1/interactions`, model: `gemini-3.8-flash`) kullanıldı.
+
+### Yeni Dosyalar & Değişiklikler
+- `IAiController` / `AiController`: `POST /api/v1/ai/{slug,seo,description,alt-text,blog-info,article}`
+- `IAiService` / `AiService`: `RestClient` ile Gemini `/v1/interactions` entegrasyonu, hata sanitizasyonu (API key sızıntısı önleme), Jsoup ile HTML strip
+- `DtoAiTitleRequest`, `DtoAiDescriptionRequest`, `DtoAiBlogInfoRequest`, `DtoAiArticleRequest` ve ilgili `DtoAi*Response` sınıfları
+- `application.properties` & `k8s/1-secret.template.yaml`: `GEMINI_API_KEY` ve `app.ai.gemini.*` ayarları
+- `docs/NEXTJS_API_GUIDE.md`: Yeni AI endpoint'lerinin dokümantasyonu
+
+---
+
 ## [2026-05-18] K8s CrashLoopBackOff Çözümü + Chat Paket Refactoring
 **Tip:** 🔧 Bugfix | **Boyut:** Orta
 

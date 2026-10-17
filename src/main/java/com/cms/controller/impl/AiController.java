@@ -1,9 +1,16 @@
 package com.cms.controller.impl;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.cms.controller.IAiController;
@@ -17,6 +24,8 @@ import com.cms.dto.DtoAiDescriptionResponse;
 import com.cms.dto.DtoAiSeoResponse;
 import com.cms.dto.DtoAiSlugResponse;
 import com.cms.dto.DtoAiTitleRequest;
+import com.cms.dto.DtoAiUsageLog;
+import com.cms.dto.DtoAiUsageStats;
 import com.cms.entity.RootEntityResponse;
 import com.cms.service.IAiService;
 
@@ -36,6 +45,8 @@ public class AiController extends BaseController implements IAiController {
       "hasAnyAuthority('banners:create','banners:update')";
   private static final String CAN_EDIT_POSTS =
       "hasAnyAuthority('posts:create','posts:update')";
+  private static final String CAN_READ_AI_LOGS =
+      "hasAnyAuthority('posts:read','pages:read','components:read','widgets:read','banners:read','users:manage')";
 
   private final IAiService aiService;
 
@@ -81,5 +92,31 @@ public class AiController extends BaseController implements IAiController {
   @PreAuthorize(CAN_EDIT_POSTS)
   public RootEntityResponse<DtoAiArticleResponse> generateArticle(@Valid @RequestBody DtoAiArticleRequest request) {
     return ok(aiService.generateArticle(request));
+  }
+
+  @Override
+  @GetMapping("/logs")
+  @PreAuthorize(CAN_READ_AI_LOGS)
+  public RootEntityResponse<Page<DtoAiUsageLog>> listUsageLogs(
+      @RequestParam(value = "action", required = false) String action,
+      @RequestParam(value = "status", required = false) String status,
+      @RequestParam(value = "username", required = false) String username,
+      @RequestParam(value = "q", required = false) String q,
+      @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+    return ok(aiService.listUsageLogs(action, status, username, q, pageable));
+  }
+
+  @Override
+  @GetMapping("/logs/{id}")
+  @PreAuthorize(CAN_READ_AI_LOGS)
+  public RootEntityResponse<DtoAiUsageLog> getUsageLogById(@PathVariable("id") Long id) {
+    return ok(aiService.getUsageLogById(id));
+  }
+
+  @Override
+  @GetMapping("/stats")
+  @PreAuthorize(CAN_READ_AI_LOGS)
+  public RootEntityResponse<DtoAiUsageStats> getUsageStats() {
+    return ok(aiService.getUsageStats());
   }
 }

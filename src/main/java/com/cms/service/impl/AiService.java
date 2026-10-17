@@ -1,20 +1,29 @@
 package com.cms.service.impl;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+import com.cms.config.TenantContext;
 import com.cms.dto.DtoAiAltTextResponse;
 import com.cms.dto.DtoAiArticleRequest;
 import com.cms.dto.DtoAiArticleResponse;
@@ -25,8 +34,14 @@ import com.cms.dto.DtoAiDescriptionResponse;
 import com.cms.dto.DtoAiSeoResponse;
 import com.cms.dto.DtoAiSlugResponse;
 import com.cms.dto.DtoAiTitleRequest;
+import com.cms.dto.DtoAiUsageLog;
+import com.cms.dto.DtoAiUsageStats;
+import com.cms.dto.DtoAiUsageStats.DtoAiActionStat;
+import com.cms.entity.AiUsageLog;
 import com.cms.exception.BadRequestException;
 import com.cms.exception.BaseException;
+import com.cms.exception.ResourceNotFoundException;
+import com.cms.repository.AiUsageLogRepository;
 import com.cms.service.IAiService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +52,7 @@ import lombok.extern.slf4j.Slf4j;
  * Google Gemini Interactions API (/v1/interactions) üzerinden AI içerik üretim servisi.
  * Model varsayılan olarak {@code gemini-3.8-flash} kullanır.
  * API anahtarı sadece backend'de tutulur ve hata mesajlarında asla dışarı sızdırılmaz.
+ * Her Gemini alt çağrısı (istek, prompt, yanıt, token kırılımı, süre, durum) ai_usage_logs tablosuna kaydedilir.
  */
 @Service
 @Slf4j
@@ -49,15 +65,25 @@ public class AiService implements IAiService {
   private final RestClient restClient;
   private final String apiKey;
   private final String modelName;
+  private final AiUsageLogRepository aiUsageLogRepository;
+  private final AiUsageLogWriter aiUsageLogWriter;
 
   @Autowired
   public AiService(
       ObjectMapper objectMapper,
+      AiUsageLogRepository aiUsageLogRepository,
+      AiUsageLogWriter aiUsageLogWriter,
       @Value("${app.ai.gemini.api-key:}") String apiKey,
       @Value("${app.ai.gemini.model:gemini-3.8-flash}") String modelName,
       @Value("${app.ai.gemini.connect-timeout-ms:10000}") int connectTimeoutMs,
       @Value("${app.ai.gemini.read-timeout-ms:90000}") int readTimeoutMs) {
-    this(objectMapper, createDefaultRestClient(connectTimeoutMs, readTimeoutMs), apiKey, modelName);
+    this(
+        objectMapper,
+        createDefaultRestClient(connectTimeoutMs, readTimeoutMs),
+        apiKey,
+        modelName,
+        aiUsageLogRepository,
+        aiUsageLogWriter);
   }
 
   public AiService(
@@ -65,10 +91,22 @@ public class AiService implements IAiService {
       RestClient restClient,
       String apiKey,
       String modelName) {
+    this(objectMapper, restClient, apiKey, modelName, null, null);
+  }
+
+  public AiService(
+      ObjectMapper objectMapper,
+      RestClient restClient,
+      String apiKey,
+      String modelName,
+      AiUsageLogRepository aiUsageLogRepository,
+      AiUsageLogWriter aiUsageLogWriter) {
     this.objectMapper = objectMapper;
     this.restClient = restClient;
     this.apiKey = apiKey != null ? apiKey.trim() : "";
     this.modelName = (modelName != null && !modelName.isBlank()) ? modelName.trim() : "gemini-3.8-flash";
+    this.aiUsageLogRepository = aiUsageLogRepository;
+    this.aiUsageLogWriter = aiUsageLogWriter;
   }
 
   private static RestClient createDefaultRestClient(int connectTimeoutMs, int readTimeoutMs) {
@@ -95,8 +133,9 @@ public class AiService implements IAiService {
 
         Başlık: %s""".formatted(title);
 
-    String raw = callGemini(prompt);
-    String slug = raw.trim()
+    GeminiCallResult call = callGemini(
+        new GeminiCallSpec(newRequestId(), 1, "/api/v1/ai/slug", "slug", toJsonSafe(Map.of("title", title)), prompt));
+    String slug = call.text().trim()
         .replace('İ', 'i')
         .replace('I', 'i')
         .replace('ı', 'i')
@@ -120,10 +159,13 @@ public class AiService implements IAiService {
       slug = slug.substring(0, 80).replaceAll("-+$", "");
     }
     if (slug.isBlank()) {
+      recordParseFailure(call.logEntry(), "EMPTY_SLUG", "AI geçerli bir slug üretemedi.");
       throw new AiServiceException("AI geçerli bir slug üretemedi.");
     }
 
-    return DtoAiSlugResponse.builder().slug(slug).build();
+    DtoAiSlugResponse result = DtoAiSlugResponse.builder().slug(slug).build();
+    recordSuccess(call.logEntry(), toJsonSafe(result));
+    return result;
   }
 
   @Override
@@ -142,16 +184,21 @@ public class AiService implements IAiService {
           "seoKeywords": "anahtar1, anahtar2, anahtar3, anahtar4, anahtar5"
         }""".formatted(title);
 
-    String raw = stripCodeFences(callGemini(prompt));
+    GeminiCallResult call = callGemini(
+        new GeminiCallSpec(newRequestId(), 1, "/api/v1/ai/seo", "seo", toJsonSafe(Map.of("title", title)), prompt));
+    String raw = stripCodeFences(call.text());
     try {
       JsonNode node = objectMapper.readTree(raw);
-      return DtoAiSeoResponse.builder()
+      DtoAiSeoResponse result = DtoAiSeoResponse.builder()
           .seoTitle(node.path("seoTitle").asText("").trim())
           .seoDescription(node.path("seoDescription").asText("").trim())
           .seoKeywords(node.path("seoKeywords").asText("").trim())
           .build();
+      recordSuccess(call.logEntry(), toJsonSafe(result));
+      return result;
     } catch (Exception e) {
       log.error("[AiService] SEO JSON ayrıştırma hatası", e);
+      recordParseFailure(call.logEntry(), "PARSE_ERROR", "SEO alanları üretilirken yanıt ayrıştırılamadı.");
       throw new AiServiceException("SEO alanları üretilirken yanıt ayrıştırılamadı.");
     }
   }
@@ -173,8 +220,17 @@ public class AiService implements IAiService {
         - Türkçe yaz
         - Sadece açıklamayı döndür, başka hiçbir şey yazma""".formatted(context, name);
 
-    String description = callGemini(prompt).trim();
-    return DtoAiDescriptionResponse.builder().description(description).build();
+    GeminiCallResult call = callGemini(new GeminiCallSpec(
+        newRequestId(),
+        1,
+        "/api/v1/ai/description",
+        "description",
+        toJsonSafe(Map.of("name", name, "context", context)),
+        prompt));
+    String description = call.text().trim();
+    DtoAiDescriptionResponse result = DtoAiDescriptionResponse.builder().description(description).build();
+    recordSuccess(call.logEntry(), toJsonSafe(result));
+    return result;
   }
 
   @Override
@@ -192,8 +248,12 @@ public class AiService implements IAiService {
         - Türkçe yaz
         - Sadece alt metni döndür, başka hiçbir şey yazma""".formatted(title);
 
-    String altText = callGemini(prompt).trim();
-    return DtoAiAltTextResponse.builder().altText(altText).build();
+    GeminiCallResult call = callGemini(new GeminiCallSpec(
+        newRequestId(), 1, "/api/v1/ai/alt-text", "alt-text", toJsonSafe(Map.of("title", title)), prompt));
+    String altText = call.text().trim();
+    DtoAiAltTextResponse result = DtoAiAltTextResponse.builder().altText(altText).build();
+    recordSuccess(call.logEntry(), toJsonSafe(result));
+    return result;
   }
 
   @Override
@@ -229,17 +289,27 @@ public class AiService implements IAiService {
           "imagePrompt": "..."
         }""".formatted(title, plainContent);
 
-    String raw = stripCodeFences(callGemini(prompt));
+    GeminiCallResult call = callGemini(new GeminiCallSpec(
+        newRequestId(),
+        1,
+        "/api/v1/ai/blog-info",
+        "blog-info",
+        toJsonSafe(Map.of("title", title, "contentPreview", truncate(plainContent, 500), "contentChars", plainContent.length())),
+        prompt));
+    String raw = stripCodeFences(call.text());
     try {
       JsonNode node = objectMapper.readTree(raw);
-      return DtoAiBlogInfoResponse.builder()
+      DtoAiBlogInfoResponse result = DtoAiBlogInfoResponse.builder()
           .description(node.path("description").asText("").trim())
           .category(node.path("category").asText("").trim())
           .readingTime(node.path("readingTime").asText("").trim())
           .imagePrompt(node.path("imagePrompt").asText("").trim())
           .build();
+      recordSuccess(call.logEntry(), toJsonSafe(result));
+      return result;
     } catch (Exception e) {
       log.error("[AiService] BlogInfo JSON ayrıştırma hatası", e);
+      recordParseFailure(call.logEntry(), "PARSE_ERROR", "Blog bilgileri üretilirken yanıt ayrıştırılamadı.");
       throw new AiServiceException("Blog bilgileri üretilirken yanıt ayrıştırılamadı.");
     }
   }
@@ -253,6 +323,8 @@ public class AiService implements IAiService {
     String keywords = request.getKeywords() != null ? request.getKeywords().trim() : "";
 
     log.info("[AiService] 3-aşamalı makale üretimi başlatıldı: topicLen={}", topic.length());
+    String requestId = newRequestId();
+    String userInputJson = toJsonSafe(Map.of("topic", topic, "keywords", keywords));
 
     // Step 1: Outline Agent
     String outlinePrompt = """
@@ -277,7 +349,10 @@ public class AiService implements IAiService {
         Yanıtını Türkçe ver ve yalnızca yapılandırılmış planı döndür, ek açıklama yapma."""
         .formatted(topic, keywords.isEmpty() ? "Belirtilmedi" : keywords);
 
-    String outline = callGemini(outlinePrompt);
+    GeminiCallResult outlineCall = callGemini(
+        new GeminiCallSpec(requestId, 1, "/api/v1/ai/article", "article:outline", userInputJson, outlinePrompt));
+    String outline = outlineCall.text();
+    recordSuccess(outlineCall.logEntry(), outline);
     log.info("[AiService] Makale outline hazırlandı");
 
     // Step 2: Full Article Agent
@@ -313,7 +388,10 @@ public class AiService implements IAiService {
         Herhangi bir markdown, ek açıklama veya kod bloğu ekleme — sadece saf HTML döndür."""
         .formatted(outline);
 
-    String rawHtml = callGemini(articlePrompt);
+    GeminiCallResult draftCall = callGemini(
+        new GeminiCallSpec(requestId, 2, "/api/v1/ai/article", "article:draft", userInputJson, articlePrompt));
+    String rawHtml = draftCall.text();
+    recordSuccess(draftCall.logEntry(), rawHtml);
     log.info("[AiService] Ham makale HTML üretildi");
 
     // Step 3: Frontend Review & Sanitization Agent
@@ -340,22 +418,138 @@ public class AiService implements IAiService {
         ÖNEMLİ: Yalnızca temizlenmiş HTML döndür. Açıklama, yorum, markdown veya kod bloğu ekleme."""
         .formatted(rawHtml);
 
-    String cleanHtml = stripCodeFences(callGemini(reviewPrompt));
+    GeminiCallResult sanitizeCall = callGemini(
+        new GeminiCallSpec(requestId, 3, "/api/v1/ai/article", "article:sanitize", userInputJson, reviewPrompt));
+    String cleanHtml = stripCodeFences(sanitizeCall.text());
+    recordSuccess(sanitizeCall.logEntry(), cleanHtml);
     log.info("[AiService] Makale üretimi tamamlandı");
     return DtoAiArticleResponse.builder().html(cleanHtml).build();
   }
 
+  // ==================== REPORTING & LOG LISTING ====================
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<DtoAiUsageLog> listUsageLogs(
+      String action, String status, String username, String q, Pageable pageable) {
+    if (aiUsageLogRepository == null) {
+      return Page.empty(pageable);
+    }
+    return aiUsageLogRepository
+        .search(trimToNull(action), trimToNull(status), trimToNull(username), trimToNull(q), pageable)
+        .map(AiService::toDto);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public DtoAiUsageLog getUsageLogById(Long id) {
+    if (aiUsageLogRepository == null) {
+      throw new ResourceNotFoundException("AI kullanım logu bulunamadı: " + id);
+    }
+    AiUsageLog entity = aiUsageLogRepository
+        .findById(id)
+        .orElseThrow(() -> new ResourceNotFoundException("AI kullanım logu bulunamadı: " + id));
+    return toDto(entity);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public DtoAiUsageStats getUsageStats() {
+    if (aiUsageLogRepository == null) {
+      return DtoAiUsageStats.builder().byAction(List.of()).build();
+    }
+    List<Object[]> totalsRows = aiUsageLogRepository.aggregateTotals();
+    Object[] totals = (totalsRows != null && !totalsRows.isEmpty()) ? totalsRows.get(0) : null;
+
+    long totalCalls = toLong(totals, 0);
+    long successCalls = toLong(totals, 1);
+    long errorCalls = toLong(totals, 2);
+    long totalInputTokens = toLong(totals, 3);
+    long totalOutputTokens = toLong(totals, 4);
+    long totalThoughtTokens = toLong(totals, 5);
+    long totalCachedTokens = toLong(totals, 6);
+    long totalTokens = toLong(totals, 7);
+    double avgDurationMs = Math.round(toDouble(totals, 8) * 10.0) / 10.0;
+
+    List<DtoAiActionStat> byAction = new ArrayList<>();
+    for (Object[] row : aiUsageLogRepository.aggregateByAction()) {
+      byAction.add(DtoAiActionStat.builder()
+          .action(row[0] != null ? row[0].toString() : "")
+          .endpoint(row[1] != null ? row[1].toString() : "")
+          .callCount(toLong(row, 2))
+          .successCount(toLong(row, 3))
+          .errorCount(toLong(row, 4))
+          .inputTokens(toLong(row, 5))
+          .outputTokens(toLong(row, 6))
+          .thoughtTokens(toLong(row, 7))
+          .totalTokens(toLong(row, 8))
+          .avgDurationMs(Math.round(toDouble(row, 9) * 10.0) / 10.0)
+          .build());
+    }
+
+    return DtoAiUsageStats.builder()
+        .totalCalls(totalCalls)
+        .successCalls(successCalls)
+        .errorCalls(errorCalls)
+        .totalInputTokens(totalInputTokens)
+        .totalOutputTokens(totalOutputTokens)
+        .totalThoughtTokens(totalThoughtTokens)
+        .totalCachedTokens(totalCachedTokens)
+        .totalTokens(totalTokens)
+        .avgDurationMs(avgDurationMs)
+        .byAction(byAction)
+        .build();
+  }
+
   // ==================== INTERNAL HELPERS ====================
 
-  private String callGemini(String prompt) {
+  private record GeminiCallSpec(
+      String requestId,
+      int stepOrder,
+      String endpoint,
+      String action,
+      String userInput,
+      String prompt) {}
+
+  private record GeminiCallResult(String text, AiUsageLog logEntry) {}
+
+  private GeminiCallResult callGemini(GeminiCallSpec spec) {
+    long startNanos = System.nanoTime();
+    AiUsageLog entry = AiUsageLog.builder()
+        .requestId(spec.requestId())
+        .stepOrder(spec.stepOrder())
+        .endpoint(spec.endpoint())
+        .action(spec.action())
+        .model(modelName)
+        .username(resolveCurrentUsername())
+        .tenantId(TenantContext.getTenantId())
+        .userInput(spec.userInput())
+        .promptText(spec.prompt())
+        .promptChars(spec.prompt() != null ? spec.prompt().length() : 0)
+        .responseChars(0)
+        .inputTokens(0)
+        .outputTokens(0)
+        .thoughtTokens(0)
+        .cachedTokens(0)
+        .totalTokens(0)
+        .durationMs(0L)
+        .status("ERROR")
+        .build();
+
     if (apiKey.isBlank()) {
+      recordError(
+          entry,
+          startNanos,
+          null,
+          "API_KEY_MISSING",
+          "Gemini API anahtarı yapılandırılmamış. Lütfen sistem yöneticisiyle iletişime geçin.");
       throw new AiServiceException(
           "Gemini API anahtarı yapılandırılmamış. Lütfen sistem yöneticisiyle iletişime geçin.");
     }
 
     Map<String, Object> body = new LinkedHashMap<>();
     body.put("model", modelName);
-    body.put("input", prompt);
+    body.put("input", spec.prompt());
     body.put("store", false);
 
     try {
@@ -368,40 +562,115 @@ public class AiService implements IAiService {
           .retrieve()
           .body(String.class);
 
+      long elapsedMs = Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+      entry.setDurationMs(elapsedMs);
+      entry.setHttpStatus(200);
+
       if (rawResponse == null || rawResponse.isBlank()) {
+        recordError(entry, startNanos, 200, "EMPTY_RESPONSE", "AI servisinden boş yanıt döndü.");
         throw new AiServiceException("AI servisinden boş yanıt döndü.");
       }
 
       JsonNode root = objectMapper.readTree(rawResponse);
+      populateTokenUsage(entry, root);
+
       String extracted = extractTextFromInteraction(root);
       if (extracted == null || extracted.isBlank()) {
+        recordError(entry, startNanos, 200, "EMPTY_TEXT", "AI servisinden metin çıktısı alınamadı.");
         throw new AiServiceException("AI servisinden metin çıktısı alınamadı.");
       }
-      return extracted;
+
+      entry.setResponseText(extracted);
+      entry.setResponseChars(extracted.length());
+      entry.setStatus("SUCCESS");
+      return new GeminiCallResult(extracted, entry);
 
     } catch (RestClientResponseException e) {
       int status = e.getStatusCode().value();
       log.error("[AiService] Gemini API HTTP hatası: status={}", status);
       if (status == 400 || status == 401 || status == 403) {
         String bodyStr = e.getResponseBodyAsString();
-        if (bodyStr != null && (bodyStr.contains("API_KEY") || bodyStr.contains("api key") || status == 401 || status == 403)) {
-          throw new AiServiceException(
-              "Gemini API anahtarı geçersiz veya yetkisiz. Lütfen sistem yöneticisiyle iletişime geçin.");
+        if (bodyStr != null
+            && (bodyStr.contains("API_KEY") || bodyStr.contains("api key") || status == 401 || status == 403)) {
+          String msg = "Gemini API anahtarı geçersiz veya yetkisiz. Lütfen sistem yöneticisiyle iletişime geçin.";
+          recordError(entry, startNanos, status, "INVALID_API_KEY", msg);
+          throw new AiServiceException(msg);
         }
       }
       if (status == 429) {
-        throw new AiServiceException("AI istek kotası aşıldı. Lütfen biraz bekleyip tekrar deneyin.");
+        String msg = "AI istek kotası aşıldı. Lütfen biraz bekleyip tekrar deneyin.";
+        recordError(entry, startNanos, status, "RATE_LIMIT", msg);
+        throw new AiServiceException(msg);
       }
-      throw new AiServiceException("AI üretimi sırasında bir hata oluştu (HTTP " + status + ").");
+      String msg = "AI üretimi sırasında bir hata oluştu (HTTP " + status + ").";
+      recordError(entry, startNanos, status, "HTTP_" + status, msg);
+      throw new AiServiceException(msg);
     } catch (RestClientException e) {
       log.error("[AiService] Gemini API bağlantı hatası: {}", e.getClass().getSimpleName());
-      throw new AiServiceException("AI servisine şu anda ulaşılamıyor. Lütfen tekrar deneyin.");
+      String msg = "AI servisine şu anda ulaşılamıyor. Lütfen tekrar deneyin.";
+      recordError(entry, startNanos, null, "NETWORK_ERROR", msg);
+      throw new AiServiceException(msg);
     } catch (BaseException e) {
       throw e;
     } catch (Exception e) {
       log.error("[AiService] Beklenmeyen AI hatası: {}", e.getClass().getSimpleName());
-      throw new AiServiceException("Üretim sırasında beklenmeyen bir hata oluştu.");
+      String msg = "Üretim sırasında beklenmeyen bir hata oluştu.";
+      recordError(entry, startNanos, null, "UNEXPECTED_ERROR", msg);
+      throw new AiServiceException(msg);
     }
+  }
+
+  private void recordSuccess(AiUsageLog entry, String parsedOutput) {
+    if (aiUsageLogWriter == null || entry == null) {
+      return;
+    }
+    entry.setStatus("SUCCESS");
+    entry.setParsedOutput(parsedOutput);
+    aiUsageLogWriter.save(entry);
+  }
+
+  private void recordParseFailure(AiUsageLog entry, String errorCode, String errorMessage) {
+    if (aiUsageLogWriter == null || entry == null) {
+      return;
+    }
+    entry.setStatus("ERROR");
+    entry.setErrorCode(errorCode);
+    entry.setErrorMessage(errorMessage);
+    aiUsageLogWriter.save(entry);
+  }
+
+  private void recordError(
+      AiUsageLog entry, long startNanos, Integer httpStatus, String errorCode, String errorMessage) {
+    if (aiUsageLogWriter == null || entry == null) {
+      return;
+    }
+    entry.setDurationMs(Duration.ofNanos(System.nanoTime() - startNanos).toMillis());
+    entry.setHttpStatus(httpStatus);
+    entry.setStatus("ERROR");
+    entry.setErrorCode(errorCode);
+    entry.setErrorMessage(errorMessage);
+    aiUsageLogWriter.save(entry);
+  }
+
+  static void populateTokenUsage(AiUsageLog entry, JsonNode root) {
+    if (entry == null || root == null) {
+      return;
+    }
+    JsonNode usage = root.path("usage");
+    if (usage.isMissingNode() || usage.isNull()) {
+      return;
+    }
+    int input = usage.path("total_input_tokens").asInt(usage.path("promptTokenCount").asInt(0));
+    int output = usage.path("total_output_tokens").asInt(usage.path("candidatesTokenCount").asInt(0));
+    int thought = usage.path("total_thought_tokens").asInt(usage.path("thoughtsTokenCount").asInt(0));
+    int cached = usage.path("total_cached_tokens").asInt(usage.path("cachedContentTokenCount").asInt(0));
+    int total = usage.path("total_tokens").asInt(usage.path("totalTokenCount").asInt(input + output + thought));
+
+    entry.setInputTokens(input);
+    entry.setOutputTokens(output);
+    entry.setThoughtTokens(thought);
+    entry.setCachedTokens(cached);
+    entry.setTotalTokens(total);
   }
 
   static String extractTextFromInteraction(JsonNode root) {
@@ -439,6 +708,90 @@ public class AiService implements IAiService {
       }
     }
     return null;
+  }
+
+  private static DtoAiUsageLog toDto(AiUsageLog entity) {
+    return DtoAiUsageLog.builder()
+        .id(entity.getId())
+        .createdAt(entity.getCreatedAt())
+        .requestId(entity.getRequestId())
+        .stepOrder(entity.getStepOrder())
+        .endpoint(entity.getEndpoint())
+        .action(entity.getAction())
+        .model(entity.getModel())
+        .username(entity.getUsername())
+        .tenantId(entity.getTenantId())
+        .userInput(entity.getUserInput())
+        .promptText(entity.getPromptText())
+        .responseText(entity.getResponseText())
+        .parsedOutput(entity.getParsedOutput())
+        .promptChars(entity.getPromptChars())
+        .responseChars(entity.getResponseChars())
+        .inputTokens(entity.getInputTokens())
+        .outputTokens(entity.getOutputTokens())
+        .thoughtTokens(entity.getThoughtTokens())
+        .cachedTokens(entity.getCachedTokens())
+        .totalTokens(entity.getTotalTokens())
+        .durationMs(entity.getDurationMs())
+        .status(entity.getStatus())
+        .httpStatus(entity.getHttpStatus())
+        .errorCode(entity.getErrorCode())
+        .errorMessage(entity.getErrorMessage())
+        .build();
+  }
+
+  private static String resolveCurrentUsername() {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
+      return null;
+    }
+    return auth.getName();
+  }
+
+  private String toJsonSafe(Object obj) {
+    try {
+      return objectMapper.writeValueAsString(obj);
+    } catch (Exception e) {
+      return obj != null ? obj.toString() : null;
+    }
+  }
+
+  private static String newRequestId() {
+    return UUID.randomUUID().toString();
+  }
+
+  private static String trimToNull(String value) {
+    if (value == null || value.trim().isEmpty()) {
+      return null;
+    }
+    return value.trim();
+  }
+
+  private static String truncate(String text, int maxLen) {
+    if (text == null || text.length() <= maxLen) {
+      return text;
+    }
+    return text.substring(0, maxLen) + "...";
+  }
+
+  private static long toLong(Object[] row, int idx) {
+    if (row == null || idx >= row.length || row[idx] == null) {
+      return 0L;
+    }
+    if (row[idx] instanceof Number n) {
+      return n.longValue();
+    }
+    return Long.parseLong(row[idx].toString());
+  }
+
+  private static double toDouble(Object[] row, int idx) {
+    if (row == null || idx >= row.length || row[idx] == null) {
+      return 0.0;
+    }
+    if (row[idx] instanceof Number n) {
+      return n.doubleValue();
+    }
+    return Double.parseDouble(row[idx].toString());
   }
 
   private static String requireNonBlank(String value, String message) {

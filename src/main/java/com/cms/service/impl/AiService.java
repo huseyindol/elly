@@ -58,7 +58,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AiService implements IAiService {
 
-  private static final String INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1/interactions";
+  private static final String INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
   private static final int MAX_PLAIN_CONTENT_LEN = 4000;
 
   private final ObjectMapper objectMapper;
@@ -587,22 +587,55 @@ public class AiService implements IAiService {
 
     } catch (RestClientResponseException e) {
       int status = e.getStatusCode().value();
-      log.error("[AiService] Gemini API HTTP hatası: status={}", status);
+      String rawErrorBody = sanitizeErrorText(e.getResponseBodyAsString());
+      if (rawErrorBody != null && !rawErrorBody.isBlank()) {
+        entry.setResponseText(rawErrorBody);
+        entry.setResponseChars(rawErrorBody.length());
+      }
+      String upstreamDetail = extractUpstreamErrorMessage(rawErrorBody);
+      log.error("[AiService] Gemini API HTTP hatası: status={}, detail={}", status, upstreamDetail);
+
+      if (status == 402) {
+        String msg =
+            "Gemini API ön ödemeli (prepay) kredisi tükenmiş (HTTP 402). Lütfen Google AI Studio (https://ai.studio/projects) üzerinden kredi yükleyin veya faturalandırmasız (Free Tier) bir proje API anahtarı kullanın.";
+        recordError(
+            entry,
+            startNanos,
+            status,
+            "PREPAY_CREDITS_DEPLETED",
+            upstreamDetail != null ? msg + " (" + upstreamDetail + ")" : msg);
+        throw new AiServiceException(msg);
+      }
       if (status == 400 || status == 401 || status == 403) {
-        String bodyStr = e.getResponseBodyAsString();
-        if (bodyStr != null
-            && (bodyStr.contains("API_KEY") || bodyStr.contains("api key") || status == 401 || status == 403)) {
+        if (rawErrorBody != null
+            && (rawErrorBody.contains("API_KEY")
+                || rawErrorBody.toLowerCase().contains("api key")
+                || status == 401
+                || status == 403)) {
           String msg = "Gemini API anahtarı geçersiz veya yetkisiz. Lütfen sistem yöneticisiyle iletişime geçin.";
-          recordError(entry, startNanos, status, "INVALID_API_KEY", msg);
+          recordError(
+              entry,
+              startNanos,
+              status,
+              "INVALID_API_KEY",
+              upstreamDetail != null ? msg + " (" + upstreamDetail + ")" : msg);
           throw new AiServiceException(msg);
         }
       }
       if (status == 429) {
         String msg = "AI istek kotası aşıldı. Lütfen biraz bekleyip tekrar deneyin.";
-        recordError(entry, startNanos, status, "RATE_LIMIT", msg);
+        recordError(
+            entry,
+            startNanos,
+            status,
+            "RATE_LIMIT",
+            upstreamDetail != null ? msg + " (" + upstreamDetail + ")" : msg);
         throw new AiServiceException(msg);
       }
-      String msg = "AI üretimi sırasında bir hata oluştu (HTTP " + status + ").";
+      String msg =
+          upstreamDetail != null
+              ? "AI üretimi sırasında hata oluştu (HTTP " + status + "): " + upstreamDetail
+              : "AI üretimi sırasında bir hata oluştu (HTTP " + status + ").";
       recordError(entry, startNanos, status, "HTTP_" + status, msg);
       throw new AiServiceException(msg);
     } catch (RestClientException e) {
@@ -822,9 +855,38 @@ public class AiService implements IAiService {
         .trim();
   }
 
+  private String sanitizeErrorText(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    String cleaned = raw.trim();
+    if (!apiKey.isBlank()) {
+      cleaned = cleaned.replace(apiKey, "[REDACTED_API_KEY]");
+    }
+    cleaned = cleaned.replaceAll("AIza[0-9A-Za-z_\\-]{20,}", "[REDACTED_API_KEY]");
+    cleaned = cleaned.replaceAll("AQ\\.[0-9A-Za-z_\\-]{20,}", "[REDACTED_API_KEY]");
+    return cleaned;
+  }
+
+  private String extractUpstreamErrorMessage(String sanitizedBody) {
+    if (sanitizedBody == null || sanitizedBody.isBlank()) {
+      return null;
+    }
+    try {
+      JsonNode root = objectMapper.readTree(sanitizedBody);
+      JsonNode errNode = root.isArray() && !root.isEmpty() ? root.get(0).path("error") : root.path("error");
+      if (!errNode.isMissingNode() && errNode.hasNonNull("message")) {
+        return truncate(errNode.path("message").asText("").trim(), 400);
+      }
+    } catch (Exception ignored) {
+      // ignore non-json error body
+    }
+    return null;
+  }
+
   public static class AiServiceException extends BaseException {
     public AiServiceException(String message) {
-      super(message, HttpStatus.BAD_GATEWAY, "AI_GENERATION_FAILED");
+      super(message, HttpStatus.UNPROCESSABLE_ENTITY, "AI_GENERATION_FAILED");
     }
   }
 }

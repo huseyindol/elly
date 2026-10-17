@@ -46,7 +46,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 class AiServiceTest {
 
-  private static final String INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1/interactions";
+  private static final String INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
   private static final String TEST_API_KEY = "test-secret-api-key-123";
 
   private ObjectMapper objectMapper;
@@ -230,6 +230,27 @@ class AiServiceTest {
     assertEquals("ERROR", captor.getValue().getStatus());
     assertEquals("INVALID_API_KEY", captor.getValue().getErrorCode());
     assertEquals(400, captor.getValue().getHttpStatus());
+    assertTrue(!captor.getValue().getResponseText().contains(TEST_API_KEY));
+  }
+
+  @Test
+  void prepayCreditsDepletedHttp402_returns422AndLogsDetailedError() {
+    mockServer.expect(requestTo(INTERACTIONS_URL))
+        .andRespond(withStatus(HttpStatus.PAYMENT_REQUIRED)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body("[{\"error\":{\"code\":402,\"message\":\"Your prepayment credits are depleted.\",\"status\":\"RESOURCE_EXHAUSTED\"}}]"));
+
+    AiServiceException ex = assertThrows(AiServiceException.class,
+        () -> aiService.generateSlug(new DtoAiTitleRequest("Test")));
+    assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, ex.getStatus());
+    assertTrue(ex.getMessage().contains("prepay"));
+
+    ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
+    verify(logWriter).save(captor.capture());
+    assertEquals("ERROR", captor.getValue().getStatus());
+    assertEquals("PREPAY_CREDITS_DEPLETED", captor.getValue().getErrorCode());
+    assertEquals(402, captor.getValue().getHttpStatus());
+    assertTrue(captor.getValue().getErrorMessage().contains("Your prepayment credits are depleted."));
   }
 
   @Test

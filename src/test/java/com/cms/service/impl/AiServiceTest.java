@@ -187,29 +187,26 @@ class AiServiceTest {
   }
 
   @Test
-  void generateArticle_runsThreeStepPipelineAndLogsThreeCorrelatedRows() {
+  void generateArticle_runsSingleStepPipelineAndSanitizesHtmlWithJsoup() {
     mockServer.expect(requestTo(INTERACTIONS_URL))
-        .andRespond(withSuccess(interactionJson("\"1. Giriş\\n2. Mimari\""), MediaType.APPLICATION_JSON));
-    mockServer.expect(requestTo(INTERACTIONS_URL))
-        .andRespond(withSuccess(interactionJson("\"<h1>Başlık</h1><p>Ham içerik</p>\""), MediaType.APPLICATION_JSON));
-    mockServer.expect(requestTo(INTERACTIONS_URL))
-        .andRespond(withSuccess(interactionJson("\"```html\\n<h1>Başlık</h1><p>Temiz içerik</p>\\n```\""), MediaType.APPLICATION_JSON));
+        .andRespond(withSuccess(
+            interactionJson("\"```html\\n<h1>Başlık</h1><script>alert(1)</script><p class=\\\"x\\\">Temiz içerik</p><img src=\\\"https://image.pollinations.ai/prompt/modern%20cloud\\\" /><img src=\\\"https://evil.example.com/x.png\\\" />\\n```\""),
+            MediaType.APPLICATION_JSON));
 
     DtoAiArticleResponse res = aiService.generateArticle(new DtoAiArticleRequest("Spring Boot Mimari", "java, spring"));
-    assertEquals("<h1>Başlık</h1><p>Temiz içerik</p>", res.getHtml());
+    assertTrue(res.getHtml().contains("<h1>Başlık</h1>"));
+    assertTrue(res.getHtml().contains("<p>Temiz içerik</p>"));
+    assertTrue(res.getHtml().contains("https://image.pollinations.ai/prompt/modern%20cloud"));
+    assertTrue(!res.getHtml().contains("script"));
+    assertTrue(!res.getHtml().contains("evil.example.com"));
     mockServer.verify();
 
     ArgumentCaptor<AiUsageLog> captor = ArgumentCaptor.forClass(AiUsageLog.class);
-    verify(logWriter, times(3)).save(captor.capture());
-    List<AiUsageLog> rows = captor.getAllValues();
-    assertEquals("article:outline", rows.get(0).getAction());
-    assertEquals(1, rows.get(0).getStepOrder());
-    assertEquals("article:draft", rows.get(1).getAction());
-    assertEquals(2, rows.get(1).getStepOrder());
-    assertEquals("article:sanitize", rows.get(2).getAction());
-    assertEquals(3, rows.get(2).getStepOrder());
-    assertEquals(rows.get(0).getRequestId(), rows.get(1).getRequestId());
-    assertEquals(rows.get(1).getRequestId(), rows.get(2).getRequestId());
+    verify(logWriter, times(1)).save(captor.capture());
+    AiUsageLog saved = captor.getValue();
+    assertEquals("article", saved.getAction());
+    assertEquals(1, saved.getStepOrder());
+    assertEquals("SUCCESS", saved.getStatus());
   }
 
   @Test

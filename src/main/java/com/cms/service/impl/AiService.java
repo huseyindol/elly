@@ -11,6 +11,9 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.safety.Safelist;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -348,107 +351,42 @@ public class AiService implements IAiService {
     }
     String keywords = request.getKeywords() != null ? request.getKeywords().trim() : "";
 
-    log.info("[AiService] 3-aşamalı makale üretimi başlatıldı: topicLen={}", topic.length());
+    log.info("[AiService] Tek aşamalı makale üretimi başlatıldı: topicLen={}", topic.length());
     String requestId = newRequestId();
     String userInputJson = toJsonSafe(Map.of("topic", topic, "keywords", keywords));
 
-    // Step 1: Outline Agent
-    String outlinePrompt = """
-        Sen bir makale planlama ve içerik stratejisi uzmanısın.
-        Görevin: Verilen ham konu ve anahtar kelimeleri alarak, AI'ın derinlemesine, görsel destekli ve odaklı bir makale yazabilmesi için yapılandırılmış bir plan oluşturmak.
+    String articlePrompt = """
+        Sen profesyonel bir Türkçe içerik stratejisti, teknik yazar ve SEO editörüsün.
+        Görevin: Verilen konu ve yardımcı anahtar kelimeler için önce kendi içinde kapsamlı bir içerik planı (hedef kitle, ana mesaj, 5-7 bölüm, somut örnekler ve 2-3 görsel yerleşimi) kurgulamak ve ardından DERİNLEMESİNE, görsel destekli, SEO uyumlu tam makaleyi doğrudan temiz HTML olarak yazmak.
 
         Ham Konu: %s
         Yardımcı Anahtar Kelimeler: %s
 
-        Lütfen aşağıdaki formatta bir makale planı oluştur:
-        - Ana başlık önerisi
-        - Hedef kitle
-        - Makalenin ana mesajı (1-2 cümle)
-        - Bölüm başlıkları (en az 5, en fazla 7 bölüm) — her bölüm derinlemesine işlenecek
-        - Her bölümde ele alınacak temel noktalar (3-5 madde, sadece liste değil; kavram, örnek ve gerekçe)
-        - Görsel planı: Makale gövdesi içine yerleştirilecek 2 (en fazla 3) görselin nereye konulacağı ve içeriği. Her görsel için:
-          * yerleşim: "Hangi bölümün sonunda / hangi paragrafın altında"
-          * imagePrompt: kısa İNGİLİZCE görsel prompt (max 14 kelime, fotogerçekçi/diyagram/illustration stilini belirt, marka/kişi adı içermesin)
-          * alt: kısa Türkçe alt metin (max 10 kelime)
-        - Sonuç bölümünde yer alacak çağrı-eylem (CTA)
-
-        Yanıtını Türkçe ver ve yalnızca yapılandırılmış planı döndür, ek açıklama yapma."""
-        .formatted(topic, keywords.isEmpty() ? "Belirtilmedi" : keywords);
-
-    GeminiCallResult outlineCall = callGemini(
-        new GeminiCallSpec(requestId, 1, "/api/v1/ai/article", "article:outline", userInputJson, outlinePrompt));
-    String outline = outlineCall.text();
-    recordSuccess(outlineCall.logEntry(), outline);
-    log.info("[AiService] Makale outline hazırlandı");
-
-    // Step 2: Full Article Agent
-    String articlePrompt = """
-        Sen profesyonel bir Türkçe içerik yazarı ve web editörüsün.
-        Görevin: Aşağıdaki makale planına göre DERİNLEMESİNE, görsel destekli ve SEO dostu bir makale yazmak.
-
-        MAKALE PLANI:
-        %s
-
         YAZIM KURALLARI:
-        - Makaleyi Türkçe yaz
-        - Akıcı, anlaşılır ve profesyonel bir dil kullan
-        - Yüzeysel geçme: her bölüm derinlemesine işlensin, kavramlar tanımlansın, gerekçelendirilsin, somut örnek/senaryo/karşılaştırma verilsin
-        - Toplam uzunluk minimum 800, maksimum 1500 kelime olmalı (bölüm başına ortalama 150-250 kelime). 800'ün altı kabul edilmez, 1500'ü aşma.
-        - Sadece geçerli HTML çıktısı ver (body içeriği, html/body/head etiketleri olmadan)
-        - Kullanabileceğin HTML etiketleri: h1, h2, h3, p, ul, ol, li, strong, em, blockquote, img
-        - Başlıklar için h1 (ana başlık, sadece 1 adet), h2 (bölüm başlıkları), h3 (alt başlıklar) kullan
-        - Önemli kavramları <strong> ile vurgula
-        - Listeleri yalnızca açıklayıcı olduğu yerde kullan — gereksiz bullet'a kaçma
+        - Makaleyi Türkçe, akıcı, anlaşılır ve profesyonel bir dille yaz
+        - Yüzeysel geçme: 5 ila 7 ana bölüm oluştur; her bölümde kavramları tanımla, gerekçelendir ve somut örnek/senaryo/karşılaştırma ver
+        - Toplam uzunluk minimum 800, maksimum 1500 kelime olmalı (bölüm başına ortalama 150-250 kelime)
+        - Son bölümde okuyucuyu harekete geçiren kısa bir sonuç ve çağrı-eylem (CTA) yer alsın
+        - Sadece geçerli HTML çıktısı ver (body içeriği; html/head/body etiketleri olmadan)
+        - SADECE şu HTML etiketlerini kullan: h1, h2, h3, p, ul, ol, li, strong, em, blockquote, img
+        - Başlık hiyerarşisi: sadece 1 adet h1 (ana başlık), bölüm başlıkları için h2, alt başlıklar için h3
+        - Önemli kavramları <strong> ile vurgula; listeleri yalnızca gerçekten açıklayıcı olduğu yerde kullan
 
         GÖRSEL KURALLARI (ZORUNLU):
-        - Makale gövdesine 2 (gerekiyorsa en fazla 3) görsel yerleştir. Daha azı kabul edilmez, daha fazlası dağıtıcı olur.
-        - Her görsel ayrı bir <p>...</p> bloğu içinde olmalı: <p><img src="..." alt="..." width="1200" height="675" loading="lazy" /></p>
-        - Görseller H1 başlığından ÖNCE olmaz. İlk görsel ilk veya ikinci bölümün ardından, son görsel sonuç bölümünden ÖNCE olmalı.
-        - Her img src değeri ŞU FORMATTA olmalı (başka domain kullanma):
-          https://image.pollinations.ai/prompt/{ENCODED_PROMPT}?width=1200&height=675&nologo=true
-          - {ENCODED_PROMPT} kısmı URL-encoded İngilizce görsel prompt'tur (boşluk yerine %%20, virgül yerine %%2C)
-          - Görsel prompt'u 6-14 kelime, fotogerçekçi/illustration/diagram stili belirt, marka veya kişi adı içermesin
-        - Her görselin alt metni TÜRKÇE, max 12 kelime, görseli açıklayıcı ve anahtar kavramı barındıran şekilde olmalı
-        - Görsel için ek başlık/figcaption yazma — sadece <p><img/></p>
+        - Makale gövdesine 2 (en fazla 3) görsel yerleştir: ilk görsel 1. veya 2. bölümün sonunda, son görsel sonuç bölümünden önce olsun (h1'den önce görsel koyma)
+        - Her görsel ayrı bir <p>...</p> bloğu içinde olmalı:
+          <p><img src="https://image.pollinations.ai/prompt/{ENCODED_PROMPT}?width=1200&height=675&nologo=true" alt="..." width="1200" height="675" loading="lazy" /></p>
+        - {ENCODED_PROMPT}: 6-14 kelimelik URL-encoded İNGİLİZCE görsel prompt'u (boşluk yerine %%20, virgül yerine %%2C; fotogerçekçi/illustration/diagram stilini belirt; marka veya kişi adı içermesin)
+        - alt: görseli açıklayan kısa TÜRKÇE alt metin (maksimum 12 kelime)
 
-        Herhangi bir markdown, ek açıklama veya kod bloğu ekleme — sadece saf HTML döndür."""
-        .formatted(outline);
+        Herhangi bir markdown, ön plan metni, açıklama veya ```html kod bloğu ekleme — doğrudan yalnızca saf HTML makaleyi döndür."""
+        .formatted(topic, keywords.isEmpty() ? "Belirtilmedi" : keywords);
 
-    GeminiCallResult draftCall = callGemini(
-        new GeminiCallSpec(requestId, 2, "/api/v1/ai/article", "article:draft", userInputJson, articlePrompt));
-    String rawHtml = draftCall.text();
-    recordSuccess(draftCall.logEntry(), rawHtml);
-    log.info("[AiService] Ham makale HTML üretildi");
-
-    // Step 3: Frontend Review & Sanitization Agent
-    String reviewPrompt = """
-        Sen bir frontend geliştirici ve HTML/erişilebilirlik uzmanısın.
-        Görevin: Verilen HTML makale içeriğini incelemek, düzeltmek ve temizlemek.
-
-        HAM HTML:
-        %s
-
-        YAPILACAKLAR:
-        1. Sadece şu etiketlere izin ver: h1, h2, h3, p, ul, ol, li, strong, em, blockquote, img — diğer tüm etiketleri kaldır
-        2. Başlık hiyerarşisini düzelt (h1 → h2 → h3 sırası, sadece 1 adet h1)
-        3. Boş etiketleri kaldır
-        4. Birden fazla ardışık boş satırı tek satıra indir
-        5. img dışındaki tüm etiketlerden script, style, class, id ve inline style attribute'larını kaldır
-        6. img etiketinde SADECE şu attribute'lara izin ver: src, alt, width, height, loading. Diğerlerini (class, id, style, srcset, data-*, onerror vb.) kaldır.
-        7. img src değeri "https://image.pollinations.ai/prompt/" ile başlamıyorsa ya da http/https ile başlayan geçerli bir URL değilse görseli komple kaldır.
-        8. Her img için alt boşsa kısa Türkçe bir alt metni türet; img yine de <p>...</p> içinde sarmalanmış olmalı, değilse sarmalanmış hale getir
-        9. Görsel sayısı 2 veya 3 olmalı. 1 veya 0 ise olduğu gibi bırak (daha fazlası dağıtıcı). 4+ görsel varsa fazlasını kaldır, içerikle en alakalı 3 tanesini koru.
-        10. HTML entity'lerini düzgün encode et (&amp; &lt; &gt; vb.)
-        11. Makul olmayan ya da çok kısa paragrafları bir önceki veya sonraki paragrafla birleştir
-
-        ÖNEMLİ: Yalnızca temizlenmiş HTML döndür. Açıklama, yorum, markdown veya kod bloğu ekleme."""
-        .formatted(rawHtml);
-
-    GeminiCallResult sanitizeCall = callGemini(
-        new GeminiCallSpec(requestId, 3, "/api/v1/ai/article", "article:sanitize", userInputJson, reviewPrompt));
-    String cleanHtml = stripCodeFences(sanitizeCall.text());
-    recordSuccess(sanitizeCall.logEntry(), cleanHtml);
-    log.info("[AiService] Makale üretimi tamamlandı");
+    GeminiCallResult call = callGemini(
+        new GeminiCallSpec(requestId, 1, "/api/v1/ai/article", "article", userInputJson, articlePrompt));
+    String cleanHtml = sanitizeArticleHtml(stripCodeFences(call.text()), topic);
+    recordSuccess(call.logEntry(), cleanHtml);
+    log.info("[AiService] Makale üretimi tamamlandı (chars={})", cleanHtml.length());
     return DtoAiArticleResponse.builder().html(cleanHtml).build();
   }
 
@@ -1058,6 +996,59 @@ public class AiService implements IAiService {
         .replaceFirst("(?i)^```(?:json|html)?\\s*", "")
         .replaceFirst("(?i)\\s*```$", "")
         .trim();
+  }
+
+  static String sanitizeArticleHtml(String html, String fallbackAlt) {
+    if (html == null || html.isBlank()) {
+      return "";
+    }
+    Safelist safelist =
+        Safelist.none()
+            .addTags("h1", "h2", "h3", "p", "ul", "ol", "li", "strong", "em", "blockquote", "img")
+            .addAttributes("img", "src", "alt", "width", "height", "loading")
+            .addProtocols("img", "src", "http", "https");
+
+    String cleaned = Jsoup.clean(html, "", safelist, new Document.OutputSettings().prettyPrint(false));
+    Document doc = Jsoup.parseBodyFragment(cleaned);
+    doc.outputSettings().prettyPrint(false);
+
+    int imgCount = 0;
+    for (Element img : doc.select("img")) {
+      String src = img.attr("src").trim();
+      if (!src.startsWith("https://image.pollinations.ai/prompt/") || imgCount >= 3) {
+        Element parent = img.parent();
+        img.remove();
+        if (parent != null && "p".equalsIgnoreCase(parent.tagName()) && parent.text().isBlank() && parent.children().isEmpty()) {
+          parent.remove();
+        }
+        continue;
+      }
+      imgCount++;
+      if (img.attr("alt").isBlank()) {
+        img.attr("alt", fallbackAlt != null && !fallbackAlt.isBlank() ? fallbackAlt : "Makale görseli");
+      }
+      if (img.attr("width").isBlank()) {
+        img.attr("width", "1200");
+      }
+      if (img.attr("height").isBlank()) {
+        img.attr("height", "675");
+      }
+      if (img.attr("loading").isBlank()) {
+        img.attr("loading", "lazy");
+      }
+      Element parent = img.parent();
+      if (parent == null || !"p".equalsIgnoreCase(parent.tagName())) {
+        img.wrap("<p></p>");
+      }
+    }
+
+    for (Element el : doc.select("h1, h2, h3, p, ul, ol, li, strong, em, blockquote")) {
+      if (el.text().isBlank() && el.select("img").isEmpty()) {
+        el.remove();
+      }
+    }
+
+    return doc.body().html().replaceAll("(\\r?\\n){3,}", "\n\n").trim();
   }
 
   private String sanitizeErrorText(String raw) {

@@ -2472,7 +2472,7 @@ Blog yazısının başlığı ve HTML/metin içeriğinden özet açıklama, kate
 ---
 
 ### POST /api/v1/ai/article
-Konu ve anahtar kelimelerden 3 aşamalı pipeline (Outline → İçerik → HTML Sanitize) ile görsel destekli tam HTML makale üretir.
+Konu ve anahtar kelimelerden tek aşamalı birleşik strateji + içerik üretimi ve deterministik Jsoup HTML sanitizasyonu ile görsel destekli tam HTML makale üretir.
 
 **Permission:** `posts:create` veya `posts:update`
 
@@ -2497,12 +2497,12 @@ Konu ve anahtar kelimelerden 3 aşamalı pipeline (Outline → İçerik → HTML
 ---
 
 ### GET /api/v1/ai/logs
-AI kullanım loglarını (istek, tam prompt, yanıt, ayrıştırılmış çıktı, input/output/thought/cached/toplam token, süre ve durum) sayfalı ve filtreli olarak listeler. 3 adımlı makale üretiminde (`article:outline`, `article:draft`, `article:sanitize`) her alt Gemini çağrısı aynı `requestId` ve `stepOrder` (`1..3`) ile ayrı satır olarak kaydedilir.
+AI kullanım loglarını (istek, tam prompt, yanıt, ayrıştırılmış çıktı, input/output/thought/cached/toplam token, süre ve durum) sayfalı ve filtreli olarak listeler.
 
 **Permission:** `posts:read`, `pages:read`, `components:read`, `widgets:read`, `banners:read` veya `users:manage`
 
 **Query Params:**
-- `action` (opsiyonel): `slug`, `seo`, `description`, `alt-text`, `blog-info`, `article:outline`, `article:draft`, `article:sanitize`
+- `action` (opsiyonel): `slug`, `seo`, `description`, `alt-text`, `blog-info`, `article` (ve geçmiş kayıtlar için `article:outline`, `article:draft`, `article:sanitize`)
 - `status` (opsiyonel): `SUCCESS` | `ERROR`
 - `username` (opsiyonel): kullanıcı adı filtresi
 - `q` (opsiyonel): girdi, yanıt, endpoint veya `requestId` içinde arama

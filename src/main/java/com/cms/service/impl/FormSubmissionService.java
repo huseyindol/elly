@@ -61,11 +61,20 @@ public class FormSubmissionService implements IFormSubmissionService {
   private final List<FieldValidator> fieldValidators;
   private final IEmailService emailService;
   private final INotificationService notificationService;
+  private final FormSpamProtectionService formSpamProtectionService;
 
   @Override
   @Transactional
   @CacheEvict(value = "formSubmissions", allEntries = true)
   public FormSubmission submitForm(Long formDefinitionId, Map<String, Object> payload) {
+    // Create a mutable copy of the payload for sanitization
+    Map<String, Object> sanitizedPayload = new HashMap<>(payload != null ? payload : new HashMap<>());
+
+    // Step 0 (B3): Spam protection (honeypot keys + IP rate limit)
+    if (formSpamProtectionService != null) {
+      formSpamProtectionService.verifyAndSanitizeSubmission(formDefinitionId, sanitizedPayload);
+    }
+
     // Step 1: Fetch the FormDefinition
     FormDefinition formDefinition = formDefinitionService.getById(formDefinitionId);
 
@@ -82,9 +91,6 @@ public class FormSubmissionService implements IFormSubmissionService {
     if (Boolean.TRUE.equals(formDefinition.getNotificationEnabled())) {
       validateNotificationConfig(formDefinition);
     }
-
-    // Create a mutable copy of the payload for sanitization
-    Map<String, Object> sanitizedPayload = new HashMap<>(payload != null ? payload : new HashMap<>());
 
     // Step 2 & 3: Iterate through fields and evaluate conditions
     for (FieldDefinition field : schema.getFields()) {
@@ -177,22 +183,32 @@ public class FormSubmissionService implements IFormSubmissionService {
           ? SUBMITTED_AT_FORMATTER.format(submission.getSubmittedAt())
           : "");
       dynamicData.put("payload", submission.getPayload());
+      if (submission.getPayload() != null) {
+        submission.getPayload().forEach(dynamicData::putIfAbsent);
+      }
 
       String subject = (formDefinition.getNotificationSubject() != null
           && !formDefinition.getNotificationSubject().isBlank())
               ? formDefinition.getNotificationSubject()
               : "Yeni form gonderimi: " + formDefinition.getTitle();
 
+      String templateKey = (formDefinition.getNotificationTemplateKey() != null
+          && !formDefinition.getNotificationTemplateKey().isBlank())
+              ? formDefinition.getNotificationTemplateKey().trim()
+              : NOTIFICATION_TEMPLATE;
+
       EmailRequest request = new EmailRequest(
           formDefinition.getRecipientEmail(),
+          formDefinition.getCcEmails(),
+          formDefinition.getBccEmails(),
           subject,
-          NOTIFICATION_TEMPLATE,
+          templateKey,
           dynamicData,
           sender.getId());
 
       emailService.sendEmail(request);
-      log.info("Form bildirim maili kuyrukland: formId={}, submissionId={}, senderMailAccount={}, to={}",
-          formDefinition.getId(), submission.getId(), sender.getId(), formDefinition.getRecipientEmail());
+      log.info("Form bildirim maili kuyruklandi: formId={}, submissionId={}, senderMailAccount={}, template={}, to={}",
+          formDefinition.getId(), submission.getId(), sender.getId(), templateKey, formDefinition.getRecipientEmail());
     } catch (Exception ex) {
       // Submission kaydi rollback olmasin; mail tekrar denenebilir / admin inceleyebilir.
       log.error("Form bildirim maili tetiklenemedi: formId={}, submissionId={}, hata={}",

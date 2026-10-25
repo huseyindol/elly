@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import com.cms.dto.DtoEmailLog;
+import com.cms.dto.DtoEmailStats;
 import com.cms.dto.EmailRequest;
 import com.cms.enums.EmailStatus;
 
@@ -27,4 +28,9 @@ public interface IEmailService {
    * status null ise tum kayitlar, aksi halde sadece o durumdakiler.
    */
   Page<DtoEmailLog> list(EmailStatus status, Pageable pageable);
+
+  /**
+   * Mail+Form v3 (B4) — Toplam durum sayilari ve son 24 saatteki FAILED sayisi.
+   */
+  DtoEmailStats getStats();
 }

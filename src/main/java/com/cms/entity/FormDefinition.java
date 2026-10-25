@@ -69,6 +69,25 @@ public class FormDefinition extends BaseEntity {
   private String recipientEmail;
 
   /**
+   * Opsiyonel CC alici adresleri (coklu alici icin virgulle ayrilabilir, B1).
+   */
+  @Column(name = "cc_emails", length = 1000)
+  private String ccEmails;
+
+  /**
+   * Opsiyonel BCC alici adresleri (coklu alici icin virgulle ayrilabilir, B1).
+   */
+  @Column(name = "bcc_emails", length = 1000)
+  private String bccEmails;
+
+  /**
+   * Opsiyonel ozel e-posta sablonu anahtari (B6 — or. "contact-form-custom").
+   * Null/bos ise varsayilan "form-notification" sablonu kullanilir.
+   */
+  @Column(name = "notification_template_key", length = 100)
+  private String notificationTemplateKey;
+
+  /**
    * Opsiyonel özel konu; bos ise varsayilan ("Yeni form gonderimi: {title}") kullanilir.
    */
   @Column(name = "notification_subject", length = 255)

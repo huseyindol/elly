@@ -41,6 +41,7 @@ public class EmailQueueService implements IEmailQueueService {
   private final ObjectMapper objectMapper;
   private final RabbitTemplate rabbitTemplate;
   private final INotificationService notificationService;
+  private final EmailQuotaService emailQuotaService;
 
   private static final int MAX_RETRY_COUNT = 3;
 
@@ -61,7 +62,9 @@ public class EmailQueueService implements IEmailQueueService {
         return;
       }
 
-      if (emailLog.getStatus() == EmailStatus.SENT || emailLog.getStatus() == EmailStatus.FAILED) {
+      if (emailLog.getStatus() == EmailStatus.SENT
+          || emailLog.getStatus() == EmailStatus.FAILED
+          || emailLog.getStatus() == EmailStatus.QUOTA_EXCEEDED) {
         log.info("EmailLog zaten islenmis: id={}, status={}", emailLogId, emailLog.getStatus());
         return;
       }
@@ -73,6 +76,21 @@ public class EmailQueueService implements IEmailQueueService {
         emailLog.setErrorMessage("mailAccountId zorunludur (varsayilan hesap kaldirildi)");
         emailLogRepository.save(emailLog);
         log.error("EmailLog mailAccountId olmadan kuyruga girmis: id={}", emailLogId);
+        return;
+      }
+
+      // B2: Gunluk SMTP kota kontrolu (kota asildiysa retry yapmadan QUOTA_EXCEEDED)
+      String effectiveTenant = account.getTenantId() != null ? account.getTenantId() : message.getTenantId();
+      if (emailQuotaService != null
+          && emailQuotaService.isQuotaExceeded(effectiveTenant, account.getId(), account.getDailyLimit())) {
+        int limit = emailQuotaService.resolveEffectiveLimit(account.getDailyLimit());
+        emailLog.setStatus(EmailStatus.QUOTA_EXCEEDED);
+        emailLog.setErrorMessage(
+            "Gunluk SMTP gonderim kotasi asildi (hesap=" + account.getName() + ", limit=" + limit + ")");
+        emailLogRepository.save(emailLog);
+        log.warn("Mail QUOTA_EXCEEDED durumuna alindi: logId={}, accountId={}, limit={}",
+            emailLogId, account.getId(), limit);
+        triggerEmailFailedNotification(emailLogId, message.getTenantId());
         return;
       }
 
@@ -95,15 +113,18 @@ public class EmailQueueService implements IEmailQueueService {
             templateRenderer.render(emailLog.getTemplateName(), dynamicData);
         String htmlContent = rendered.html();
 
-        // 4. Sender'i fabrikadan al ve gonder (v2: DB-based)
+        // 4. Sender'i fabrikadan al ve gonder (v2: DB-based, v3: TO/CC/BCC)
         JavaMailSender sender = mailSenderFactory.getMailSender(account);
         sendHtmlEmail(sender, account.getFromAddress(), emailLog.getRecipient(),
-            emailLog.getSubject(), htmlContent);
+            emailLog.getCc(), emailLog.getBcc(), emailLog.getSubject(), htmlContent);
 
-        // 5. Basari -> SENT
+        // 5. Basari -> SENT + gunluk kota sayacini artir
         emailLog.setStatus(EmailStatus.SENT);
         emailLog.setSentAt(new Date());
         emailLogRepository.save(emailLog);
+        if (emailQuotaService != null) {
+          emailQuotaService.incrementDailySentCount(effectiveTenant, account.getId());
+        }
         log.info("Mail gonderildi: logId={}, mailAccountId={}, from={}, to={}",
             emailLogId, account.getId(), account.getFromAddress(), emailLog.getRecipient());
 
@@ -151,22 +172,36 @@ public class EmailQueueService implements IEmailQueueService {
   }
 
   private void sendHtmlEmail(JavaMailSender sender, String from, String to,
-      String subject, String htmlContent) throws MessagingException {
+      String cc, String bcc, String subject, String htmlContent) throws MessagingException {
     MimeMessage mime = sender.createMimeMessage();
     MimeMessageHelper helper = new MimeMessageHelper(mime, true, "UTF-8");
     helper.setFrom(from);
-    if (to != null && to.contains(",")) {
-      String[] addresses = Arrays.stream(to.split(","))
-          .map(String::trim)
-          .filter(s -> !s.isEmpty())
-          .toArray(String[]::new);
-      helper.setTo(addresses);
-    } else {
-      helper.setTo(to);
+    helper.setTo(parseAddresses(to));
+    if (cc != null && !cc.isBlank()) {
+      String[] ccAddresses = parseAddresses(cc);
+      if (ccAddresses.length > 0) {
+        helper.setCc(ccAddresses);
+      }
+    }
+    if (bcc != null && !bcc.isBlank()) {
+      String[] bccAddresses = parseAddresses(bcc);
+      if (bccAddresses.length > 0) {
+        helper.setBcc(bccAddresses);
+      }
     }
     helper.setSubject(subject);
     helper.setText(htmlContent, true);
     sender.send(mime);
+  }
+
+  private String[] parseAddresses(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return new String[0];
+    }
+    return Arrays.stream(raw.split(","))
+        .map(String::trim)
+        .filter(s -> !s.isEmpty())
+        .toArray(String[]::new);
   }
 
   private String truncate(String s) {

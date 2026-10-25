@@ -37,8 +37,17 @@ public class DtoFormDefinition {
   /** Bagli MailAccount gonderici adresi (salt okunur, UI display icin). */
   private String senderFromAddress;
 
-  /** Form submit bildiriminin gidecegi adres (v2 tek adres). */
+  /** Form submit bildiriminin gidecegi adres (coklu alici icin virgulle ayrilabilir). */
   private String recipientEmail;
+
+  /** Opsiyonel CC alici adresleri (virgulle ayrilabilir). */
+  private String ccEmails;
+
+  /** Opsiyonel BCC alici adresleri (virgulle ayrilabilir). */
+  private String bccEmails;
+
+  /** Opsiyonel ozel bildirim sablon anahtari (bos ise "form-notification"). */
+  private String notificationTemplateKey;
 
   /** Opsiyonel konu; null ise varsayilan ("Yeni form gonderimi: {title}") kullanilir. */
   private String notificationSubject;

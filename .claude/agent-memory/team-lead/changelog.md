@@ -5,6 +5,19 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-10-25] Mail & Form v3/v5 (Grup B) — Çoklu Alıcı (CC/BCC), SMTP Günlük Kota, Form Spam Koruması, 24s Hata İstatistiği ve Özel Şablon Seçimi
+**Tip:** 🆕 Özellik + 🔒 Güvenlik | **Boyut:** Orta-Büyük
+
+### Özet
+- **B1 — Çoklu Alıcı (`TO` / `CC` / `BCC`):** `FormDefinition` (`ccEmails`, `bccEmails`), `EmailRequest` (`cc`, `bcc`), `EmailLog` (`cc`, `bcc`), `DtoEmailLog` ve `EmailQueueService.sendHtmlEmail` güncellendi.
+- **B2 — SMTP Günlük Kota (`dailyLimit` & `QUOTA_EXCEEDED`):** `MailAccount.dailyLimit` (varsayılan 500), `DtoMailAccountResponse.dailySentCount`, `EmailStatus.QUOTA_EXCEEDED` ve Redis + in-memory fallback tabanlı `EmailQuotaService` eklendi.
+- **B3 — Public Form Spam Koruması (`FormSpamProtectionService`):** `DtoFormSubmit.honeypot` ve payload içindeki `_hp` / `_honeypot` / `website_url_hp` alanları denetlenip temizleniyor; IP + tenant + form başına dakikada maksimum 5 gönderim limiti (`429 TOO_MANY_REQUESTS`) uygulandı.
+- **B4 — E-posta Gönderim İstatistikleri (`GET /api/v1/emails/stats`):** `DtoEmailStats` (`totalCount`, `sentCount`, `pendingCount`, `failedCount`, `quotaExceededCount`, `failedLast24hCount`) eklendi.
+- **B6 — Form Özel Bildirim Şablonu (`notificationTemplateKey`):** `FormDefinition.notificationTemplateKey` eklendi; doluysa ilgili `EmailTemplate` anahtarı, boşsa `"form-notification"` şablonu kullanılır.
+- **Migration & Test:** `db-migration-mail-form-v5-quota-cc-template.sql`, `JpaConfig` idempotent `ALTER TABLE` ve `MailFormV3Test` (5 kapsamlı birim testi) eklendi.
+
+---
+
 ## [2026-10-25] STOMP SUBSCRIBE Yetkilendirmesi, 2FA Brute-Force Koruması, Rol Hiyerarşisi ve DtoEmailLog Hata Detayı
 **Tip:** 🔒 Güvenlik + 🔧 İyileştirme | **Boyut:** Orta
 

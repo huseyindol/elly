@@ -47,6 +47,7 @@ public class MailAccountService implements IMailAccountService {
   private final TenantMailSenderFactory mailSenderFactory;
   private final AesEncryptor aesEncryptor;
   private final INotificationService notificationService;
+  private final EmailQuotaService emailQuotaService;
 
   @Override
   @Transactional
@@ -61,6 +62,9 @@ public class MailAccountService implements IMailAccountService {
     if (entity.getActive() == null) {
       entity.setActive(true);
     }
+    if (entity.getDailyLimit() == null) {
+      entity.setDailyLimit(EmailQuotaService.DEFAULT_DAILY_LIMIT);
+    }
     if (Boolean.TRUE.equals(entity.getIsPrimary())) {
       demoteExistingPrimary(entity.getTenantId(), null);
     }
@@ -69,7 +73,7 @@ public class MailAccountService implements IMailAccountService {
     log.info("Mail hesabi olusturuldu: id={}, name={}, host={}:{}",
         saved.getId(), saved.getName(), saved.getSmtpHost(), saved.getSmtpPort());
     warnIfGmailFromMismatch(saved);
-    return mapper.toResponse(saved);
+    return enrichResponse(saved);
   }
 
   @Override
@@ -78,6 +82,7 @@ public class MailAccountService implements IMailAccountService {
   public DtoMailAccountResponse update(Long id, DtoMailAccountRequest request) {
     MailAccount entity = findOrThrow(id);
     String oldPassword = entity.getSmtpPassword();
+    Integer oldDailyLimit = entity.getDailyLimit();
 
     mapper.updateFromRequest(request, entity);
 
@@ -86,6 +91,10 @@ public class MailAccountService implements IMailAccountService {
       entity.setSmtpPassword(aesEncryptor.encrypt(request.getSmtpPassword()));
     } else {
       entity.setSmtpPassword(oldPassword);
+    }
+    if (request.getDailyLimit() == null) {
+      entity.setDailyLimit(
+          oldDailyLimit != null ? oldDailyLimit : EmailQuotaService.DEFAULT_DAILY_LIMIT);
     }
     if (Boolean.TRUE.equals(entity.getIsPrimary())) {
       demoteExistingPrimary(entity.getTenantId(), id);
@@ -96,12 +105,12 @@ public class MailAccountService implements IMailAccountService {
     log.info("Mail hesabi guncellendi: id={}, host={}:{}",
         saved.getId(), saved.getSmtpHost(), saved.getSmtpPort());
     warnIfGmailFromMismatch(saved);
-    return mapper.toResponse(saved);
+    return enrichResponse(saved);
   }
 
   @Override
   public DtoMailAccountResponse getById(Long id) {
-    return mapper.toResponse(findOrThrow(id));
+    return enrichResponse(findOrThrow(id));
   }
 
   @Override
@@ -111,22 +120,29 @@ public class MailAccountService implements IMailAccountService {
 
   @Override
   public List<DtoMailAccountResponse> getAll() {
-    return mapper.toResponseList(repository.findAll());
+    return repository.findAll().stream().map(this::enrichResponse).toList();
   }
 
   @Override
   public List<DtoMailAccountResponse> getAllByTenantId(String tenantId) {
-    return mapper.toResponseList(repository.findAllByTenantId(tenantId));
+    return repository.findAllByTenantId(tenantId).stream().map(this::enrichResponse).toList();
   }
 
   @Override
   public List<DtoMailAccountResponse> getAllActive() {
-    return mapper.toResponseList(repository.findAllByActiveTrue());
+    return repository.findAllByActiveTrue().stream().map(this::enrichResponse).toList();
   }
 
   @Override
   public List<DtoMailAccountResponse> getAllActiveByTenantId(String tenantId) {
-    return mapper.toResponseList(repository.findAllByTenantIdAndActiveTrue(tenantId));
+    return repository.findAllByTenantIdAndActiveTrue(tenantId).stream().map(this::enrichResponse).toList();
+  }
+
+  private DtoMailAccountResponse enrichResponse(MailAccount entity) {
+    DtoMailAccountResponse dto = mapper.toResponse(entity);
+    dto.setDailyLimit(emailQuotaService.resolveEffectiveLimit(entity.getDailyLimit()));
+    dto.setDailySentCount(emailQuotaService.getDailySentCount(entity.getTenantId(), entity.getId()));
+    return dto;
   }
 
   @Override

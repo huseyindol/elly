@@ -96,6 +96,16 @@ public class FormDefinitionService implements IFormDefinitionService {
       throw new ValidationException(
           "Gecersiz e-posta formati. Birden fazla adres icin araya virgul koyunuz.");
     }
+    if (form.getCcEmails() != null && !form.getCcEmails().isBlank()
+        && !RECIPIENT_PATTERN.matcher(form.getCcEmails()).matches()) {
+      throw new ValidationException(
+          "Gecersiz CC e-posta formati. Birden fazla adres icin araya virgul koyunuz.");
+    }
+    if (form.getBccEmails() != null && !form.getBccEmails().isBlank()
+        && !RECIPIENT_PATTERN.matcher(form.getBccEmails()).matches()) {
+      throw new ValidationException(
+          "Gecersiz BCC e-posta formati. Birden fazla adres icin araya virgul koyunuz.");
+    }
   }
 
   /**

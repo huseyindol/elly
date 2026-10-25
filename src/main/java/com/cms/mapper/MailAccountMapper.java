@@ -14,6 +14,7 @@ import com.cms.entity.MailAccount;
 public interface MailAccountMapper {
 
   /** Entity -> Response. smtpPassword asla response'a dahil edilmez. */
+  @Mapping(target = "dailySentCount", ignore = true)
   DtoMailAccountResponse toResponse(MailAccount entity);
 
   List<DtoMailAccountResponse> toResponseList(List<MailAccount> entities);

@@ -26,6 +26,10 @@ public interface EmailLogRepository extends JpaRepository<EmailLog, Long> {
    */
   Page<EmailLog> findByStatus(EmailStatus status, Pageable pageable);
 
+  long countByStatus(EmailStatus status);
+
+  long countByStatusAndCreatedAtAfter(EmailStatus status, Date since);
+
   /**
    * RabbitMQ consumer icin: mailAccount lazy proxy'sini ayni sorguda initialize
    * eder. Consumer thread'inde Hibernate session kisa surede kapandigindan

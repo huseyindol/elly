@@ -239,6 +239,15 @@ public class JpaConfig {
           daily_request_limit BIGINT,
           updated_at          TIMESTAMP(6)
         );
+        ALTER TABLE IF EXISTS form_definitions
+          ADD COLUMN IF NOT EXISTS cc_emails VARCHAR(1000),
+          ADD COLUMN IF NOT EXISTS bcc_emails VARCHAR(1000),
+          ADD COLUMN IF NOT EXISTS notification_template_key VARCHAR(100);
+        ALTER TABLE IF EXISTS email_logs
+          ADD COLUMN IF NOT EXISTS cc VARCHAR(1000),
+          ADD COLUMN IF NOT EXISTS bcc VARCHAR(1000);
+        ALTER TABLE IF EXISTS mail_accounts
+          ADD COLUMN IF NOT EXISTS daily_limit INTEGER DEFAULT 500;
         """;
 
     tenantProperties.getDatasources().forEach((tenantId, config) -> {

@@ -24,6 +24,8 @@ public class DtoMailAccountResponse {
   private Boolean active;
   private String tenantId;
   private Boolean isPrimary;
+  private Integer dailyLimit;
+  private Long dailySentCount;
   private Date createdAt;
   private Date updatedAt;
 }

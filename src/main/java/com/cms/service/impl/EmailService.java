@@ -1,7 +1,10 @@
 package com.cms.service.impl;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -15,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.cms.config.RabbitMQConfig;
 import com.cms.config.TenantContext;
 import com.cms.dto.DtoEmailLog;
+import com.cms.dto.DtoEmailStats;
 import com.cms.dto.EmailMessage;
 import com.cms.dto.EmailRequest;
 import com.cms.entity.EmailLog;
@@ -67,6 +71,10 @@ public class EmailService implements IEmailService {
     // 2. PENDING status ile DB'ye kaydet
     EmailLog emailLog = new EmailLog();
     emailLog.setRecipient(request.getTo());
+    emailLog.setCc(
+        request.getCc() != null && !request.getCc().isBlank() ? request.getCc().trim() : null);
+    emailLog.setBcc(
+        request.getBcc() != null && !request.getBcc().isBlank() ? request.getBcc().trim() : null);
     emailLog.setSubject(request.getSubject());
     emailLog.setTemplateName(request.getTemplateName());
     emailLog.setPayloadJson(payloadJson);
@@ -164,6 +172,23 @@ public class EmailService implements IEmailService {
     return page.map(this::toDto);
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public DtoEmailStats getStats() {
+    Date since24h = Date.from(Instant.now().minus(24, ChronoUnit.HOURS));
+    return DtoEmailStats.builder()
+        .totalCount(emailLogRepository.count())
+        .sentCount(emailLogRepository.countByStatus(EmailStatus.SENT))
+        .pendingCount(emailLogRepository.countByStatus(EmailStatus.PENDING))
+        .failedCount(emailLogRepository.countByStatus(EmailStatus.FAILED))
+        .quotaExceededCount(emailLogRepository.countByStatus(EmailStatus.QUOTA_EXCEEDED))
+        .failedLast24hCount(
+            emailLogRepository.countByStatusAndCreatedAtAfter(EmailStatus.FAILED, since24h)
+                + emailLogRepository.countByStatusAndCreatedAtAfter(
+                    EmailStatus.QUOTA_EXCEEDED, since24h))
+        .build();
+  }
+
   /**
    * EmailLog -> DtoEmailLog. MailAccount lazy field'ina dokunmaz, sadece
    * scalar alanlari kullanir — Page.map icinde session kapanmis olsa bile guvenli.
@@ -172,6 +197,8 @@ public class EmailService implements IEmailService {
     return DtoEmailLog.builder()
         .id(entity.getId())
         .recipient(entity.getRecipient())
+        .cc(entity.getCc())
+        .bcc(entity.getBcc())
         .subject(entity.getSubject())
         .templateName(entity.getTemplateName())
         .status(entity.getStatus())

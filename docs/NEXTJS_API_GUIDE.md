@@ -1816,6 +1816,7 @@ Forma yanıt gönder (submission).
 **Body:**
 ```json
 {
+  "honeypot": "",
   "payload": {
     "name": "Ahmet Yılmaz",
     "email": "ahmet@example.com",
@@ -1826,7 +1827,9 @@ Forma yanıt gönder (submission).
 ```
 
 > **Not:** `payload` içindeki key'ler form schema'daki field `id`'leri ile eşleşmelidir.
-> Sunucu tarafında validasyon ve sanitizasyon uygulanır.
+> Sunucu tarafında validasyon, spam koruması (`honeypot` / `_hp` / `_honeypot` dolu ise `400 Bad Request`, dakikada 5'ten fazla gönderimde `429 Too Many Requests`) ve sanitizasyon uygulanır.
+> Bildirim açıksa (`notificationEnabled: true`), formda tanımlı `recipientEmail` (`TO`), `ccEmails` (`CC`), `bccEmails` (`BCC`) ve `notificationTemplateKey` (varsayılan `"form-notification"`) kullanılarak e-posta kuyruğa alınır.
+> Ayrıca `GET /api/v1/emails/stats` endpoint'i (`emails:read` yetkisi ile) toplam `totalCount`, `sentCount`, `pendingCount`, `failedCount`, `quotaExceededCount` ve `failedLast24hCount` istatistiklerini döner.
 
 **Response:**
 ```json

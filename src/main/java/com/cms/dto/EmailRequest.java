@@ -22,6 +22,14 @@ public class EmailRequest {
   @Size(max = 1000, message = "Recipient email must be at most 1000 characters")
   private String to;
 
+  @Pattern(regexp = "^$|^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$", message = "Invalid CC email format. Use comma to separate multiple addresses.")
+  @Size(max = 1000, message = "CC email must be at most 1000 characters")
+  private String cc;
+
+  @Pattern(regexp = "^$|^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$", message = "Invalid BCC email format. Use comma to separate multiple addresses.")
+  @Size(max = 1000, message = "BCC email must be at most 1000 characters")
+  private String bcc;
+
   @NotBlank(message = "Subject is required")
   private String subject;
 
@@ -36,4 +44,9 @@ public class EmailRequest {
    */
   @NotNull(message = "mailAccountId zorunludur (varsayilan hesap kaldirildi)")
   private Long mailAccountId;
+
+  public EmailRequest(String to, String subject, String templateName,
+      Map<String, Object> dynamicData, Long mailAccountId) {
+    this(to, null, null, subject, templateName, dynamicData, mailAccountId);
+  }
 }

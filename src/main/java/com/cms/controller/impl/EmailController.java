@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.cms.config.PermissionConstants;
 import com.cms.controller.IEmailController;
 import com.cms.dto.DtoEmailLog;
+import com.cms.dto.DtoEmailStats;
 import com.cms.dto.EmailRequest;
 import com.cms.entity.RootEntityResponse;
 import com.cms.enums.EmailStatus;
@@ -84,5 +85,15 @@ public class EmailController implements IEmailController {
       @RequestParam(value = "status", required = false) EmailStatus status,
       @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
     return RootEntityResponse.ok(emailService.list(status, pageable));
+  }
+
+  /**
+   * Mail+Form v3 (B4) — E-posta gonderim istatistikleri ve son 24 saat FAILED sayisi.
+   */
+  @GetMapping("/stats")
+  @Override
+  @PreAuthorize("hasAuthority('" + PermissionConstants.EMAILS_READ + "')")
+  public RootEntityResponse<DtoEmailStats> getStats() {
+    return RootEntityResponse.ok(emailService.getStats());
   }
 }

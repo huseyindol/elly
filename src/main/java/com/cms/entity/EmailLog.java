@@ -32,6 +32,12 @@ public class EmailLog extends BaseEntity {
   @Column(nullable = false, length = 1000)
   private String recipient;
 
+  @Column(length = 1000)
+  private String cc;
+
+  @Column(length = 1000)
+  private String bcc;
+
   @Column(nullable = false)
   private String subject;
 

@@ -38,6 +38,8 @@ interface MailAccountResponse {
   active: boolean
   tenantId: string | null   // hangi tenant'a ait
   isPrimary: boolean        // tenant'ın ana gönderim hesabı
+  dailyLimit: number        // günlük maksimum gönderim kotası (varsayılan 500)
+  dailySentCount: number    // bugün gönderilen e-posta sayısı
   createdAt: string
   updatedAt: string
   // smtpPassword: ASLA DÖNMEZ
@@ -56,6 +58,7 @@ interface MailAccountRequest {
   active?: boolean          // varsayılan: true
   tenantId?: string         // ör. "tenant1", "tenant2"
   isPrimary?: boolean       // varsayılan: false; true yapılınca aynı tenant'ın eskisi otomatik false olur
+  dailyLimit?: number       // varsayılan: 500 (1-100000)
 }
 ```
 

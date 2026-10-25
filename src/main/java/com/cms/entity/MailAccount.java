@@ -72,4 +72,11 @@ public class MailAccount extends BaseEntity {
    */
   @Column(name = "is_primary", nullable = false)
   private Boolean isPrimary = false;
+
+  /**
+   * Günlük maksimum e-posta gönderim kotası (B2 — SMTP Daily Quota).
+   * Varsayılan 500 (örn. standart Gmail günlük limiti).
+   */
+  @Column(name = "daily_limit")
+  private Integer dailyLimit = 500;
 }

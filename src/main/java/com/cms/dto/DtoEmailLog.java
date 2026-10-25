@@ -19,6 +19,8 @@ public class DtoEmailLog {
 
   private Long id;
   private String recipient;
+  private String cc;
+  private String bcc;
   private String subject;
   private String templateName;
   private EmailStatus status;

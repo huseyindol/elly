@@ -57,4 +57,9 @@ public class DtoMailAccountRequest {
 
   /** Ana gönderim hesabı olarak işaretler. Tenant başına yalnızca bir tane olabilir. */
   private Boolean isPrimary = false;
+
+  /** Günlük maksimum e-posta gönderim kotası (varsayılan 500). */
+  @Min(value = 1, message = "Gunluk kota en az 1 olmalidir")
+  @Max(value = 100000, message = "Gunluk kota en fazla 100000 olabilir")
+  private Integer dailyLimit = 500;
 }

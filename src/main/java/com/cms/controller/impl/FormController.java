@@ -30,6 +30,7 @@ import com.cms.mapper.FormMapper;
 import com.cms.service.IFormDefinitionService;
 import com.cms.service.IFormSubmissionService;
 import com.cms.service.IMailAccountService;
+import com.cms.service.impl.FormSpamProtectionService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -42,6 +43,7 @@ public class FormController extends BaseController implements IFormController {
   private final IFormSubmissionService formSubmissionService;
   private final FormMapper formMapper;
   private final IMailAccountService mailAccountService;
+  private final FormSpamProtectionService formSpamProtectionService;
 
   // ==================== FormDefinition Endpoints ====================
 
@@ -158,7 +160,11 @@ public class FormController extends BaseController implements IFormController {
   public RootEntityResponse<DtoFormSubmission> submitForm(
       @PathVariable Long formId,
       @RequestBody DtoFormSubmit dto) {
-    FormSubmission submission = formSubmissionService.submitForm(formId, dto.getPayload());
+    if (formSpamProtectionService != null && dto != null) {
+      formSpamProtectionService.validateTopLevelHoneypot(dto.getHoneypot());
+    }
+    FormSubmission submission = formSubmissionService.submitForm(
+        formId, dto != null ? dto.getPayload() : null);
     return ok(formMapper.toSubmissionDto(submission));
   }
 

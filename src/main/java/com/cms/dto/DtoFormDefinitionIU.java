@@ -61,6 +61,30 @@ public class DtoFormDefinitionIU {
   private String recipientEmail;
 
   /**
+   * Opsiyonel CC alicilari (coklu alici icin virgulle ayrilabilir).
+   */
+  @Pattern(
+      regexp = "^$|^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$",
+      message = "Gecersiz CC e-posta formati. Birden fazla adres icin araya virgul koyunuz.")
+  @Size(max = 1000, message = "ccEmails en fazla 1000 karakter olabilir")
+  private String ccEmails;
+
+  /**
+   * Opsiyonel BCC alicilari (coklu alici icin virgulle ayrilabilir).
+   */
+  @Pattern(
+      regexp = "^$|^\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(\\s*,\\s*[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,})*\\s*$",
+      message = "Gecersiz BCC e-posta formati. Birden fazla adres icin araya virgul koyunuz.")
+  @Size(max = 1000, message = "bccEmails en fazla 1000 karakter olabilir")
+  private String bccEmails;
+
+  /**
+   * Opsiyonel ozel e-posta sablonu anahtari (bos birakilirsa "form-notification" kullanilir).
+   */
+  @Size(max = 100, message = "notificationTemplateKey en fazla 100 karakter olabilir")
+  private String notificationTemplateKey;
+
+  /**
    * Opsiyonel ozel konu; bos birakilirsa varsayilan kullanilir.
    */
   @Size(max = 255, message = "notificationSubject en fazla 255 karakter olabilir")

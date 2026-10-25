@@ -584,6 +584,11 @@ public class AuthService implements IAuthService {
   public DtoMfaSetupResponse initMfaSetup(Long userId, String tenantId) {
     User user = loadUserForMfa(userId, tenantId);
 
+    if (Boolean.TRUE.equals(user.getMfaEnabled()) && Boolean.TRUE.equals(user.getMfaSetupVerified())) {
+      throw new BadRequestException(
+          "2FA zaten etkin. Yeniden kurmak için önce mevcut 2FA'yı devre dışı bırakın.");
+    }
+
     // Her çağrıda yeni secret üret (henüz doğrulanmamış setup sıfırlanabilir)
     String plainSecret = totpService.generateSecret();
     String encryptedSecret = aesEncryptor.encrypt(plainSecret);
@@ -635,6 +640,12 @@ public class AuthService implements IAuthService {
     String loginSource = jwtUtil.extractLoginSource(request.getMfaToken());
     String tenantId = jwtUtil.extractTenantId(request.getMfaToken());
 
+    // 2b. Brute-force koruması: 5 dakikalık pencerede en fazla 5 hatalı TOTP denemesi
+    if (userAuthCacheService.isMfaLockedOut(tenantId, userId)) {
+      throw new UnauthorizedException(
+          "Çok fazla hatalı 2FA denemesi yapıldı. Lütfen yeniden giriş yapın.");
+    }
+
     // 3. Kullanıcıyı yükle (doğru tenant context ile)
     User user = loadUserForMfa(userId, tenantId);
 
@@ -645,8 +656,15 @@ public class AuthService implements IAuthService {
     // 4. TOTP kodunu doğrula
     String plainSecret = aesEncryptor.decrypt(user.getMfaSecret());
     if (!totpService.verify(plainSecret, request.getCode())) {
+      int attempts = userAuthCacheService.recordFailedMfaAttempt(tenantId, userId);
+      if (attempts >= UserAuthCacheService.MAX_MFA_VERIFY_ATTEMPTS) {
+        throw new UnauthorizedException(
+            "Çok fazla hatalı 2FA denemesi yapıldı. Lütfen yeniden giriş yapın.");
+      }
       throw new UnauthorizedException("Geçersiz 2FA kodu.");
     }
+
+    userAuthCacheService.clearMfaAttempts(tenantId, userId);
 
     // 5. Tam JWT üret
     return issueFullAuthToken(user, loginSource, tenantId);

@@ -23,6 +23,7 @@ public class DtoEmailLog {
   private String templateName;
   private EmailStatus status;
   private int retryCount;
+  private String errorMessage;
   private Date createdAt;
   private Date sentAt;
 }

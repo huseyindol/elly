@@ -297,6 +297,7 @@ public class UserService implements IUserService {
   public DtoUserResponse updateUser(Long id, DtoAdminUserUpdate request) {
     User user = userRepository.findById(id)
         .orElseThrow(() -> new BadRequestException("User not found with id: " + id));
+    assertCanManageTargetUser(user, true);
     String oldUsername = user.getUsername();
 
     // Username değişiyorsa unique kontrol
@@ -361,6 +362,7 @@ public class UserService implements IUserService {
     if (user.getUsername() != null && user.getUsername().equals(currentUsername)) {
       throw new BadRequestException("Kendi hesabınızı silemezsiniz");
     }
+    assertCanManageTargetUser(user, false);
 
     // RefreshToken @ManyToOne(User) ile FK constraint'i taşır → user silinmeden önce temizlenmeli.
     // Notification/ChatMessage gibi userId Long alanları FK taşımaz → orphan kalır (tarih korunur).
@@ -385,6 +387,9 @@ public class UserService implements IUserService {
     // Self-deactivate koruması — admin kendi hesabını pasifleştirip kilitleyemez.
     if (!isActive && user.getUsername() != null && user.getUsername().equals(currentUsername)) {
       throw new BadRequestException("Kendi hesabınızı pasifleştiremezsiniz");
+    }
+    if (user.getUsername() == null || !user.getUsername().equals(currentUsername)) {
+      assertCanManageTargetUser(user, false);
     }
 
     user.setIsActive(isActive);
@@ -439,5 +444,40 @@ public class UserService implements IUserService {
       case "EDITOR" -> 2;
       default -> 1; // VIEWER, TENANT vb.
     };
+  }
+
+  private int targetUserRoleLevel(User user) {
+    if (user == null || user.getRoles() == null || user.getRoles().isEmpty()) {
+      return 1;
+    }
+    return user.getRoles().stream()
+        .map(Role::getName)
+        .mapToInt(UserService::roleLevel)
+        .max()
+        .orElse(1);
+  }
+
+  /**
+   * SUPER_ADMIN (4) dışındaki kullanıcılar kendileriyle eşit veya daha yüksek rol seviyesindeki
+   * başka bir kullanıcıyı düzenleyemez/silemez/pasifleştiremez.
+   */
+  private void assertCanManageTargetUser(User targetUser, boolean allowSelf) {
+    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    if (allowSelf && auth != null && targetUser.getUsername() != null) {
+      String currentName = auth.getName();
+      if (targetUser.getUsername().equals(currentName)) {
+        return;
+      }
+      if (auth.getPrincipal() instanceof JwtAuthenticationFilter.CachedUserPrincipal principal
+          && targetUser.getUsername().equals(principal.getCachedUser().getUsername())) {
+        return;
+      }
+    }
+    int requesterLevel = currentUserRoleLevel();
+    int targetLevel = targetUserRoleLevel(targetUser);
+    if (requesterLevel < 4 && targetLevel >= requesterLevel) {
+      throw new com.cms.exception.ForbiddenException(
+          "Kendinizle aynı veya daha yüksek yetkideki bir kullanıcı üzerinde işlem yapamazsınız");
+    }
   }
 }

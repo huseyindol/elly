@@ -1,15 +1,18 @@
 package com.cms.config;
 
 import com.cms.dto.CachedUserDetails;
+import com.cms.entity.ChatGroup;
+import com.cms.entity.ChatGroupType;
 import com.cms.entity.Permission;
 import com.cms.entity.Role;
 import com.cms.entity.User;
+import com.cms.repository.ChatGroupMemberRepository;
+import com.cms.repository.ChatGroupRepository;
 import com.cms.repository.UserRepository;
 import com.cms.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.Message;
@@ -25,11 +28,15 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Configuration
@@ -37,8 +44,19 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfigurer {
 
+  private static final Pattern USER_TOPIC_PATTERN =
+      Pattern.compile("^/topic/user/(\\d+)/(groups/joined|groups/removed|membership|rtc)$");
+  private static final Pattern TENANT_GROUP_TOPIC_PATTERN =
+      Pattern.compile("^/topic/tenant/([^/]+)/group/([0-9a-fA-F-]{36})(?:/(typing|read|bans))?$");
+  private static final Pattern LEGACY_GROUP_TOPIC_PATTERN =
+      Pattern.compile("^/topic/group/([0-9a-fA-F-]{36})(?:/(typing|read|bans))?$");
+  private static final Pattern RTC_CLIENT_TOPIC_PATTERN =
+      Pattern.compile("^/topic/rtc-client/([^/]+)/rtc$");
+
   private final JwtUtil jwtUtil;
   private final UserRepository userRepository;
+  private final ChatGroupRepository chatGroupRepository;
+  private final ChatGroupMemberRepository chatGroupMemberRepository;
   private final ObjectMapper objectMapper;
   private final RedisTemplate<String, Object> redisTemplate;
 
@@ -59,6 +77,12 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
         } else if (accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth) {
           // SEND/SUBSCRIBE vb. — REST ile aynı SecurityContext (ROLE_* dahil)
           SecurityContextHolder.getContext().setAuthentication(auth);
+          if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+            authorizeSubscribe(accessor, message);
+          }
+        } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+          throw new org.springframework.messaging.MessageDeliveryException(
+              message, "Unauthenticated STOMP SUBSCRIBE rejected");
         }
 
         return message;
@@ -268,5 +292,180 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
     } finally {
       TenantContext.setTenantId(originalTenant);
     }
+  }
+
+  /**
+   * STOMP SUBSCRIBE yetkilendirmesi:
+   * - /user/queue/** : kendi oturumuna özel kuyruklar (tüm doğrulanmış oturumlara açık)
+   * - /topic/presence, /topic/groups/new, /topic/groups/deleted : yalnız loginSource="admin"
+   * - /topic/user/{userId}/** : yalnız kendi userId'si ile eşleşen oturumlar
+   * - /topic/rtc-client/{clientRef}/rtc : doğrulanmış oturumlar (clientRef boş olamaz)
+   * - /topic/tenant/{tid}/group/{groupId}(/.*)? ve /topic/group/{groupId}(/.*)? :
+   *   grup erişim kontrolü (üyelik, visitorAccess veya rol görünürlüğü) + tenant izolasyonu
+   */
+  public void authorizeSubscribe(StompHeaderAccessor accessor, Message<?> message) {
+    String destination = accessor.getDestination();
+    if (destination == null || destination.isBlank()) {
+      throw new org.springframework.messaging.MessageDeliveryException(
+          message, "Missing STOMP SUBSCRIBE destination");
+    }
+
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    String loginSource = attrs != null && attrs.get("loginSource") != null
+        ? attrs.get("loginSource").toString()
+        : null;
+    String sessionTenant = attrs != null && attrs.get("tenantId") != null
+        ? attrs.get("tenantId").toString()
+        : null;
+    Long sessionUserId = null;
+    if (attrs != null && attrs.get("userId") != null) {
+      Object rawId = attrs.get("userId");
+      sessionUserId = (rawId instanceof Long l) ? l : Long.valueOf(rawId.toString());
+    }
+
+    // 1. Kişisel kuyruklar (/user/queue/**)
+    if (destination.startsWith("/user/queue/")) {
+      return;
+    }
+
+    // 2. Panel genel yayınları
+    if ("/topic/presence".equals(destination)
+        || "/topic/groups/new".equals(destination)
+        || "/topic/groups/deleted".equals(destination)) {
+      if (!"admin".equals(loginSource)) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "Only admin sessions can subscribe to " + destination);
+      }
+      return;
+    }
+
+    // 3. Kullanıcıya özel topic (/topic/user/{userId}/...)
+    Matcher userMatcher = USER_TOPIC_PATTERN.matcher(destination);
+    if (userMatcher.matches()) {
+      Long targetUserId = Long.valueOf(userMatcher.group(1));
+      if (sessionUserId == null || !sessionUserId.equals(targetUserId)) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "Cannot subscribe to another user's topic: " + destination);
+      }
+      return;
+    }
+
+    // 4. WebRTC caller sinyalleşme kanalı (/topic/rtc-client/{clientRef}/rtc)
+    Matcher rtcClientMatcher = RTC_CLIENT_TOPIC_PATTERN.matcher(destination);
+    if (rtcClientMatcher.matches()) {
+      return;
+    }
+
+    // 5. Tenant-scoped veya legacy grup kanalları
+    Matcher tenantGroupMatcher = TENANT_GROUP_TOPIC_PATTERN.matcher(destination);
+    if (tenantGroupMatcher.matches()) {
+      String targetTenantId = tenantGroupMatcher.group(1);
+      UUID groupId = UUID.fromString(tenantGroupMatcher.group(2));
+      authorizeGroupTopicSubscribe(
+          message, accessor, loginSource, sessionTenant, sessionUserId, targetTenantId, groupId);
+      return;
+    }
+
+    Matcher legacyGroupMatcher = LEGACY_GROUP_TOPIC_PATTERN.matcher(destination);
+    if (legacyGroupMatcher.matches()) {
+      UUID groupId = UUID.fromString(legacyGroupMatcher.group(1));
+      authorizeGroupTopicSubscribe(
+          message, accessor, loginSource, sessionTenant, sessionUserId, sessionTenant, groupId);
+      return;
+    }
+
+    throw new org.springframework.messaging.MessageDeliveryException(
+        message, "Forbidden STOMP subscription destination: " + destination);
+  }
+
+  private void authorizeGroupTopicSubscribe(
+      Message<?> message,
+      StompHeaderAccessor accessor,
+      String loginSource,
+      String sessionTenant,
+      Long sessionUserId,
+      String targetTenantId,
+      UUID groupId) {
+    if (targetTenantId == null || targetTenantId.isBlank()) {
+      throw new org.springframework.messaging.MessageDeliveryException(
+          message, "Group subscription requires tenantId");
+    }
+
+    // Tenant ve Guest oturumları yalnızca kendi tenant'ındaki gruplara abone olabilir
+    if (("website".equals(loginSource) || "tenant".equals(loginSource))
+        && !targetTenantId.equals(sessionTenant)) {
+      throw new org.springframework.messaging.MessageDeliveryException(
+          message, "Cross-tenant group subscription forbidden");
+    }
+
+    String originalTenant = TenantContext.getTenantId();
+    TenantContext.setTenantId(targetTenantId);
+    try {
+      ChatGroup group = chatGroupRepository.findById(groupId).orElse(null);
+      if (group == null) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "Chat group not found: " + groupId);
+      }
+
+      if ("website".equals(loginSource)) {
+        if (!group.isVisitorAccess()) {
+          throw new org.springframework.messaging.MessageDeliveryException(
+              message, "Guest cannot subscribe to non-visitor group: " + groupId);
+        }
+        return;
+      }
+
+      boolean isMember = sessionUserId != null
+          && chatGroupMemberRepository.existsByIdGroupIdAndIdUserId(groupId, sessionUserId);
+      if (isMember) {
+        return;
+      }
+
+      if ("tenant".equals(loginSource)) {
+        if (!group.isVisitorAccess()) {
+          throw new org.springframework.messaging.MessageDeliveryException(
+              message, "Tenant user cannot subscribe to group without membership: " + groupId);
+        }
+        return;
+      }
+
+      if ("admin".equals(loginSource)) {
+        boolean isPublicTenantGroup = group.getTenantId() != null
+            && !group.getTenantId().isBlank()
+            && group.isVisitorAccess();
+        if (isPublicTenantGroup) {
+          return;
+        }
+        int roleLevel = resolveRoleLevel(accessor);
+        boolean canRead = (group.getType() == ChatGroupType.DM)
+            ? roleLevel >= 4
+            : roleLevel >= group.getVisibilityLevel();
+        if (!canRead) {
+          throw new org.springframework.messaging.MessageDeliveryException(
+              message, "Insufficient role level to subscribe to group: " + groupId);
+        }
+        return;
+      }
+
+      throw new org.springframework.messaging.MessageDeliveryException(
+          message, "Unauthorized loginSource for group subscription");
+    } finally {
+      TenantContext.setTenantId(originalTenant);
+    }
+  }
+
+  private int resolveRoleLevel(StompHeaderAccessor accessor) {
+    if (!(accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth)) {
+      return 1;
+    }
+    Collection<? extends GrantedAuthority> authorities = auth.getAuthorities();
+    if (authorities == null) return 1;
+    Set<String> names = authorities.stream()
+        .map(GrantedAuthority::getAuthority)
+        .collect(Collectors.toSet());
+    if (names.contains("ROLE_SUPER_ADMIN")) return 4;
+    if (names.contains("ROLE_ADMIN")) return 3;
+    if (names.contains("ROLE_EDITOR")) return 2;
+    return 1;
   }
 }

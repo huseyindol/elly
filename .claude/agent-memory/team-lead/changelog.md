@@ -5,6 +5,18 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-10-25] STOMP SUBSCRIBE Yetkilendirmesi, 2FA Brute-Force Koruması, Rol Hiyerarşisi ve DtoEmailLog Hata Detayı
+**Tip:** 🔒 Güvenlik + 🔧 İyileştirme | **Boyut:** Orta
+
+### Özet
+- **STOMP `SUBSCRIBE` Yetkilendirmesi (`ChatWebSocketSecurityConfig`):** `/topic/presence`, `/topic/groups/{new,deleted}`, `/topic/user/{userId}/**` ve `/topic/tenant/{tid}/group/{groupId}(/**)` aboneliklerinde oturum tipi (`admin|tenant|website`), kullanıcı ID eşleşmesi, tenant izolasyonu ve grup okuma yetkisi (`member`, `visitorAccess`, `visibilityLevel`) kontrolü eklendi.
+- **2FA Brute-Force & Kurulum Koruması (`AuthService`, `UserAuthCacheService`):** `/auth/mfa/verify` uç noktasında 5 dakikalık pencerede en fazla 5 hatalı TOTP deneme sınırı eklendi; `initMfaSetup` çağrısında 2FA zaten etkin ve doğrulanmışsa mevcut 2FA'yı sıfırlaması engellendi.
+- **Kullanıcı Rol Hiyerarşisi (`UserService`):** `updateUser`, `deleteUser` ve `setUserStatus` işlemlerinde `SUPER_ADMIN` dışındaki kullanıcıların kendileriyle eşit veya daha yüksek rol seviyesindeki başka bir kullanıcı üzerinde işlem yapması `ForbiddenException` ile engellendi.
+- **`DtoEmailLog` Hata Detayı (`DtoEmailLog`, `EmailService`):** `EmailLog.errorMessage` alanı `DtoEmailLog`'a taşındı.
+- **Birim Testleri:** `SecurityHardeningTest` (7 test) eklendi.
+
+---
+
 ## [2026-10-17] Gemini Interactions API (gemini-3.8-flash) ile Merkezi AI Üretim Endpoint'leri
 **Tip:** 🆕 Özellik | **Boyut:** Orta
 

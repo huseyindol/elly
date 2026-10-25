@@ -176,6 +176,7 @@ public class EmailService implements IEmailService {
         .templateName(entity.getTemplateName())
         .status(entity.getStatus())
         .retryCount(entity.getRetryCount())
+        .errorMessage(entity.getErrorMessage())
         .createdAt(entity.getCreatedAt())
         .sentAt(entity.getSentAt())
         .build();

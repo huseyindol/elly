@@ -1,10 +1,13 @@
 package com.cms.controller;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import com.cms.dto.DtoFormDefinition;
 import com.cms.dto.DtoFormDefinitionIU;
 import com.cms.dto.DtoFormSubmission;
+import com.cms.dto.DtoFormSubmissionCleanupResult;
+import com.cms.dto.DtoFormSubmissionExport;
 import com.cms.dto.DtoFormSubmit;
 import com.cms.dto.PagedResponse;
 import com.cms.entity.RootEntityResponse;
@@ -39,4 +42,8 @@ public interface IFormController {
   RootEntityResponse<DtoFormSubmission> getSubmissionById(Long submissionId);
 
   RootEntityResponse<Long> getSubmissionCount(Long formId);
+
+  RootEntityResponse<DtoFormSubmissionExport> exportSubmissionsCsv(Long formId, LocalDate from, LocalDate to);
+
+  RootEntityResponse<DtoFormSubmissionCleanupResult> cleanupOldSubmissions(Long formId, int retentionDays);
 }

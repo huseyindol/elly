@@ -46,6 +46,9 @@ public class CallSessionService {
   private final CallLogService callLogService;
   private final TaskScheduler taskScheduler;
 
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  private com.cms.service.impl.PushNotificationService pushNotificationService;
+
   private final Map<UUID, CallSession> calls = new ConcurrentHashMap<>();
   /** userId → aktif/çalan callId (aynı anda tek çağrı). */
   private final Map<Long, UUID> busy = new ConcurrentHashMap<>();
@@ -147,6 +150,10 @@ public class CallSessionService {
     // callee'ye gelen çağrı, caller'a "çalıyor" onayı
     sendSignal(calleeUserId, callee.username(), sig(CallSignalType.INCOMING_CALL, s.callId)
         .peerUserId(callerUserId).peerDisplayName(callerUsername).ringAll(false).build());
+    if (pushNotificationService != null) {
+      withTenant(s.tenantId, () -> pushNotificationService.sendIncomingCallWakeup(
+          calleeUserId, s.callId.toString(), callerUserId, callerUsername, false, s.tenantId));
+    }
     sendSignal(callerUserId, callerUsername, sig(CallSignalType.RINGING, s.callId)
         .peerUserId(calleeUserId).peerDisplayName(callee.username()).build());
   }
@@ -202,8 +209,14 @@ public class CallSessionService {
     withTenant(s.tenantId, () -> callLogService.createRinging(s.callId, callerUserId, callerUsername));
     scheduleTimeout(s);
 
-    online.forEach(p -> sendSignal(p.userId(), p.username(), sig(CallSignalType.INCOMING_CALL, s.callId)
-        .peerUserId(callerUserId).peerDisplayName(callerUsername).ringAll(true).build()));
+    online.forEach(p -> {
+      sendSignal(p.userId(), p.username(), sig(CallSignalType.INCOMING_CALL, s.callId)
+          .peerUserId(callerUserId).peerDisplayName(callerUsername).ringAll(true).build());
+      if (pushNotificationService != null) {
+        withTenant(s.tenantId, () -> pushNotificationService.sendIncomingCallWakeup(
+            p.userId(), s.callId.toString(), callerUserId, callerUsername, true, s.tenantId));
+      }
+    });
     sendSignal(callerUserId, callerUsername, sig(CallSignalType.RINGING, s.callId).build());
   }
 

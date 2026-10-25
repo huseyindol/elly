@@ -1,9 +1,11 @@
 package com.cms.controller.impl;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +22,8 @@ import com.cms.controller.IFormController;
 import com.cms.dto.DtoFormDefinition;
 import com.cms.dto.DtoFormDefinitionIU;
 import com.cms.dto.DtoFormSubmission;
+import com.cms.dto.DtoFormSubmissionCleanupResult;
+import com.cms.dto.DtoFormSubmissionExport;
 import com.cms.dto.DtoFormSubmit;
 import com.cms.dto.PagedResponse;
 import com.cms.entity.FormDefinition;
@@ -204,5 +208,24 @@ public class FormController extends BaseController implements IFormController {
   public RootEntityResponse<Long> getSubmissionCount(@PathVariable Long formId) {
     Long count = formSubmissionService.countByFormId(formId);
     return ok(count);
+  }
+
+  @Override
+  @GetMapping("/{formId}/submissions/export")
+  @PreAuthorize("hasAuthority('forms:read')")
+  public RootEntityResponse<DtoFormSubmissionExport> exportSubmissionsCsv(
+      @PathVariable Long formId,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+    return ok(formSubmissionService.exportCsv(formId, from, to));
+  }
+
+  @Override
+  @DeleteMapping("/{formId}/submissions/cleanup")
+  @PreAuthorize("hasAuthority('forms:delete')")
+  public RootEntityResponse<DtoFormSubmissionCleanupResult> cleanupOldSubmissions(
+      @PathVariable Long formId,
+      @RequestParam(defaultValue = "365") int retentionDays) {
+    return ok(formSubmissionService.cleanupOldSubmissions(formId, retentionDays));
   }
 }

@@ -248,6 +248,18 @@ public class JpaConfig {
           ADD COLUMN IF NOT EXISTS bcc VARCHAR(1000);
         ALTER TABLE IF EXISTS mail_accounts
           ADD COLUMN IF NOT EXISTS daily_limit INTEGER DEFAULT 500;
+        CREATE TABLE IF NOT EXISTS push_device_tokens (
+          id          BIGSERIAL PRIMARY KEY,
+          created_at  TIMESTAMP(6),
+          updated_at  TIMESTAMP(6),
+          user_id     BIGINT       NOT NULL,
+          token       VARCHAR(512) NOT NULL,
+          platform    VARCHAR(20)  NOT NULL,
+          voip_token  VARCHAR(512),
+          device_name VARCHAR(120)
+        );
+        CREATE INDEX IF NOT EXISTS idx_push_device_tokens_user_id ON push_device_tokens (user_id);
+        CREATE INDEX IF NOT EXISTS idx_push_device_tokens_token   ON push_device_tokens (token);
         """;
 
     tenantProperties.getDatasources().forEach((tenantId, config) -> {

@@ -32,4 +32,20 @@ public interface FormSubmissionRepository extends JpaRepository<FormSubmission, 
   List<FormSubmission> findBySubmittedAtBetween(
       @Param("startDate") LocalDateTime startDate,
       @Param("endDate") LocalDateTime endDate);
+
+  @Query("SELECT fs FROM FormSubmission fs WHERE fs.formDefinition.id = :formId AND fs.submittedAt BETWEEN :startDate AND :endDate ORDER BY fs.submittedAt DESC")
+  List<FormSubmission> findByFormIdAndSubmittedAtBetweenOrderBySubmittedAtDesc(
+      @Param("formId") Long formId,
+      @Param("startDate") LocalDateTime startDate,
+      @Param("endDate") LocalDateTime endDate);
+
+  @Modifying
+  @Query("DELETE FROM FormSubmission fs WHERE fs.formDefinition.id = :formId AND fs.submittedAt < :cutoff")
+  int deleteByFormIdAndSubmittedAtBefore(
+      @Param("formId") Long formId,
+      @Param("cutoff") LocalDateTime cutoff);
+
+  @Modifying
+  @Query("DELETE FROM FormSubmission fs WHERE fs.submittedAt < :cutoff")
+  int deleteBySubmittedAtBefore(@Param("cutoff") LocalDateTime cutoff);
 }

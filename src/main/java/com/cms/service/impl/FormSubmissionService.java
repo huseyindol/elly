@@ -1,10 +1,15 @@
 package com.cms.service.impl;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -13,6 +18,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.cms.dto.DtoFormSubmissionCleanupResult;
+import com.cms.dto.DtoFormSubmissionExport;
 import com.cms.dto.EmailRequest;
 import com.cms.entity.FormDefinition;
 import com.cms.entity.FormSubmission;
@@ -271,5 +278,104 @@ public class FormSubmissionService implements IFormSubmissionService {
       return true;
     }
     return false;
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public DtoFormSubmissionExport exportCsv(Long formDefinitionId, LocalDate from, LocalDate to) {
+    FormDefinition formDefinition = formDefinitionService.getById(formDefinitionId);
+    List<FormSubmission> submissions;
+    if (from != null || to != null) {
+      LocalDateTime start = from != null ? from.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);
+      LocalDateTime end = to != null ? to.atTime(23, 59, 59) : LocalDateTime.now().plusDays(1);
+      submissions = formSubmissionRepository.findByFormIdAndSubmittedAtBetweenOrderBySubmittedAtDesc(
+          formDefinitionId, start, end);
+    } else {
+      submissions = formSubmissionRepository.findByFormIdOrderBySubmittedAtDesc(formDefinitionId);
+    }
+
+    Map<String, String> fieldLabels = new LinkedHashMap<>();
+    if (formDefinition.getSchema() != null && formDefinition.getSchema().getFields() != null) {
+      for (FieldDefinition f : formDefinition.getSchema().getFields()) {
+        if (f != null && f.getId() != null) {
+          fieldLabels.put(f.getId(), f.getLabel() != null && !f.getLabel().isBlank() ? f.getLabel() : f.getId());
+        }
+      }
+    }
+
+    Set<String> extraKeys = new LinkedHashSet<>();
+    for (FormSubmission sub : submissions) {
+      if (sub.getPayload() != null) {
+        for (String key : sub.getPayload().keySet()) {
+          if (!fieldLabels.containsKey(key)) {
+            extraKeys.add(key);
+          }
+        }
+      }
+    }
+
+    List<String> orderedKeys = new ArrayList<>(fieldLabels.keySet());
+    orderedKeys.addAll(extraKeys);
+
+    StringBuilder sb = new StringBuilder();
+    sb.append('\uFEFF'); // UTF-8 BOM for Excel compatibility
+    sb.append("ID,Gönderim Tarihi");
+    for (String key : orderedKeys) {
+      sb.append(',').append(escapeCsv(fieldLabels.getOrDefault(key, key)));
+    }
+    sb.append("\r\n");
+
+    for (FormSubmission sub : submissions) {
+      sb.append(sub.getId() != null ? sub.getId() : "");
+      sb.append(',');
+      sb.append(escapeCsv(sub.getSubmittedAt() != null
+          ? SUBMITTED_AT_FORMATTER.format(sub.getSubmittedAt())
+          : ""));
+      Map<String, Object> payload = sub.getPayload();
+      for (String key : orderedKeys) {
+        Object val = payload != null ? payload.get(key) : null;
+        sb.append(',').append(escapeCsv(val != null ? String.valueOf(val) : ""));
+      }
+      sb.append("\r\n");
+    }
+
+    String safeTitle = formDefinition.getTitle() != null
+        ? formDefinition.getTitle().replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase()
+        : "form_" + formDefinitionId;
+    String fileName = safeTitle + "_submissions.csv";
+    return new DtoFormSubmissionExport(fileName, submissions.size(), sb.toString());
+  }
+
+  @Override
+  @Transactional
+  @CacheEvict(value = "formSubmissions", allEntries = true)
+  public DtoFormSubmissionCleanupResult cleanupOldSubmissions(Long formDefinitionId, int retentionDays) {
+    if (retentionDays < 1) {
+      throw new ValidationException("Saklama suresi (retentionDays) en az 1 gun olmalidir");
+    }
+    formDefinitionService.getById(formDefinitionId);
+    LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+    int deleted = formSubmissionRepository.deleteByFormIdAndSubmittedAtBefore(formDefinitionId, cutoff);
+    return new DtoFormSubmissionCleanupResult(deleted, retentionDays);
+  }
+
+  @Override
+  @Transactional
+  @CacheEvict(value = "formSubmissions", allEntries = true)
+  public int cleanupAllExpiredSubmissions(int retentionDays) {
+    if (retentionDays < 1) {
+      return 0;
+    }
+    LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+    return formSubmissionRepository.deleteBySubmittedAtBefore(cutoff);
+  }
+
+  private String escapeCsv(String raw) {
+    if (raw == null) {
+      return "";
+    }
+    boolean needsQuotes = raw.contains(",") || raw.contains("\"") || raw.contains("\n") || raw.contains("\r");
+    String escaped = raw.replace("\"", "\"\"");
+    return needsQuotes ? "\"" + escaped + "\"" : escaped;
   }
 }

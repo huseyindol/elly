@@ -1955,6 +1955,36 @@ Belirli bir forma ait toplam yanıt sayısını getir.
 
 ---
 
+### GET /api/v1/forms/{formId}/submissions/export
+Belirli bir forma ait yanıtları tarih aralığı filtresi (`from`, `to` — `YYYY-MM-DD`) ile UTF-8 BOM CSV formatında dışa aktarır (`forms:read`).
+
+**Response:**
+```json
+{
+  "result": true,
+  "data": {
+    "fileName": "iletisim_submissions.csv",
+    "count": 12,
+    "csvContent": "\uFEFFID,Gönderim Tarihi,Ad Soyad\r\n1,25.04.2026 14:30:00,Ahmet Yılmaz\r\n"
+  }
+}
+```
+
+---
+
+### DELETE /api/v1/forms/{formId}/submissions/cleanup
+Belirli bir formda `retentionDays` (varsayılan `365`) günden eski yanıtları KVKK/GDPR kapsamında temizler (`forms:delete`). Ayrıca her gece `FormSubmissionRetentionScheduler` (`app.forms.retention-days`, varsayılan `365`) tüm tenant'larda otomatik temizlik çalıştırır.
+
+---
+
+### Bildirim Cihaz Kaydı & WebRTC ICE Sunucuları (`/api/v1/notifications`)
+- `POST /api/v1/notifications/devices`: Mobil push / VoIP cihaz token kaydı (`token`, `platform` (`ANDROID|IOS|WEB`), `voipToken`, `deviceName`).
+- `GET /api/v1/notifications/devices`: Aktif kullanıcının kayıtlı cihazlarını listeler.
+- `DELETE /api/v1/notifications/devices?token=...`: Cihaz token kaydını siler.
+- `GET /api/v1/notifications/ice-servers`: STUN + (varsa `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL`) WebRTC ICE sunucu listesini döner.
+
+---
+
 ## CMS Contents
 
 Esnek, sektörden bağımsız içerik yapıları için JSONB tabanlı Headless CMS endpointleri.

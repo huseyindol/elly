@@ -35,6 +35,7 @@ public class NotificationPublisher implements INotificationPublisher {
   private final NotificationMapper notificationMapper;
   private final UserRepository userRepository;
   private final SimpMessagingTemplate messagingTemplate;
+  private final PushNotificationService pushNotificationService;
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -100,6 +101,15 @@ public class NotificationPublisher implements INotificationPublisher {
       log.debug("Notification WS push → userId={} username={} notificationId={}",
           userId, user.getUsername(), dto.getId());
     }, () -> log.warn("Notification WS push skipped — userId={} not found", userId));
+
+    if (pushNotificationService != null && dto != null) {
+      pushNotificationService.sendPushToUser(
+          userId,
+          dto.getTitle(),
+          dto.getMessage(),
+          dto.getLink(),
+          dto.getMetadata());
+    }
   }
 
   private String sanitizeText(String value) {

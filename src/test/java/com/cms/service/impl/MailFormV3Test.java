@@ -12,6 +12,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -26,12 +28,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.cms.config.TenantMailSenderFactory;
 import com.cms.dto.DtoEmailLog;
 import com.cms.dto.DtoEmailStats;
+import com.cms.dto.DtoFormSubmissionCleanupResult;
+import com.cms.dto.DtoFormSubmissionExport;
+import com.cms.dto.DtoIceServer;
+import com.cms.dto.DtoPushDeviceRequest;
+import com.cms.dto.DtoPushDeviceResponse;
 import com.cms.dto.EmailMessage;
 import com.cms.dto.EmailRequest;
 import com.cms.entity.EmailLog;
 import com.cms.entity.FormDefinition;
 import com.cms.entity.FormSubmission;
 import com.cms.entity.MailAccount;
+import com.cms.entity.PushDeviceToken;
 import com.cms.entity.form.FieldDefinition;
 import com.cms.entity.form.FormSchema;
 import com.cms.enums.EmailStatus;
@@ -41,6 +49,7 @@ import com.cms.exception.ValidationException;
 import com.cms.repository.EmailLogRepository;
 import com.cms.repository.FormDefinitionRepository;
 import com.cms.repository.FormSubmissionRepository;
+import com.cms.repository.PushDeviceTokenRepository;
 import com.cms.service.IEmailService;
 import com.cms.service.IFormDefinitionService;
 import com.cms.service.IMailAccountService;
@@ -250,5 +259,79 @@ class MailFormV3Test {
     assertEquals("audit@example.com", captured.getBcc());
     assertEquals("hr-application-template", captured.getTemplateName());
     assertEquals("Ayse Demir", captured.getDynamicData().get("fullName"));
+  }
+
+  @Test
+  void b5_exportCsvAndKvkkRetentionCleanup() {
+    FormSubmissionRepository subRepo = mock(FormSubmissionRepository.class);
+    IFormDefinitionService defService = mock(IFormDefinitionService.class);
+    ConditionEvaluator condEval = mock(ConditionEvaluator.class);
+    IEmailService emailService = mock(IEmailService.class);
+    INotificationService notificationService = mock(INotificationService.class);
+    FormSpamProtectionService spamService = new FormSpamProtectionService(null);
+
+    FormSubmissionService submissionService = new FormSubmissionService(
+        subRepo, defService, condEval, List.of(), emailService, notificationService, spamService);
+
+    FieldDefinition f1 = new FieldDefinition();
+    f1.setId("fullName");
+    f1.setLabel("Ad Soyad");
+    FormSchema schema = new FormSchema();
+    schema.setFields(List.of(f1));
+
+    FormDefinition def = new FormDefinition();
+    ReflectionTestUtils.setField(def, "id", 5L);
+    def.setTitle("Iletisim Formu");
+    def.setSchema(schema);
+
+    FormSubmission sub = new FormSubmission();
+    ReflectionTestUtils.setField(sub, "id", 42L);
+    sub.setSubmittedAt(LocalDateTime.of(2026, 3, 15, 14, 30, 0));
+    sub.setPayload(Map.of("fullName", "Mehmet, Kaya"));
+
+    when(defService.getById(5L)).thenReturn(def);
+    when(subRepo.findByFormIdAndSubmittedAtBetweenOrderBySubmittedAtDesc(eq(5L), any(), any()))
+        .thenReturn(List.of(sub));
+    when(subRepo.deleteByFormIdAndSubmittedAtBefore(eq(5L), any())).thenReturn(3);
+
+    DtoFormSubmissionExport export = submissionService.exportCsv(
+        5L, LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31));
+    assertEquals(1, export.getCount());
+    assertTrue(export.getFileName().endsWith("_submissions.csv"));
+    assertTrue(export.getCsvContent().contains("ID,Gönderim Tarihi,Ad Soyad"));
+    assertTrue(export.getCsvContent().contains("\"Mehmet, Kaya\""));
+
+    DtoFormSubmissionCleanupResult cleanup = submissionService.cleanupOldSubmissions(5L, 365);
+    assertEquals(3, cleanup.getDeletedCount());
+    assertEquals(365, cleanup.getRetentionDays());
+  }
+
+  @Test
+  void c1_c2_c3_pushDeviceRegistrationAndRtcIceServers() {
+    PushDeviceTokenRepository tokenRepo = mock(PushDeviceTokenRepository.class);
+    PushNotificationService pushService = new PushNotificationService(tokenRepo, new ObjectMapper());
+
+    when(tokenRepo.findByUserIdAndToken(7L, "fcm-token-123")).thenReturn(Optional.empty());
+    when(tokenRepo.save(any(PushDeviceToken.class))).thenAnswer(inv -> {
+      PushDeviceToken t = inv.getArgument(0);
+      ReflectionTestUtils.setField(t, "id", 11L);
+      return t;
+    });
+
+    DtoPushDeviceRequest req = new DtoPushDeviceRequest("fcm-token-123", "ios", "voip-token-456", "iPhone 16");
+    DtoPushDeviceResponse res = pushService.registerDevice(7L, req);
+    assertEquals(11L, res.getId());
+    assertEquals("IOS", res.getPlatform());
+    assertEquals("voip-token-456", res.getVoipToken());
+
+    RtcIceConfigService iceService = new RtcIceConfigService();
+    ReflectionTestUtils.setField(iceService, "stunUrls", "stun:stun.l.google.com:19302");
+    ReflectionTestUtils.setField(iceService, "turnUrls", "turn:turn.example.com:3478?transport=udp");
+    ReflectionTestUtils.setField(iceService, "turnUsername", "ellyuser");
+    ReflectionTestUtils.setField(iceService, "turnCredential", "ellysecret");
+
+    List<DtoIceServer> servers = iceService.getIceServers();
+    assertEquals(2, servers.size());
+    assertEquals("ellyuser", servers.get(1).getUsername());
   }
 }

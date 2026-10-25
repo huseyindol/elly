@@ -1,11 +1,14 @@
 package com.cms.service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import com.cms.dto.DtoFormSubmissionCleanupResult;
+import com.cms.dto.DtoFormSubmissionExport;
 import com.cms.entity.FormSubmission;
 
 public interface IFormSubmissionService {
@@ -30,4 +33,10 @@ public interface IFormSubmissionService {
   Long countByFormId(Long formDefinitionId);
 
   Boolean delete(Long id);
+
+  DtoFormSubmissionExport exportCsv(Long formDefinitionId, LocalDate from, LocalDate to);
+
+  DtoFormSubmissionCleanupResult cleanupOldSubmissions(Long formDefinitionId, int retentionDays);
+
+  int cleanupAllExpiredSubmissions(int retentionDays);
 }

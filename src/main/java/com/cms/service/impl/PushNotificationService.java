@@ -53,7 +53,7 @@ public class PushNotificationService {
   @Value("${app.push.apns.p12-path:${APNS_VOIP_P12_PATH:${user.home}/.elly-certs/apple-voip/elly_voip.p12}}")
   private String apnsVoipP12Path;
 
-  @Value("${app.push.apns.p12-password:${APNS_VOIP_P12_PASSWORD:ellyvoip}}")
+  @Value("${app.push.apns.p12-password:${APNS_VOIP_P12_PASSWORD:}}")
   private String apnsVoipP12Password;
 
   @Value("${app.push.apns.voip-topic:${APNS_VOIP_TOPIC:com.huseyindol.ellyMobileApp.voip}}")
@@ -263,7 +263,14 @@ public class PushNotificationService {
         if (apnsVoipClient != null && apnsVoipClientLoadedMtime == mtime) {
           return apnsVoipClient;
         }
-        char[] password = apnsVoipP12Password != null ? apnsVoipP12Password.toCharArray() : new char[0];
+        String resolvedPass = apnsVoipP12Password;
+        if (resolvedPass == null || resolvedPass.isBlank()) {
+          Path passFile = path.getParent() != null ? path.getParent().resolve(".p12_pass") : null;
+          if (passFile != null && Files.isRegularFile(passFile)) {
+            resolvedPass = Files.readString(passFile).trim();
+          }
+        }
+        char[] password = (resolvedPass != null) ? resolvedPass.toCharArray() : new char[0];
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
         try (FileInputStream fis = new FileInputStream(path.toFile())) {
           keyStore.load(fis, password);

@@ -5,6 +5,15 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-10-27] WebRTC & VoIP Push Erişilebilirlik + Cihaz/VoIP Token Tekilleştirme
+**Tip:** 🐛 Hata Düzeltme + 🔧 İyileştirme | **Boyut:** Küçük-Orta
+
+### Özet
+- **Arka Plan VoIP Erişilebilirliği (`CallSessionService.isUserReachable`):** Panel kullanıcısının STOMP bağlantısı arka planda kapalıyken (`presenceService.isOnline(userId) == false`) kayıtlı mobil push/VoIP cihazı (`pushNotificationService.hasRegisteredDevices(userId)`) varsa `startPanelCall` ve `startTenantRingAll` akışlarında ulaşılabilir kabul edilerek APNs VoIP Push ile uyandırılması sağlandı.
+- **Cihaz ve VoIP Token Tekilleştirme (`PushNotificationService`):** `registerDevice` içinde aynı `userId + token` için mükerrer kayıt oluşumu önlendi (varsa fazlalık kayıtlar temizlenir) ve `sendIncomingCallWakeup` içinde `voipTokens` listesi `.distinct()` ile tekilleştirilerek aynı çağrı için çift APNs VoIP push gönderimi engellendi.
+
+---
+
 ## [2026-10-27] Apple APNs VoIP HTTP/2 `.p12` (`APNS_VOIP_P12_BASE64`) + Sandbox/Production Otomatik Fallback
 **Tip:** 🆕 Özellik + 🔧 İyileştirme | **Boyut:** Orta
 

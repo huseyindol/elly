@@ -89,12 +89,22 @@ public class PushNotificationService {
         ? req.getDeviceName().trim()
         : null;
 
-    PushDeviceToken entity = pushDeviceTokenRepository.findByUserIdAndToken(userId, token)
-        .orElseGet(() -> PushDeviceToken.builder()
-            .userId(userId)
-            .token(token)
-            .platform(platform)
-            .build());
+    List<PushDeviceToken> existing = pushDeviceTokenRepository.findByUserId(userId).stream()
+        .filter(d -> token.equals(d.getToken()))
+        .toList();
+    PushDeviceToken entity;
+    if (!existing.isEmpty()) {
+      entity = existing.get(0);
+      if (existing.size() > 1) {
+        pushDeviceTokenRepository.deleteAll(existing.subList(1, existing.size()));
+      }
+    } else {
+      entity = PushDeviceToken.builder()
+          .userId(userId)
+          .token(token)
+          .platform(platform)
+          .build();
+    }
     entity.setPlatform(platform);
     entity.setVoipToken(voipToken);
     entity.setDeviceName(deviceName);
@@ -163,6 +173,8 @@ public class PushNotificationService {
       List<String> voipTokens = devices.stream()
           .map(PushDeviceToken::getVoipToken)
           .filter(v -> v != null && !v.isBlank())
+          .map(String::trim)
+          .distinct()
           .toList();
 
       Map<String, Object> payload = new LinkedHashMap<>();

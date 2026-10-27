@@ -120,7 +120,7 @@ public class CallSessionService {
       sendError(callerUserId, callerUsername, "Bu kullanıcıyı arama yetkiniz yok");
       return;
     }
-    if (!presenceService.isOnline(calleeUserId)) {
+    if (!isUserReachable(calleeUserId, callerTenant)) {
       sendSignal(callerUserId, callerUsername, sig(CallSignalType.UNAVAILABLE, null).reason("Kullanıcı çevrimdışı").build());
       return;
     }
@@ -181,7 +181,7 @@ public class CallSessionService {
       TenantContext.clear();
     }
     List<PanelUserRef> online = panelUsers.stream()
-        .filter(p -> presenceService.isOnline(p.userId()) && !busy.containsKey(p.userId()))
+        .filter(p -> !busy.containsKey(p.userId()) && isUserReachable(p.userId(), tenantId))
         .toList();
     if (online.isEmpty()) {
       sendSignal(callerUserId, callerUsername, sig(CallSignalType.UNAVAILABLE, null).reason("Şu an müsait temsilci yok").build());
@@ -333,6 +333,23 @@ public class CallSessionService {
   }
 
   // ─────────────────────────── Yardımcılar ───────────────────────────
+
+  private boolean isUserReachable(Long userId, String tenantId) {
+    if (presenceService.isOnline(userId)) {
+      return true;
+    }
+    if (pushNotificationService == null || tenantId == null || tenantId.isBlank()) {
+      return false;
+    }
+    try {
+      TenantContext.setTenantId(tenantId);
+      return pushNotificationService.hasRegisteredDevices(userId);
+    } catch (Exception e) {
+      return false;
+    } finally {
+      TenantContext.clear();
+    }
+  }
 
   private CallSession participantSession(UUID callId, Long userId) {
     CallSession s = calls.get(callId);

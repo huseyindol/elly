@@ -5,6 +5,16 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 
 ---
 
+## [2026-10-27] Apple APNs VoIP HTTP/2 `.p12` (`APNS_VOIP_P12_BASE64`) + Sandbox/Production Otomatik Fallback
+**Tip:** 🆕 Özellik + 🔧 İyileştirme | **Boyut:** Orta
+
+### Özet
+- **Apple APNs VoIP (`.p12` HTTP/2):** `PushNotificationService` içine harici kütüphane gerektirmeden Java `HttpClient` (HTTP/2 + PKCS#12 `SSLContext`) ile doğrudan `api.push.apple.com` / `api.development.push.apple.com` (`apns-push-type: voip`, `apns-priority: 10`, `apns-topic: com.huseyindol.ellyMobileApp.voip`) gönderimi eklendi.
+- **K8s Bellek İçi Sertifika (`APNS_VOIP_P12_BASE64`):** K8s pod içinde disk mount gerektirmemesi için `APNS_VOIP_P12_BASE64` ortam değişkeninden PKCS#12 keystore yükleme desteği ve `k8s/1-secret.template.yaml` şablonu eklendi.
+- **Sandbox / Production Otomatik Fallback:** `400 BadDeviceToken` / `DeviceTokenNotForTopic` yanıtında yedek APNs sunucusuna (Production <-> Sandbox) otomatik geçiş eklendi.
+
+---
+
 ## [2026-10-25] Mail & Form v3/v5 (Grup B) — Çoklu Alıcı (CC/BCC), SMTP Günlük Kota, Form Spam Koruması, 24s Hata İstatistiği ve Özel Şablon Seçimi
 **Tip:** 🆕 Özellik + 🔒 Güvenlik | **Boyut:** Orta-Büyük
 

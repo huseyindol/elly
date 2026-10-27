@@ -203,9 +203,12 @@ public class PushNotificationService {
     if (client == null) {
       return;
     }
-    String host = apnsVoipSandbox
+    String primaryHost = apnsVoipSandbox
         ? "https://api.development.push.apple.com"
         : "https://api.push.apple.com";
+    String fallbackHost = apnsVoipSandbox
+        ? "https://api.push.apple.com"
+        : "https://api.development.push.apple.com";
     String topic = (apnsVoipTopic != null && !apnsVoipTopic.isBlank())
         ? apnsVoipTopic.trim()
         : "com.huseyindol.ellyMobileApp.voip";
@@ -223,33 +226,50 @@ public class PushNotificationService {
       for (String voipToken : voipTokens) {
         String cleanToken = voipToken.trim().replaceAll("\\s+", "");
         if (cleanToken.isEmpty()) continue;
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(host + "/3/device/" + cleanToken))
-            .version(HttpClient.Version.HTTP_2)
-            .timeout(Duration.ofSeconds(5))
-            .header("apns-push-type", "voip")
-            .header("apns-priority", "10")
-            .header("apns-expiration", "0")
-            .header("apns-topic", topic)
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(json))
-            .build();
-        client.sendAsync(req, HttpResponse.BodyHandlers.ofString())
-            .thenAccept(res -> {
-              if (res.statusCode() != 200) {
-                log.warn("APNs VoIP push yaniti: status={}, body={}", res.statusCode(), res.body());
-              } else {
-                log.info("APNs VoIP push basarili: callId={}, topic={}", callId, topic);
-              }
-            })
-            .exceptionally(err -> {
-              log.warn("APNs VoIP push hatasi: {}", err.getMessage());
-              return null;
-            });
+        sendApnsVoipRequest(client, primaryHost, fallbackHost, cleanToken, topic, json, callId);
       }
     } catch (Exception ex) {
       log.warn("APNs VoIP payload olusturulamadi: {}", ex.getMessage());
     }
+  }
+
+  private void sendApnsVoipRequest(
+      HttpClient client,
+      String host,
+      String fallbackHost,
+      String cleanToken,
+      String topic,
+      String json,
+      String callId) {
+    HttpRequest req = HttpRequest.newBuilder()
+        .uri(URI.create(host + "/3/device/" + cleanToken))
+        .version(HttpClient.Version.HTTP_2)
+        .timeout(Duration.ofSeconds(5))
+        .header("apns-push-type", "voip")
+        .header("apns-priority", "10")
+        .header("apns-expiration", "0")
+        .header("apns-topic", topic)
+        .header("Content-Type", "application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(json))
+        .build();
+    client.sendAsync(req, HttpResponse.BodyHandlers.ofString())
+        .thenAccept(res -> {
+          if (res.statusCode() == 200) {
+            log.info("APNs VoIP push basarili: callId={}, host={}, topic={}", callId, host, topic);
+          } else if (fallbackHost != null
+              && res.statusCode() == 400
+              && res.body() != null
+              && (res.body().contains("BadDeviceToken") || res.body().contains("DeviceTokenNotForTopic"))) {
+            log.info("APNs VoIP token ortami farkli ({}), yedek APNs sunucusu deneniyor: {}", host, fallbackHost);
+            sendApnsVoipRequest(client, fallbackHost, null, cleanToken, topic, json, callId);
+          } else {
+            log.warn("APNs VoIP push yaniti: status={}, host={}, body={}", res.statusCode(), host, res.body());
+          }
+        })
+        .exceptionally(err -> {
+          log.warn("APNs VoIP push hatasi ({}): {}", host, err.getMessage());
+          return null;
+        });
   }
 
   private HttpClient resolveApnsVoipClient() {

@@ -1,6 +1,8 @@
 package com.cms.service.impl;
 
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.net.URI;
@@ -10,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -49,6 +52,9 @@ public class PushNotificationService {
 
   @Value("${app.push.webhook-secret:${FCM_WEBHOOK_SECRET:}}")
   private String webhookSecret;
+
+  @Value("${app.push.apns.p12-base64:${APNS_VOIP_P12_BASE64:}}")
+  private String apnsVoipP12Base64;
 
   @Value("${app.push.apns.p12-path:${APNS_VOIP_P12_PATH:${user.home}/.elly-certs/apple-voip/elly_voip.p12}}")
   private String apnsVoipP12Path;
@@ -247,15 +253,16 @@ public class PushNotificationService {
   }
 
   private HttpClient resolveApnsVoipClient() {
-    if (apnsVoipP12Path == null || apnsVoipP12Path.isBlank()) {
+    boolean hasBase64 = apnsVoipP12Base64 != null && !apnsVoipP12Base64.isBlank();
+    if (!hasBase64 && (apnsVoipP12Path == null || apnsVoipP12Path.isBlank())) {
       return null;
     }
     try {
-      Path path = Path.of(apnsVoipP12Path.trim());
-      if (!Files.isRegularFile(path)) {
+      Path path = (!hasBase64) ? Path.of(apnsVoipP12Path.trim()) : null;
+      if (!hasBase64 && (path == null || !Files.isRegularFile(path))) {
         return null;
       }
-      long mtime = Files.getLastModifiedTime(path).toMillis();
+      long mtime = hasBase64 ? apnsVoipP12Base64.hashCode() : Files.getLastModifiedTime(path).toMillis();
       if (apnsVoipClient != null && apnsVoipClientLoadedMtime == mtime) {
         return apnsVoipClient;
       }
@@ -264,7 +271,7 @@ public class PushNotificationService {
           return apnsVoipClient;
         }
         String resolvedPass = apnsVoipP12Password;
-        if (resolvedPass == null || resolvedPass.isBlank()) {
+        if ((resolvedPass == null || resolvedPass.isBlank()) && path != null) {
           Path passFile = path.getParent() != null ? path.getParent().resolve(".p12_pass") : null;
           if (passFile != null && Files.isRegularFile(passFile)) {
             resolvedPass = Files.readString(passFile).trim();
@@ -272,8 +279,10 @@ public class PushNotificationService {
         }
         char[] password = (resolvedPass != null) ? resolvedPass.toCharArray() : new char[0];
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
-        try (FileInputStream fis = new FileInputStream(path.toFile())) {
-          keyStore.load(fis, password);
+        try (InputStream is = hasBase64
+            ? new ByteArrayInputStream(Base64.getDecoder().decode(apnsVoipP12Base64.trim()))
+            : new FileInputStream(path.toFile())) {
+          keyStore.load(is, password);
         }
         KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         kmf.init(keyStore, password);
@@ -286,11 +295,11 @@ public class PushNotificationService {
             .connectTimeout(Duration.ofSeconds(5))
             .build();
         apnsVoipClientLoadedMtime = mtime;
-        log.info("Apple APNs VoIP PKCS12 sertifikasi yuklendi: {}", path);
+        log.info("Apple APNs VoIP PKCS12 sertifikasi yuklendi ({})", hasBase64 ? "APNS_VOIP_P12_BASE64" : path);
         return apnsVoipClient;
       }
     } catch (Exception ex) {
-      log.warn("Apple APNs VoIP .p12 sertifikasi yuklenemedi ({}): {}", apnsVoipP12Path, ex.getMessage());
+      log.warn("Apple APNs VoIP .p12 sertifikasi yuklenemedi: {}", ex.getMessage());
       return null;
     }
   }

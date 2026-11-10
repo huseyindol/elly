@@ -108,12 +108,15 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("Tenant not found: " + tenantId);
     }
 
-    // Email ve username kontrolü
-    if (userRepository.existsByEmail(dtoRegister.getEmail())) {
-      throw new ConflictException("Email already exists: " + dtoRegister.getEmail());
-    }
-    if (userRepository.existsByUsername(dtoRegister.getUsername())) {
-      throw new ConflictException("Username already exists: " + dtoRegister.getUsername());
+    // Email ve username kontrolü — S9: hata mesajı NEUTRAL (kayıtlı e-posta/username'i
+    // ifşa etmez; enumeration kapanır). Detay yalnızca sunucu log'unda.
+    if (userRepository.existsByEmail(dtoRegister.getEmail())
+        || userRepository.existsByUsername(dtoRegister.getUsername())) {
+      log.warn("Register rejected — email/username collision (tenant={})",
+          TenantContext.getTenantId());
+      throw new ConflictException(
+          "Registration could not be completed. Please check your information and try again — "
+              + "if you already have an account, please sign in.");
     }
 
     // Tenant register → TENANT rolü (tenant-site kullanıcısı, panel'e GİREMEZ). TENANT rolü
@@ -519,8 +522,8 @@ public class AuthService implements IAuthService {
     }
     TenantContext.setTenantId(refreshTenantId);
 
-    // Veritabanından refresh token'ı bul
-    RefreshToken refreshToken = refreshTokenRepository.findByToken(refreshTokenString)
+    // Veritabanından refresh token'ı bul (S5: DB'de SHA-256 hash saklanır — aynı hash ile ara)
+    RefreshToken refreshToken = refreshTokenRepository.findByToken(sha256Hex(refreshTokenString))
         .orElseThrow(() -> new BadRequestException("Refresh token not found"));
 
     // Token iptal edilmiş mi kontrol et
@@ -811,10 +814,53 @@ public class AuthService implements IAuthService {
 
   private RefreshToken createRefreshTokenEntity(User user, String tokenString) {
     RefreshToken refreshToken = new RefreshToken();
-    refreshToken.setToken(tokenString);
+    // S5: DB'de token PLAINTEXT değil SHA-256 hash'i saklanır (DB sızıntısında refresh
+    // token'lar doğrudan kullanılamaz). findByToken sorgusu da aynı hash ile arar.
+    refreshToken.setToken(sha256Hex(tokenString));
     refreshToken.setUser(user);
     refreshToken.setIsRevoked(false);
     refreshToken.setExpiryDate(new Date(System.currentTimeMillis() + refreshTokenExpiration));
     return refreshToken;
+  }
+
+  /** SHA-256 → küçük harf hex (refresh token DB saklaması için). */
+  private static String sha256Hex(String value) {
+    try {
+      java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+      byte[] hash = digest.digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      StringBuilder hex = new StringBuilder(hash.length * 2);
+      for (byte b : hash) {
+        hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+        hex.append(Character.forDigit(b & 0xF, 16));
+      }
+      return hex.toString();
+    } catch (java.security.NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 bulunamadı", e);
+    }
+  }
+
+  /**
+   * S4: Oturumu tamamen kapatır — kullanıcının refresh token'ını siler ve tokenVersion'ı
+   * artırarak MEVCUT access token'ları da anında geçersiz kılar (çalınan token kurtarma yolu).
+   * Cache evict ile aktif pod'lardaki yetki kopyası da düşer.
+   */
+  @Override
+  @Transactional
+  public void logout(String username, String tenantId) {
+    if (username == null || username.isBlank()) {
+      throw new UnauthorizedException("Logout için kimlik doğrulaması gerekli");
+    }
+    // Tenant context'i garantiye al (JwtTenantFilter Bearer'dan set etmiş olmalı)
+    if (tenantId != null && !tenantId.isBlank()) {
+      TenantContext.setTenantId(tenantId);
+    }
+    User user = userRepository.findByUsername(username)
+        .orElseThrow(() -> new UnauthorizedException("Invalid token or user not found"));
+    refreshTokenRepository.deleteByUserId(user.getId());
+    Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+    user.setTokenVersion(currentVersion + 1);
+    userRepository.save(user);
+    userAuthCacheService.evictUserCache(user.getUsername());
+    log.info("User logged out (all sessions revoked): {}", username);
   }
 }

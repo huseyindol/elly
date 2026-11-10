@@ -33,9 +33,20 @@ public class CookieUtil {
   public void clearCookie(HttpServletResponse response, String cookieName, String path) {
     // Set-Cookie header ile cookie temizle - HttpOnly ve Secure flag'leri dahil
     // SonarQube java:S3330 ve java:S2092 uyumlu
+    // Prod'da Domain attribute'u ile YAZILAN cookie, Domain'siz Max-Age=0 ile SİLİNEMEZ
+    // (tarayıcı domain eşleşmesi arar) — bu yüzden setCookie ile aynı profil mantığı.
+    String[] activeProfiles = environment.getActiveProfiles();
+    boolean isLocal = activeProfiles.length == 0
+        || java.util.Arrays.asList(activeProfiles).contains("local")
+        || java.util.Arrays.asList(activeProfiles).contains("dev");
+
     StringBuilder cookieBuilder = new StringBuilder();
     cookieBuilder.append(String.format("%s=; Path=%s; Max-Age=0", cookieName, path));
-    cookieBuilder.append("; HttpOnly; Secure; SameSite=Strict");
+    if (!isLocal) {
+      cookieBuilder.append("; Domain=.huseyindol.com");
+    }
+    cookieBuilder.append("; HttpOnly; Secure");
+    cookieBuilder.append(isLocal ? "; SameSite=Strict" : "; SameSite=Lax");
     response.addHeader("Set-Cookie", cookieBuilder.toString());
   }
 

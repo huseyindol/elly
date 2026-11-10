@@ -23,5 +23,8 @@ public interface IAuthController {
   RootEntityResponse<DtoAuthResponse> refreshToken(@Valid @RequestBody DtoRefreshToken dtoRefreshToken,
       HttpServletResponse httpResponse);
 
+  /** S4: Oturumu kapatır (Bearer zorunlu) — refresh revoke + tokenVersion++ + cookie temizleme. */
+  RootEntityResponse<Boolean> logout(HttpServletRequest httpRequest, HttpServletResponse httpResponse);
+
   RootEntityResponse<Boolean> verifyEmail(@RequestParam String token, @RequestParam String tenantId);
 }

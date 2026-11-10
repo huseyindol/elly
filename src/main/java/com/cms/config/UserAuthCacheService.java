@@ -37,6 +37,12 @@ public class UserAuthCacheService {
   public static final int MAX_LOGIN_FAILURES_PER_USER = 5;
   public static final int MAX_LOGIN_FAILURES_PER_IP = 30;
   public static final long LOGIN_ATTEMPT_TTL_MINUTES = 15;
+  /**
+   * Redis down iken kullanılan local fallback haritası için üst sınır — saldırgan
+   * kontrollü anahtarlarla (rastgele username/IP spray'i) sınırsız bellek büyümesini önler.
+   * Sınır aşılırsa süresi dolmuş girdiler süpürülür.
+   */
+  public static final int MAX_LOCAL_ATTEMPT_ENTRIES = 50_000;
 
   private final Map<String, MfaAttemptEntry> localMfaAttempts = new ConcurrentHashMap<>();
   private final Map<String, MfaAttemptEntry> localLoginAttempts = new ConcurrentHashMap<>();
@@ -44,27 +50,45 @@ public class UserAuthCacheService {
   private record MfaAttemptEntry(int count, long expiresAtMillis) {}
 
   /**
+   * Auth cache anahtarı — TENANT İÇERİR (S7): Redis tek, DB'ler tenant başına olduğundan
+   * tenant'sız {@code auth:user:{username}} anahtarı iki tenant'taki aynı username'in
+   * (örn. "admin") yetkilerinin karışmasına yol açıyordu. Anahtar artık
+   * {@code auth:user:{tenantId}:{username}}.
+   */
+  public static String userCacheKey(String tenantId, String username) {
+    return USER_CACHE_PREFIX + (tenantId != null && !tenantId.isBlank() ? tenantId : "default")
+        + ":" + username;
+  }
+
+  /**
    * Kullanıcının auth cache'ini temizle.
    * Password değişikliği, rol değişikliği, token version güncelleme gibi durumlarda çağrılır.
    */
-  public void evictUserCache(String username) {
+  public void evictUserCache(String tenantId, String username) {
     try {
-      String cacheKey = USER_CACHE_PREFIX + username;
-      redisTemplate.delete(cacheKey);
-      log.debug("User auth cache evicted: {}", username);
+      redisTemplate.delete(userCacheKey(tenantId, username));
+      log.debug("User auth cache evicted: {}@{}", username, tenantId);
     } catch (Exception e) {
       log.debug("User auth cache evict hatası (user: {}): {}", username, e.getMessage());
     }
   }
 
   /**
+   * Tenant'sız kısayol — tenant, ÇAĞRI ANINDAKİ {@link TenantContext}'ten okunur.
+   * (Şifre/rol/tokenVersion değişiklikleri yapan tüm servis akışları ilgili tenant
+   * context'i zaten kurmuş durumdadır; bu sayede 14 çağrı noktası tek tek değişilmez.)
+   */
+  public void evictUserCache(String username) {
+    evictUserCache(TenantContext.getTenantId(), username);
+  }
+
+  /**
    * Redis'ten CachedUserDetails oku.
    * Cache miss veya Redis down ise null döner (fail-open).
    */
-  public CachedUserDetails getUserFromCache(String username) {
+  public CachedUserDetails getUserFromCache(String tenantId, String username) {
     try {
-      String cacheKey = USER_CACHE_PREFIX + username;
-      Object cached = redisTemplate.opsForValue().get(cacheKey);
+      Object cached = redisTemplate.opsForValue().get(userCacheKey(tenantId, username));
       if (cached instanceof CachedUserDetails details) {
         return details;
       }
@@ -196,6 +220,11 @@ public class UserAuthCacheService {
     int next = getAttemptCount(key) + 1;
     long expiresAt = System.currentTimeMillis()
         + TimeUnit.MINUTES.toMillis(LOGIN_ATTEMPT_TTL_MINUTES);
+    // T1: local fallback haritasının sınırsız büyümesini önle (saldırgan kontrollü anahtarlar)
+    if (localLoginAttempts.size() >= MAX_LOCAL_ATTEMPT_ENTRIES) {
+      long now = System.currentTimeMillis();
+      localLoginAttempts.entrySet().removeIf(e -> e.getValue().expiresAtMillis() <= now);
+    }
     localLoginAttempts.put(key, new MfaAttemptEntry(next, expiresAt));
     try {
       if (redisTemplate != null && redisTemplate.opsForValue() != null) {

@@ -97,7 +97,7 @@ public class AiController extends BaseController implements IAiController {
 
   @Override
   @GetMapping("/logs")
-  @PreAuthorize("isAuthenticated()")
+  @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
   public RootEntityResponse<Page<DtoAiUsageLog>> listUsageLogs(
       @RequestParam(value = "action", required = false) String action,
       @RequestParam(value = "status", required = false) String status,
@@ -109,21 +109,21 @@ public class AiController extends BaseController implements IAiController {
 
   @Override
   @GetMapping("/logs/{id}")
-  @PreAuthorize("isAuthenticated()")
+  @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
   public RootEntityResponse<DtoAiUsageLog> getUsageLogById(@PathVariable("id") Long id) {
     return ok(aiService.getUsageLogById(id));
   }
 
   @Override
   @GetMapping("/stats")
-  @PreAuthorize("isAuthenticated()")
+  @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
   public RootEntityResponse<DtoAiUsageStats> getUsageStats() {
     return ok(aiService.getUsageStats());
   }
 
   @Override
   @GetMapping({"/quota", "/tenant/{tenantId}/quota"})
-  @PreAuthorize("isAuthenticated()")
+  @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
   public RootEntityResponse<DtoAiQuota> getQuota() {
     return ok(aiService.getQuota());
   }

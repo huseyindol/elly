@@ -178,6 +178,9 @@ public class SecurityConfig {
     PublicApiFilter publicApiFilter = new PublicApiFilter(tenantDataSourceProperties);
     http.addFilterBefore(publicApiFilter, JwtTenantFilter.class);
 
+    // /assets/** (anonim statik dosya servisi) icin CSP sandbox + nosniff — ikinci savunma hatti
+    http.addFilterBefore(new AssetsSecurityHeadersFilter(), PublicApiFilter.class);
+
     return http.build();
   }
 }

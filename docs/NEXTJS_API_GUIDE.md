@@ -21,6 +21,10 @@ Base URL: `http://localhost:8080`
 ### POST /api/v1/auth/register
 Yeni kullanıcı kaydı.
 
+> **Güvenlik notu (S9):** E-posta/kullanıcı adı çakışmasında dönen `409` mesajı NÖTRDÜR
+> ("Registration could not be completed...") — kayıtlı e-posta adresleri ifşa edilmez
+> (kullanıcı sayımı/enumarasyon kapalı).
+
 **Body:**
 ```json
 {
@@ -94,6 +98,33 @@ Token yenileme. Refresh token rotasyonu uygulanır (eski token geçersiz olur).
 ```
 
 **Response:** Login response ile aynı yapı — yeni `token` ve `refreshToken` döner.
+
+> **Depolama notu (S5):** Refresh token'lar veritabanında **SHA-256 hash** olarak saklanır.
+> Hash geçişini içeren deploy'dan SONRA eski refresh token'lar geçersizdir — kullanıcılar
+> bir kez yeniden login olur (bir kerelik).
+
+---
+
+### POST /api/v1/auth/logout
+Oturumu **tamamen** kapatır (S4). `Authorization: Bearer` access token zorunludur (permitAll
+path altındadır ama principal yoksa `401` döner).
+
+**Etkisi:**
+- Kullanıcının refresh token'ı DB'den silinir.
+- `tokenVersion` artırılır → **mevcut access token'lar anında geçersiz** (tüm cihazlar dahil).
+- Oturum cookie'leri (`accessToken`, `refreshToken`, `userCode`, `expiredDate`) `Max-Age=0` ile temizlenir.
+- Auth cache evict edilir.
+
+**Response:**
+```json
+{ "result": true, "data": true }
+```
+
+**Hatalar:** `401` (`UNAUTHORIZED` — token yok/geçersiz).
+
+> **changePassword etkisi (S10):** `PUT /api/v1/users/me/password` başarılı olduğunda da aynı
+> oturum iptali uygulanır — şifresini değiştiren kullanıcının tüm oturumları düşer, diğer
+> cihazlar `401` alıp login ekranına yönlendirilir.
 
 ---
 
@@ -2548,7 +2579,9 @@ Konu ve anahtar kelimelerden tek aşamalı birleşik strateji + içerik üretimi
 ### GET /api/v1/ai/logs
 AI kullanım loglarını (istek, tam prompt, yanıt, ayrıştırılmış çıktı, input/output/thought/cached/toplam token, süre ve durum) sayfalı ve filtreli olarak listeler.
 
-**Permission:** `posts:read`, `pages:read`, `components:read`, `widgets:read`, `banners:read` veya `users:manage`
+> **Güvenlik notu (S8):** Log/istatistik/kota endpoint'leri (`/logs`, `/logs/{id}`, `/stats`,
+> `/quota`) yalnız **ADMIN ve SUPER_ADMIN** rollerine açıktır (`hasAnyRole('ADMIN','SUPER_ADMIN')`).
+> Prompt/yanıt metinleri hassas olduğundan VIEWER/EDITOR/TENANT rolleri `403` alır.
 
 **Query Params:**
 - `action` (opsiyonel): `slug`, `seo`, `description`, `alt-text`, `blog-info`, `article` (ve geçmiş kayıtlar için `article:outline`, `article:draft`, `article:sanitize`)
@@ -2566,7 +2599,7 @@ AI kullanım özet istatistiklerini (`totalCalls`, `successCalls`, `errorCalls`,
 ### GET /api/v1/ai/quota (veya `/api/v1/ai/tenant/{tenantId}/quota`)
 Tenant bazlı aylık AI token kotası, günlük istek kotası, kullanım yüzdeleri, aylık token kırılımı ve tahmini USD maliyetini (`gemini-3.8-flash` tarifesi: input `$0.75 / 1M`, output + thought `$3.75 / 1M`) döner.
 
-**Permission:** `isAuthenticated()`
+**Permission:** `hasAnyRole('ADMIN','SUPER_ADMIN')` (S8 — daha önce tüm authenticated kullanıcılara açıktı)
 
 **Response:**
 ```json

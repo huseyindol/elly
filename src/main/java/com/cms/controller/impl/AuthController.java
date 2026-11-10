@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cms.config.JwtAuthenticationFilter;
 import com.cms.config.TenantContext;
 import com.cms.controller.IAuthController;
 import com.cms.dto.DtoAuthResponse;
@@ -166,5 +167,30 @@ public class AuthController extends BaseController implements IAuthController {
     DtoAuthResponse response = authService.refreshToken(dtoRefreshToken);
     authCookieWriter.writeAuthCookies(httpResponse, response);
     return ok(response);
+  }
+
+  /**
+   * S4: Oturumu tamamen kapatır — Bearer access token ZORUNLU (permitAll path altında
+   * olmasına rağmen principal yoksa 401 döner). Sunucu tarafında: refresh token silinir +
+   * tokenVersion artırılır (tüm access token'lar anında geçersiz). İstemci tarafında oturum
+   * cookie'leri temizlenir.
+   */
+  @Override
+  @PostMapping("/logout")
+  public RootEntityResponse<Boolean> logout(jakarta.servlet.http.HttpServletRequest httpRequest,
+      HttpServletResponse httpResponse) {
+    Object principal = org.springframework.security.core.context.SecurityContextHolder
+        .getContext().getAuthentication() != null
+        ? org.springframework.security.core.context.SecurityContextHolder.getContext()
+            .getAuthentication().getPrincipal()
+        : null;
+
+    if (!(principal instanceof JwtAuthenticationFilter.CachedUserPrincipal userPrincipal)) {
+      throw new com.cms.exception.UnauthorizedException("Authentication required");
+    }
+
+    authService.logout(userPrincipal.getUsername(), TenantContext.getTenantId());
+    authCookieWriter.clearAuthCookies(httpResponse);
+    return ok(true);
   }
 }

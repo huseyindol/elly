@@ -55,4 +55,16 @@ public class AuthCookieWriter {
     cookieUtil.setCookie(response, "expiredDate", String.valueOf(auth.getExpiredDate()),
         accessMaxAge, false, true, "/");
   }
+
+  /**
+   * Oturum cookie'lerini tarayıcıdan kaldırır (Max-Age=0) — logout endpoint'i çağırır.
+   * Sunucu tarafı iptal (refresh revoke + tokenVersion) AuthService.logout'ta yapılır;
+   * burada yalnızca istemci tarafı kalıntı temizlenir.
+   */
+  public void clearAuthCookies(HttpServletResponse response) {
+    cookieUtil.clearCookie(response, "accessToken", "/");
+    cookieUtil.clearCookie(response, "refreshToken", "/");
+    cookieUtil.clearCookie(response, "userCode", "/");
+    cookieUtil.clearCookie(response, "expiredDate", "/");
+  }
 }

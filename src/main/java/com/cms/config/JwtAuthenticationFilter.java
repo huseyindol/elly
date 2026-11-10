@@ -97,12 +97,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     // Username çıkarıldıysa ve henüz authentication yapılmadıysa
     if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
       try {
-        // Önce Redis cache'ten dene
-        CachedUserDetails cachedUser = getUserFromCache(username);
+        // Önce Redis cache'ten dene (anahtar tenant'lidir — S7: aynı username farklı
+        // tenant'larda karışmasın)
+        CachedUserDetails cachedUser = getUserFromCache(tokenTenantId, username);
 
         if (cachedUser == null) {
           // Cache'te yok — DB'den al ve cache'e yaz
-          cachedUser = loadUserFromDbAndCache(username, loginSource);
+          cachedUser = loadUserFromDbAndCache(tokenTenantId, username, loginSource);
         }
 
         // Token'ı validate et (tokenVersion kontrolü ile)
@@ -140,12 +141,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   }
 
   /**
-   * Redis'ten CachedUserDetails oku.
+   * Redis'ten CachedUserDetails oku (tenant'lı anahtar — S7).
    */
-  private CachedUserDetails getUserFromCache(String username) {
+  private CachedUserDetails getUserFromCache(String tenantId, String username) {
     try {
-      String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
-      Object cached = redisTemplate.opsForValue().get(cacheKey);
+      Object cached = redisTemplate.opsForValue()
+          .get(UserAuthCacheService.userCacheKey(tenantId, username));
       if (cached instanceof CachedUserDetails) {
         return (CachedUserDetails) cached;
       }
@@ -160,11 +161,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   }
 
   /**
-   * DB'den User'ı yükle, CachedUserDetails'a dönüştür ve Redis'e yaz.
+   * DB'den User'ı yükle, CachedUserDetails'a dönüştür ve Redis'e yaz (tenant'lı anahtar — S7).
    * TenantContext JwtTenantFilter tarafından zaten set edilmiş olur:
    * JWT tenantId claim'i → ilgili tenant DB'si (admin dahil herkes kendi tenant DB'sinde).
    */
-  private CachedUserDetails loadUserFromDbAndCache(String username, String loginSource) {
+  private CachedUserDetails loadUserFromDbAndCache(String tenantId, String username, String loginSource) {
     // User, MEVCUT tenant context'inde (JWT tenantId claim'inden — JwtTenantFilter set eder)
     // yüklenir. basedb forcing YOK; her kullanıcı kendi tenant DB'sinde.
     User user = userRepository.findByUsername(username)
@@ -195,8 +196,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         .build();
 
     try {
-      String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
-      redisTemplate.opsForValue().set(cacheKey, cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+      redisTemplate.opsForValue().set(UserAuthCacheService.userCacheKey(tenantId, username),
+          cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
     } catch (Exception e) {
       log.debug("Redis cache yazılamadı (user: {}): {}", username, e.getMessage());
     }
@@ -206,10 +207,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
   /**
    * Kullanıcının cache'ini invalidate et.
-   * @deprecated UserAuthCacheService.evictUserCache() kullanın
+   * @deprecated UserAuthCacheService.evictUserCache(tenantId, username) kullanın
    */
-  public void evictUserCache(String username) {
-    userAuthCacheService.evictUserCache(username);
+  @Deprecated
+  public void evictUserCache(String tenantId, String username) {
+    userAuthCacheService.evictUserCache(tenantId, username);
   }
 
   private void sendErrorResponse(HttpServletResponse response, HttpStatus status, String errorCode, String message)

@@ -133,7 +133,7 @@ public class FileService implements IFileService {
 
     try {
       String actualPath = filePath.replace("assets/images", uploadDirectory);
-      Path path = Paths.get(actualPath);
+      Path path = requireWithinAssets(actualPath);
       long size = Files.exists(path) ? Files.size(path) : 0L;
       if (Files.exists(path)) {
         Files.delete(path);
@@ -190,7 +190,7 @@ public class FileService implements IFileService {
   public void deleteFile(String filePath) {
     try {
       String actualPath = filePath.replace("assets", uploadDirectoryFiles);
-      Path path = Paths.get(actualPath);
+      Path path = requireWithinAssets(actualPath);
       long size = Files.exists(path) ? Files.size(path) : 0L;
       if (Files.exists(path)) {
         Files.delete(path);
@@ -199,6 +199,19 @@ public class FileService implements IFileService {
     } catch (IOException e) {
       throw new BadRequestException("Failed to delete file", e);
     }
+  }
+
+  /**
+   * Silme yolunu assets köküne hapseder (T2): DB'den gelen path {@code ..} içeriyorsa
+   * normalize sonrası assets dışına çıkar → reddedilir (çalışma dizini/config dosyaları
+   * silinemez). Yol mutlak ise de reddedilir (assets kökü relatif kabul edilir).
+   */
+  private Path requireWithinAssets(String dbPath) {
+    Path normalized = Paths.get(dbPath).normalize();
+    if (!normalized.startsWith(Paths.get(ASSETS_ROOT))) {
+      throw new BadRequestException("Invalid file path (outside assets root)");
+    }
+    return normalized;
   }
 
   @Override

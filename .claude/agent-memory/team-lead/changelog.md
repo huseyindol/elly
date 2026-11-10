@@ -3,6 +3,22 @@
 Bu dosya projedeki orta ve büyük ölçekli geliştirmelerin kaydını tutar.
 Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayabilir.
 
+## [2026-11-10 (2)] Güvenlik Kısa-Vade Paketi (S4/S5/S7/S8/S9/S10/T1-T4)
+**Tip:** 🔒 Güvenlik | **Boyut:** Orta
+
+### Özet
+- **S4 — Logout endpoint'i:** `POST /api/v1/auth/logout` (Bearer zorunlu): refresh token silinir + `tokenVersion` artırılır (tüm access token'lar anında geçersiz) + auth cookie'leri `Max-Age=0` ile temizlenir (`CookieUtil.clearCookie` artık profil-farkındalı — prod `Domain=.huseyindol.com` attribute'u ile silme düzeltildi).
+- **S5 — Refresh token hash:** DB'de SHA-256 hash saklanır (`createRefreshTokenEntity` + `findByToken` hash araması). Hash geçişinden sonra mevcut refresh token'lar geçersiz — kullanıcılar bir kez login olur.
+- **S10 — changePassword oturum iptali:** `tokenVersion++` + `refreshTokenRepository.deleteByUserId` — şifre değişince tüm cihazlar 401'e düşer.
+- **S7 — Auth cache tenant'lı anahtar:** `auth:user:{tenantId}:{username}` (UserAuthCacheService.userCacheKey). Aynı username iki tenant'taysa yetki karışması kapatıldı. Geriye uyumlu `evictUserCache(username)` overload'u çağrı anındaki TenantContext'ten tenant'ı okur (14 çağrı noktası değişmedi).
+- **S8 — AI log kısıtı:** `/logs`, `/logs/{id}`, `/stats`, `/quota` → `hasAnyRole('ADMIN','SUPER_ADMIN')` (önceden tüm authenticated — TENANT rolü admin prompt'larını okuyabiliyordu).
+- **S9 — Register nötr mesaj:** e-posta/username çakışmasında genel mesaj; kayıtlı adres ifşa edilmez.
+- **T1:** `localLoginAttempts` 50k üst sınırda expired sweep. **T2:** `deleteImage/deleteFile` normalize + `assets` kökü containment'ı. **T3:** `SecurityPatch2Test` (7 test: lockout sayaçları, tenant izolasyonu, IP spray, SVG/HTML reddi, UUID isim, delete containment). **T4:** `/assets/**` için `CSP: sandbox` + `nosniff` filtresi (`AssetsSecurityHeadersFilter`).
+- **Doğrulama:** compile ✅ · SecurityHardeningTest 7/7 + SecurityPatch2Test 7/7 ✅ · tam paket yalnız `contextLoads` ortam kaynaklı düşer (PG kapalı, değişiklikten bağımsız).
+- **Sözleşme:** Yeni `POST /api/v1/auth/logout`; AI log endpoint'leri ADMIN+ rolü (VIEWER/EDITOR/TENANT 403); register 409 mesajı nötr; refresh hash geçişi bir kerelik yeniden login gerektirir.
+
+---
+
 ## [2026-11-10] Güvenlik Düzeltme Paketi (Audit K1/S1/S2/S3/S6/K2)
 **Tip:** 🔒 Güvenlik | **Boyut:** Orta
 

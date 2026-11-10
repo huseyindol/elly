@@ -33,6 +33,15 @@ public interface IAuthService {
 
   DtoAuthResponse refreshToken(DtoRefreshToken dtoRefreshToken);
 
+  /**
+   * Oturumu tamamen kapatır: refresh token silinir + tokenVersion artırılır (tüm access
+   * token'lar anında geçersiz) + auth cache evict. Bearer token ile çağrılmalıdır.
+   *
+   * @param username SecurityContext'ten çözülen kullanıcı adı
+   * @param tenantId JWT tenantId claim'i (TenantContext henüz set edilmemişse kullanılır)
+   */
+  void logout(String username, String tenantId);
+
   void verifyEmail(String token, String tenantId);
 
   /**

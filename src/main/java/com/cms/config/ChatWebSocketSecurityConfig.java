@@ -227,17 +227,20 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
   }
 
   private CachedUserDetails resolveCachedUser(String username, String loginSource) {
-    CachedUserDetails cached = getUserFromCache(username);
+    // Cache anahtarı tenant'lıdır (S7) — CONNECT anında TenantContext token tenantId'sine
+    // set edilmiş durumdadır (authenticateConnect).
+    String tenantId = TenantContext.getTenantId();
+    CachedUserDetails cached = getUserFromCache(tenantId, username);
     if (cached != null) {
       return cached;
     }
-    return loadUserFromDbAndCache(username, loginSource);
+    return loadUserFromDbAndCache(tenantId, username, loginSource);
   }
 
-  private CachedUserDetails getUserFromCache(String username) {
+  private CachedUserDetails getUserFromCache(String tenantId, String username) {
     try {
-      String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
-      Object cached = redisTemplate.opsForValue().get(cacheKey);
+      Object cached = redisTemplate.opsForValue()
+          .get(UserAuthCacheService.userCacheKey(tenantId, username));
       if (cached instanceof CachedUserDetails details) {
         return details;
       }
@@ -250,7 +253,7 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
     return null;
   }
 
-  private CachedUserDetails loadUserFromDbAndCache(String username, String loginSource) {
+  private CachedUserDetails loadUserFromDbAndCache(String tenantId, String username, String loginSource) {
     String originalTenant = TenantContext.getTenantId();
     try {
       // basedb forcing YOK — MEVCUT context'te (authenticateConnect token tenantId'sinden set eder).
@@ -281,9 +284,8 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
           .build();
 
       try {
-        String cacheKey = UserAuthCacheService.USER_CACHE_PREFIX + username;
-        redisTemplate.opsForValue().set(
-            cacheKey, cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set(UserAuthCacheService.userCacheKey(tenantId, username),
+            cached, UserAuthCacheService.USER_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
       } catch (Exception e) {
         log.debug("WebSocket auth cache write failed (user: {}): {}", username, e.getMessage());
       }

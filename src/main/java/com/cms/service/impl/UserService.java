@@ -122,10 +122,15 @@ public class UserService implements IUserService {
     }
 
     user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+    // S10: Şifre değişimi TÜM oturumları düşürür — tokenVersion artırımı mevcut access
+    // token'ları anında geçersiz kılar (çalınan token kurtarma yolu), refresh token'lar silinir.
+    Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+    user.setTokenVersion(currentVersion + 1);
     userRepository.save(user);
+    refreshTokenRepository.deleteByUserId(user.getId());
     // Şifre değiştiğinde cache temizle
     userAuthCacheService.evictUserCache(username);
-    log.info("Password changed for user: {}", username);
+    log.info("Password changed for user: {} (all sessions revoked)", username);
   }
 
   @Override

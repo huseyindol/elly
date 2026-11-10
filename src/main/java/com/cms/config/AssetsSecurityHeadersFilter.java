@@ -27,7 +27,8 @@ public class AssetsSecurityHeadersFilter extends OncePerRequestFilter {
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
-    return !request.getRequestURI().startsWith(ASSETS_PREFIX);
+    // getServletPath() DECODED path döner — encoded varyantlar (/assets%2f..) filtre kaçamaz
+    return !request.getServletPath().startsWith(ASSETS_PREFIX);
   }
 
   @Override

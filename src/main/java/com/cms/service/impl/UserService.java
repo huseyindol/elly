@@ -128,8 +128,19 @@ public class UserService implements IUserService {
     user.setTokenVersion(currentVersion + 1);
     userRepository.save(user);
     refreshTokenRepository.deleteByUserId(user.getId());
-    // Şifre değiştiğinde cache temizle
-    userAuthCacheService.evictUserCache(username);
+    // Şifre değiştiğinde cache temizle — COMMIT SONRASI (bayat-cache race'ini kapatır; logout ile aynı desen)
+    if (org.springframework.transaction.support.TransactionSynchronizationManager
+        .isSynchronizationActive()) {
+      org.springframework.transaction.support.TransactionSynchronizationManager
+          .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+              userAuthCacheService.evictUserCache(username);
+            }
+          });
+    } else {
+      userAuthCacheService.evictUserCache(username);
+    }
     log.info("Password changed for user: {} (all sessions revoked)", username);
   }
 

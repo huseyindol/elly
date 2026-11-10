@@ -860,7 +860,25 @@ public class AuthService implements IAuthService {
     Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
     user.setTokenVersion(currentVersion + 1);
     userRepository.save(user);
-    userAuthCacheService.evictUserCache(user.getUsername());
+    // Evict COMMIT SONRASI: metot içinde evict yapılırsa eşzamanlı bir istek commit öncesi
+    // DB'den ESKİ tokenVersion'ı okuyup cache'e yazabilir → bayat cache 30dk yaşar (review bulgusu).
+    evictCacheAfterCommit(user.getUsername());
     log.info("User logged out (all sessions revoked): {}", username);
+  }
+
+  /** Cache evict'i transaction commit'inden SONRA çalıştırır (senkronizasyon yoksa hemen). */
+  private void evictCacheAfterCommit(String username) {
+    if (org.springframework.transaction.support.TransactionSynchronizationManager
+        .isSynchronizationActive()) {
+      org.springframework.transaction.support.TransactionSynchronizationManager
+          .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+              userAuthCacheService.evictUserCache(username);
+            }
+          });
+    } else {
+      userAuthCacheService.evictUserCache(username);
+    }
   }
 }

@@ -22,6 +22,13 @@ data:
   # Lokal gelistirmede application.properties default'u "update" kalir.
   JPA_DDL_AUTO: "validate"
 
+  # --- RBAC Seed (idempotent) ---
+  # DataInitializer her boot'ta PermissionConstants'taki permission'lari DB'ye ekler
+  # (mevcutlari atlar, eksikleri tamamlar; mevcut SUPER_ADMIN seed'i atlanir).
+  # Yeni permission eklendiginde (orn. forms:submissions:read) deploy ile otomatik
+  # dagilim saglar — aksi halde endpoint'ler fail-closed 403 doner.
+  STARTUP_RBAC_SEED: "true"
+
   # --- Default Tenant ---
   # Routing fallback'i ve boot/seed icin kullanilan birincil tenant.
   # basedb KALDIRILDI — her request kendi tenant'ini tasir (JWT claim veya public URL).

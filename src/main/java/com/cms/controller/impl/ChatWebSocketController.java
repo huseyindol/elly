@@ -75,6 +75,9 @@ public class ChatWebSocketController {
       @DestinationVariable UUID groupId,
       @Payload DtoChatMessageSend payload,
       SimpMessageHeaderAccessor headerAccessor) {
+    // Cross-tenant SEND koruması (SUBSCRIBE tarafıyla simetrik): guest/tenant oturumu
+    // yalnız KENDİ tenant'ına yazabilir; destination'daki tenantId'ye güvenilmez.
+    assertSessionTenantMatch(headerAccessor, tenantId);
     TenantContext.setTenantId(tenantId);
     try {
       DtoChatMessage saved;
@@ -123,6 +126,7 @@ public class ChatWebSocketController {
   public void typingTenant(@DestinationVariable String tenantId,
       @DestinationVariable UUID groupId,
       SimpMessageHeaderAccessor headerAccessor) {
+    assertSessionTenantMatch(headerAccessor, tenantId);
     TenantContext.setTenantId(tenantId);
     try {
       DtoChatTyping event;
@@ -172,6 +176,7 @@ public class ChatWebSocketController {
     if (isGuestSession(headerAccessor)) {
       return;
     }
+    assertSessionTenantMatch(headerAccessor, tenantId);
     TenantContext.setTenantId(tenantId);
     try {
       Long userId = resolveUserId(headerAccessor);
@@ -228,6 +233,25 @@ public class ChatWebSocketController {
     if (attrs == null) return false;
     Object loginSource = attrs.get("loginSource");
     return loginSource != null && "website".equals(loginSource.toString());
+  }
+
+  /**
+   * Cross-tenant SEND/typing/read koruması — ChatWebSocketSecurityConfig'teki SUBSCRIBE
+   * kontrolüyle simetrik: guest (website) ve tenant oturumları yalnız KENDİ tenant'ının
+   * destination'larına yazabilir. Panel (admin) kullanıcıları destek operasyonu için
+   * cross-tenant yazmaya BİLİNÇLİ olarak açık bırakılır (canWriteGroup zaten rol bazlı kısıtlar).
+   */
+  private void assertSessionTenantMatch(SimpMessageHeaderAccessor accessor, String destinationTenantId) {
+    Map<String, Object> attrs = accessor.getSessionAttributes();
+    String loginSource = attrs == null ? null
+        : (attrs.get("loginSource") != null ? attrs.get("loginSource").toString() : null);
+    if (!"website".equals(loginSource) && !"tenant".equals(loginSource)) {
+      return;
+    }
+    String sessionTenant = resolveOptionalSessionTenant(accessor);
+    if (sessionTenant == null || !sessionTenant.equals(destinationTenantId)) {
+      throw new org.springframework.messaging.MessageDeliveryException("Cross-tenant message forbidden");
+    }
   }
 
   private String resolveSessionId(SimpMessageHeaderAccessor accessor) {

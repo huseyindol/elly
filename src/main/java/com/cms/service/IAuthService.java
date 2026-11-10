@@ -17,7 +17,13 @@ import com.cms.entity.User;
 public interface IAuthService {
   DtoAuthResponse register(DtoRegister dtoRegister);
 
-  DtoAuthResponse login(DtoLogin dtoLogin);
+  /**
+   * Kullanıcı adı/e-posta + şifre ile giriş.
+   *
+   * @param clientIp brute-force sayaçları için istemci IP'si (X-Forwarded-For ilk değer
+   *                 veya remoteAddr — AuthController çıkarır); null/blank ise "unknown" anahtarına düşer
+   */
+  DtoAuthResponse login(DtoLogin dtoLogin, String clientIp);
 
   /**
    * Sosyal giriş (Google/GitHub) — authorization code backend'de takas edilir; kullanıcı

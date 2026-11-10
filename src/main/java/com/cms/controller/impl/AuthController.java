@@ -84,7 +84,8 @@ public class AuthController extends BaseController implements IAuthController {
   @Override
   @PostMapping("/login")
   public RootEntityResponse<DtoAuthResponse> login(@Valid @RequestBody DtoLogin dtoLogin,
-      HttpServletResponse httpResponse) {
+      HttpServletResponse httpResponse,
+      jakarta.servlet.http.HttpServletRequest httpRequest) {
     // Tenant context'i @Transactional servis çağrısından ÖNCE kur. Aksi halde transaction
     // begin'inde context null olur, routing default (yanlış) tenant'a düşer (HikariPool hatası).
     // Panel admin login'de tenant body'de gelir; tenant-site'ta PublicApiFilter zaten kurmuştur
@@ -92,7 +93,8 @@ public class AuthController extends BaseController implements IAuthController {
     if (dtoLogin.getTenantId() != null && !dtoLogin.getTenantId().isBlank()) {
       TenantContext.setTenantId(dtoLogin.getTenantId());
     }
-    DtoAuthResponse response = authService.login(dtoLogin);
+    // Brute-force sayaçları için istemci IP'si (proxy zinciri arkasında XFF ilk değer).
+    DtoAuthResponse response = authService.login(dtoLogin, resolveClientIp(httpRequest));
 
     // 2FA gerekiyorsa tam token henüz yok (sadece mfaToken) — oturum cookie'leri YAZMA.
     // Kullanıcı /api/v1/auth/mfa/verify'i tamamlayınca cookie'ler orada set edilir.
@@ -101,6 +103,19 @@ public class AuthController extends BaseController implements IAuthController {
     }
 
     return ok(response);
+  }
+
+  /**
+   * İstemci IP'si: X-Forwarded-For ilk değeri (Cloudflare/Cloud Run proxy zinciri),
+   * yoksa remoteAddr. Sayaç anahtarı için yeterli — XFF sahtesi halinde IP sayacı
+   * yanıltılabilir olsa da username sayacı (tenant+username) bağımsız korunur.
+   */
+  private String resolveClientIp(jakarta.servlet.http.HttpServletRequest request) {
+    String xff = request.getHeader("X-Forwarded-For");
+    if (xff != null && !xff.isBlank()) {
+      return xff.split(",")[0].trim();
+    }
+    return request.getRemoteAddr();
   }
 
   /**

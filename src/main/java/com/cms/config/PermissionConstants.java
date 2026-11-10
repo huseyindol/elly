@@ -59,6 +59,12 @@ public final class PermissionConstants {
   public static final String FORMS_DELETE = "forms:delete";
   /** Anonim public form submit yetkisi — sadece site ziyaretçisi POST'larında verilir. */
   public static final String FORMS_SUBMIT = "forms:submit";
+  /**
+   * Form gönderimlerini (PII içeren submission verisi) okuma / dışa aktarma yetkisi.
+   * Panel rollerine özgü — anonim public authority listesinde KASITLI olarak YOK
+   * (PublicApiFilter'ın forms:read'i yalnızca form tanımı görüntüleme içindir).
+   */
+  public static final String FORMS_SUBMISSIONS_READ = "forms:submissions:read";
 
   // =============== RATINGS ===============
   public static final String RATINGS_CREATE = "ratings:create";

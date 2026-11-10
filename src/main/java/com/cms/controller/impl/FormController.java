@@ -172,9 +172,13 @@ public class FormController extends BaseController implements IFormController {
     return ok(formMapper.toSubmissionDto(submission));
   }
 
+  // Submissions endpoint'leri forms:submissions:read ister (panel-only; anonim public
+  // authority listesinde bu permission YOKTUR — PII sızıntısını kökten kapatır).
+  // forms:read yalnızca form TANIMI görüntüleme içindir.
+
   @Override
   @GetMapping("/{formId}/submissions")
-  @PreAuthorize("hasAuthority('forms:read')")
+  @PreAuthorize("hasAuthority('forms:submissions:read')")
   public RootEntityResponse<List<DtoFormSubmission>> getSubmissionsByFormId(@PathVariable Long formId) {
     List<FormSubmission> submissions = formSubmissionService.getByFormDefinitionId(formId);
     return ok(formMapper.toSubmissionDtoList(submissions));
@@ -182,7 +186,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/{formId}/submissions/paged")
-  @PreAuthorize("hasAuthority('forms:read')")
+  @PreAuthorize("hasAuthority('forms:submissions:read')")
   public RootEntityResponse<PagedResponse<DtoFormSubmission>> getSubmissionsByFormIdPaged(
       @PathVariable Long formId,
       @RequestParam(defaultValue = "0") int page,
@@ -196,7 +200,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/submissions/{submissionId}")
-  @PreAuthorize("hasAuthority('forms:read')")
+  @PreAuthorize("hasAuthority('forms:submissions:read')")
   public RootEntityResponse<DtoFormSubmission> getSubmissionById(@PathVariable Long submissionId) {
     FormSubmission submission = formSubmissionService.getById(submissionId);
     return ok(formMapper.toSubmissionDto(submission));
@@ -204,7 +208,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/{formId}/submissions/count")
-  @PreAuthorize("hasAuthority('forms:read')")
+  @PreAuthorize("hasAuthority('forms:submissions:read')")
   public RootEntityResponse<Long> getSubmissionCount(@PathVariable Long formId) {
     Long count = formSubmissionService.countByFormId(formId);
     return ok(count);
@@ -212,7 +216,7 @@ public class FormController extends BaseController implements IFormController {
 
   @Override
   @GetMapping("/{formId}/submissions/export")
-  @PreAuthorize("hasAuthority('forms:read')")
+  @PreAuthorize("hasAuthority('forms:submissions:read')")
   public RootEntityResponse<DtoFormSubmissionExport> exportSubmissionsCsv(
       @PathVariable Long formId,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

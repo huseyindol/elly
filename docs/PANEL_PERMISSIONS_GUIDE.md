@@ -105,6 +105,7 @@ Kullanıcının güncel izinlerini detaylı şekilde döner. Rol değişiklikler
       "forms:create",
       "forms:delete",
       "forms:read",
+      "forms:submissions:read",
       "forms:submit",
       "forms:update",
       "mail:create",
@@ -597,6 +598,7 @@ Panel sidebar'ını aşağıdaki gibi gruplamak UX açısından mantıklıdır:
 💬 Etkileşim
    ├── Yorumlar         → comments:read
    ├── Formlar          → forms:read
+   │    └── Yanıtlar    → forms:submissions:read  (form gönderimleri/CSV export — PII)
    └── Puanlamalar      → ratings:read
 
 📧 İletişim

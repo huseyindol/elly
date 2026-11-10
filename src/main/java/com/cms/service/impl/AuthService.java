@@ -49,6 +49,7 @@ import com.cms.exception.BadRequestException;
 import com.cms.exception.ConflictException;
 import com.cms.exception.ForbiddenException;
 import com.cms.exception.TenantRequiredException;
+import com.cms.exception.TooManyRequestsException;
 import com.cms.exception.UnauthorizedException;
 import com.cms.enums.NotificationType;
 import com.cms.repository.MailAccountRepository;
@@ -264,7 +265,7 @@ public class AuthService implements IAuthService {
 
   @Override
   @Transactional
-  public DtoAuthResponse login(DtoLogin dtoLogin) {
+  public DtoAuthResponse login(DtoLogin dtoLogin, String clientIp) {
     String tenantId = dtoLogin.getTenantId();
     boolean isAdminLogin = "admin".equalsIgnoreCase(dtoLogin.getLoginType());
 
@@ -286,6 +287,14 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("Login için tenant gerekli (tenantId veya /api/v1/public/{tid})");
     }
 
+    // Brute-force koruması (S3): BCrypt maliyetine girmeden önce kilit kontrolü —
+    // 5 hatalı deneme / kullanıcı (tenant+username) veya 30 hatalı deneme / IP → 15 dk 429.
+    if (userAuthCacheService.isLoginLockedOut(effectiveTenantId, dtoLogin.getUsernameOrEmail(), clientIp)) {
+      throw new TooManyRequestsException(
+          "Çok fazla başarısız giriş denemesi. Lütfen " + UserAuthCacheService.LOGIN_ATTEMPT_TTL_MINUTES
+              + " dakika sonra tekrar deneyin.");
+    }
+
     // Authentication işlemi (BCrypt - kasıtlı yavaş)
     Authentication authentication;
     try {
@@ -294,6 +303,8 @@ public class AuthService implements IAuthService {
               dtoLogin.getUsernameOrEmail(),
               dtoLogin.getPassword()));
     } catch (org.springframework.security.core.AuthenticationException e) {
+      userAuthCacheService.recordFailedLoginAttempt(
+          effectiveTenantId, dtoLogin.getUsernameOrEmail(), clientIp);
       throw new UnauthorizedException("Invalid username/email or password");
     }
 
@@ -301,6 +312,10 @@ public class AuthService implements IAuthService {
     CustomUserDetailsService.CustomUserPrincipal principal = (CustomUserDetailsService.CustomUserPrincipal) authentication
         .getPrincipal();
     User user = principal.getUser();
+
+    // Credential doğrulandı (MFA'ya düşse bile) → brute-force sayaçlarını temizle
+    userAuthCacheService.clearLoginAttempts(
+        effectiveTenantId, dtoLogin.getUsernameOrEmail(), clientIp);
 
     // Kullanıcı aktif mi kontrol et
     if (!user.getIsActive()) {

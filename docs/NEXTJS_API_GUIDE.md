@@ -76,6 +76,11 @@ Token'da `loginSource: "admin"` bulunur. Kullanıcı `managedTenants` listesinde
 }
 ```
 
+> **Brute-force koruması (login):** Aynı `tenantId + usernameOrEmail` için **5** başarısız
+> deneme veya aynı IP için **30** başarısız deneme sonrası **15 dakika** boyunca
+> `429 Too Many Requests` (`errorCode: TOO_MANY_REQUESTS`) döner. Başarılı girişte
+> (MFA adımına düşen doğrulamada dahil) sayaç sıfırlanır.
+
 ---
 
 ### POST /api/v1/auth/refresh
@@ -156,7 +161,7 @@ Permission'lar `modül:işlem` formatındadır:
 | banners | `banners:create`, `banners:read`, `banners:update`, `banners:delete` |
 | assets | `assets:create`, `assets:read`, `assets:update`, `assets:delete` |
 | comments | `comments:create`, `comments:read`, `comments:delete` |
-| forms | `forms:create`, `forms:read`, `forms:update`, `forms:delete` |
+| forms | `forms:create`, `forms:read`, `forms:update`, `forms:delete`, `forms:submissions:read` |
 | ratings | `ratings:create`, `ratings:read` |
 | contents | `contents:create`, `contents:read`, `contents:update`, `contents:delete` |
 | basic_infos | `basic_infos:create`, `basic_infos:read`, `basic_infos:update`, `basic_infos:delete` |
@@ -1246,6 +1251,13 @@ Widget sil.
 
 ## Assets
 
+> **Güvenlik notu (upload kuralları — tüm multipart endpoint'leri için geçerli):**
+> Sunucu dosya adını istemciden ALMAZ — her yükleme için UUID isim üretir (yalnızca
+> allowlist'ten geçen uzantı korunur). İzinli uzantılar (`file.upload.allowed-extensions`):
+> `jpg, jpeg, png, gif, webp, pdf, txt, csv, doc, docx, xls, xlsx, ppt, pptx, mp3, mp4, wav, webm, zip`.
+> Aktif içerik (`svg, html, js, jsp, php, exe…`) reddedilir (`400`, "File type not allowed").
+> Response'taki `path` UUID'li gerçek yoldur; orijinal dosya adı saklanmaz.
+
 ### GET /api/v1/assets/id/{id}
 Asset getir (ID ile).
 
@@ -1856,6 +1868,10 @@ Forma yanıt gönder (submission).
 ### GET /api/v1/forms/{formId}/submissions
 Belirli bir forma ait tüm yanıtları listele.
 
+> **Permission:** `forms:submissions:read` (panel rolleri — SUPER_ADMIN/ADMIN/EDITOR/VIEWER).
+> Yayınlanan anonim public authority'lerde bu permission YOKTUR; `/api/v1/public/{tid}/...`
+> üzerinden submissions okunamaz (PII koruması). Form TANIMI görüntüleme `forms:read` ile devam eder.
+
 **Path Parameters:**
 - `formId`: Form Definition ID
 
@@ -1956,7 +1972,7 @@ Belirli bir forma ait toplam yanıt sayısını getir.
 ---
 
 ### GET /api/v1/forms/{formId}/submissions/export
-Belirli bir forma ait yanıtları tarih aralığı filtresi (`from`, `to` — `YYYY-MM-DD`) ile UTF-8 BOM CSV formatında dışa aktarır (`forms:read`).
+Belirli bir forma ait yanıtları tarih aralığı filtresi (`from`, `to` — `YYYY-MM-DD`) ile UTF-8 BOM CSV formatında dışa aktarır (`forms:submissions:read`).
 
 **Response:**
 ```json

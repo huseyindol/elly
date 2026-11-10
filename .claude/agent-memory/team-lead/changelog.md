@@ -3,6 +3,18 @@
 Bu dosya projedeki orta ve büyük ölçekli geliştirmelerin kaydını tutar.
 Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayabilir.
 
+## [2026-11-10] Güvenlik Düzeltme Paketi (Audit K1/S1/S2/S3/S6/K2)
+**Tip:** 🔒 Güvenlik | **Boyut:** Orta
+
+### Özet
+- **K1 — Form submissions PII sızıntısı:** 5 submissions endpoint'i (`GET /{formId}/submissions`, `/submissions/paged`, `/submissions/{id}`, `/submissions/count`, `/submissions/export`) `forms:read` → **`forms:submissions:read`** yeni permission'a taşındı (`PermissionConstants.FORMS_SUBMISSIONS_READ`). Anonim public authority listesinde KASITLI yok — `/api/v1/public/{tid}/forms/{id}/submissions` artık 403. Panel rolleri (SA/ADMIN/EDITOR/VIEWER) DataInitializer modül bazlı sync ile otomatik alır; deploy'da bir kez `STARTUP_RBAC_SEED=true` gerekir.
+- **S1/S2 — Path traversal + aktif içerik upload:** `FileService.saveFile` artık UUID isim üretir (orijinal dosya adı kullanılmaz) + uzantı allowlist (`file.upload.allowed-extensions`; svg/html/js/php/exe… yok). `saveImage` için resim alt kümesi (jpg/jpeg/png/gif/webp) zorunlu.
+- **S3 — Login brute-force koruması:** `UserAuthCacheService`'e Redis (local fallback) tabanlı sayaçlar: tenant+username 5 hata / IP 30 hata → 15 dk `429 TOO_MANY_REQUESTS`. `AuthController.login` client IP'yi (XFF ilk değer → remoteAddr) `AuthService.login`'e taşır; başarılı doğrulamada sayaç sıfırlanır.
+- **S6 — WS cross-tenant SEND:** `ChatWebSocketController` `tenant-chat/{tid}/...` send/typing/read handler'larına SUBSCRIBE ile simetrik session-tenant eşleşme kontrolü (guest/tenant loginSource; admin destek amaçlı açık kalır).
+- **K2 — API yüzeyi kapama:** `/api-docs` + swagger-ui varsayılan KAPALI (`SPRINGDOC_ENABLED=true` ile lokalde açılır).
+- **Doğrulama:** `./mvnw compile` ✅ · `SecurityHardeningTest` 7/7 ✅ · tam paket 29/30 (yalnız `EllyApplicationTests.contextLoads` ortam kaynaklı düştü — PostgreSQL kapalı, dialect belirlenemiyor; değişiklikten bağımsız).
+- **Sözleşme:** Yeni permission `forms:submissions:read`; yeni hata `429 TOO_MANY_REQUESTS` (login); upload response'ları artık UUID path döner. Kanonik: `NEXTJS_API_GUIDE.md`, `PANEL_PERMISSIONS_GUIDE.md` güncellendi.
+
 ---
 
 ## [2026-10-27] WebRTC & VoIP Push Erişilebilirlik + Cihaz/VoIP Token Tekilleştirme

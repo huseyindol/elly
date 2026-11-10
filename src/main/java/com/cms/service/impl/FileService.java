@@ -5,7 +5,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,24 @@ public class FileService implements IFileService {
   private String uploadDirectory;
   @Value("${file.upload.directory.files:uploads/assets}")
   private String uploadDirectoryFiles;
+
+  /**
+   * Yüklenebilir dosya uzantıları (virgüllü, noktasız). Aktif içerik (svg/html/js/jsp/php/exe…)
+   * KASITLI olarak yok: /assets/** anonim servis edildiği için bu uzantılar stored-XSS/RCE yüzeyi.
+   */
+  @Value("${file.upload.allowed-extensions:jpg,jpeg,png,gif,webp,pdf,txt,csv,doc,docx,xls,xlsx,ppt,pptx,mp3,mp4,wav,webm,zip}")
+  private String allowedExtensionsRaw;
+
+  /** Normalize edilmiş (trim + lowercase) allowlist. */
+  private Set<String> allowedExtensionSet() {
+    return java.util.Arrays.stream(allowedExtensionsRaw.split(","))
+        .map(s -> s.trim().toLowerCase(Locale.ROOT))
+        .filter(s -> !s.isEmpty())
+        .collect(Collectors.toUnmodifiableSet());
+  }
+
+  /** Resim upload (saveImage) için izinli uzantılar — allowlist'in resim alt kümesi. */
+  private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
 
   /** Served + PVC kökü (WebConfig: /assets/** → file:assets/). Tenant izolasyonu bunun altında. */
   private static final String ASSETS_ROOT = "assets";
@@ -68,6 +89,9 @@ public class FileService implements IFileService {
     if (!isImageFile(file)) {
       throw new BadRequestException("File is not an image");
     }
+    // Uzantı da allowlist'ten geçmeli: content-type client beyanıdır; "a.svg" yerine
+    // image/* beyanıyla SVG yüklenip /assets/**'ten stored-XSS olarak servis edilemez.
+    String extension = requireAllowedExtension(file.getOriginalFilename(), IMAGE_EXTENSIONS);
     storageQuotaService.ensureWithin(file.getSize());
 
     try {
@@ -82,8 +106,7 @@ public class FileService implements IFileService {
         Files.createDirectories(uploadPath);
       }
 
-      String extension = getFileExtension(file.getOriginalFilename());
-      String filename = UUID.randomUUID().toString() + (extension != null ? extension : "");
+      String filename = UUID.randomUUID().toString() + extension;
 
       Path filePath = uploadPath.resolve(filename);
       Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
@@ -129,6 +152,11 @@ public class FileService implements IFileService {
     }
     storageQuotaService.ensureWithin(file.getSize());
 
+    // Güvenlik: dosya adı client kontrollüdür — ham isimle resolve() path traversal'a açıktır
+    // ("../x" veya absolute path). Bu yüzden isim SUNUCUDA üretilir (UUID), yalnızca
+    // allowlist'ten geçen uzantı korunur (saveImage ile aynı desen).
+    String extension = requireAllowedExtension(file.getOriginalFilename(), allowedExtensionSet());
+
     try {
       // Tenant izolasyonu: assets/t/{tenant}/files/{subfolder}
       String tenant = currentTenant();
@@ -141,8 +169,8 @@ public class FileService implements IFileService {
         Files.createDirectories(uploadPath);
       }
 
-      String originalFilename = file.getOriginalFilename();
-      Path filePath = uploadPath.resolve(originalFilename);
+      String filename = UUID.randomUUID().toString() + extension;
+      Path filePath = uploadPath.resolve(filename);
       Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
       storageQuotaService.addUsage(file.getSize());
 
@@ -150,7 +178,7 @@ public class FileService implements IFileService {
       if (!sub.isEmpty()) {
         dbPath += "/" + sub;
       }
-      dbPath += "/" + originalFilename;
+      dbPath += "/" + filename;
       return dbPath;
     } catch (IOException e) {
       throw new BadRequestException("Failed to save file", e);
@@ -183,6 +211,25 @@ public class FileService implements IFileService {
     } catch (Exception e) {
       throw new BadRequestException("Failed to get file extension", e);
     }
+  }
+
+  /**
+   * Uzantıyı çıkarır, lowercase normalize eder ve allowlist'e tabi tutar.
+   *
+   * @return nokta ile birlikte uzantı (örn. ".pdf") — allowlist'te güvenli
+   */
+  private String requireAllowedExtension(String originalFilename, Set<String> allowlist) {
+    String extension = getFileExtension(originalFilename);
+    if (extension == null) {
+      throw new BadRequestException("File has no extension (allowed: "
+          + String.join(",", allowlist) + ")");
+    }
+    String normalized = extension.substring(1).toLowerCase(Locale.ROOT);
+    if (!allowlist.contains(normalized)) {
+      throw new BadRequestException("File type not allowed: " + normalized
+          + " (allowed: " + String.join(",", allowlist) + ")");
+    }
+    return "." + normalized;
   }
 
   @Override

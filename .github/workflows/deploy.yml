@@ -101,9 +101,11 @@ jobs:
       - name: 📝 Generate Secrets YAML
         id: manifests
         run: |
-          # ConfigMap'i sunucuya taşımak için base64'e çevir (SSH script'inde
-          # decode edilip `kubectl apply -f -` ile uygulanır — sunucuda repo yok)
+          # ConfigMap + Ingress'i sunucuya taşımak için base64'e çevir (SSH script'inde
+          # decode edilip `kubectl apply -f -` ile uygulanır — sunucuda repo yok).
+          # Ingress de artık deploy ile canlıya gider (ör. monitoring host kaldırma).
           echo "configmap_b64=$(base64 -w 0 k8s/1-configmap.yaml)" >> "$GITHUB_OUTPUT"
+          echo "ingress_b64=$(base64 -w 0 k8s/4-ingress.yaml)" >> "$GITHUB_OUTPUT"
 
           # Secret değerleri base64 encode et
           export TENANT1_DB_USER_B64=$(echo -n "${{ secrets.TENANT1_DB_USER }}" | base64)
@@ -139,11 +141,12 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           CONFIGMAP_B64: ${{ steps.manifests.outputs.configmap_b64 }}
+          INGRESS_B64: ${{ steps.manifests.outputs.ingress_b64 }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: CONFIGMAP_B64
+          envs: CONFIGMAP_B64,INGRESS_B64
           script: |
             echo "🚀 Deploying Elly CMS..."
             SHORT_SHA="${{ needs.build.outputs.short_sha }}"
@@ -152,10 +155,12 @@ jobs:
             # Deployment var mı kontrol et
             if sudo kubectl get deployment elly-app -n elly > /dev/null 2>&1; then
               echo "📦 Existing deployment found. Updating image..."
-              # ConfigMap'i uygula (idempotent, stdin'den) — env değişiklikleri (ör.
-              # STARTUP_RBAC_SEED permission seed'i) deploy ile birlikte canlıya insin;
-              # `kubectl set image` tek başına configmap değişikliğini almaz.
+              # ConfigMap + Ingress'i uygula (idempotent, stdin'den) — env değişiklikleri
+              # (ör. STARTUP_RBAC_SEED) ve ingress host değişiklikleri (ör. monitoring
+              # host kaldırma) deploy ile birlikte canlıya insin; `kubectl set image`
+              # tek başına bu manifestleri almaz.
               echo "$CONFIGMAP_B64" | base64 -d | sudo kubectl apply -f -
+              echo "$INGRESS_B64" | base64 -d | sudo kubectl apply -f -
               # Image'ı güncelle
               sudo kubectl set image deployment/elly-app \
                 elly-app=${IMAGE}:${SHORT_SHA} \

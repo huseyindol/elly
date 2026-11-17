@@ -409,6 +409,13 @@ public class UserService implements IUserService {
     }
 
     user.setIsActive(isActive);
+    // Y2 (denetim 2026-11-17): pasifleştirme tokenVersion'ı da artırır → mevcut ACCESS
+    // token'lar anında geçersiz (30 dk beklemeden; REST filter + WS CONNECT aktiflik
+    // kontrolü de eklendi). afterCommit evict: bayat-cache race'ini kapatır.
+    if (!isActive) {
+      Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+      user.setTokenVersion(currentVersion + 1);
+    }
     User saved = userRepository.save(user);
 
     // Pasifleştirme sonrası açık oturumlar mantıksal olarak sona ermeli:
@@ -418,7 +425,18 @@ public class UserService implements IUserService {
       refreshTokenRepository.deleteByUserId(id);
     }
     if (saved.getUsername() != null) {
-      userAuthCacheService.evictUserCache(saved.getUsername());
+      if (org.springframework.transaction.support.TransactionSynchronizationManager
+          .isSynchronizationActive()) {
+        org.springframework.transaction.support.TransactionSynchronizationManager
+            .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+              @Override
+              public void afterCommit() {
+                userAuthCacheService.evictUserCache(saved.getUsername());
+              }
+            });
+      } else {
+        userAuthCacheService.evictUserCache(saved.getUsername());
+      }
     }
     log.info("Kullanici durumu degisti: id={} username={} isActive={} degisen={}",
         id, saved.getUsername(), isActive, currentUsername);

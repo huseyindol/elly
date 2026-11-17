@@ -74,6 +74,20 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
           // H4: authenticateConnect() içindeki jwtUtil.validateToken(token, username, tokenVersion)
           // çağrısı zaten token version kontrolü yapıyor — iptal edilmiş token'lar reject edilir.
           authenticateConnect(accessor, message);
+        } else if (StompCommand.SEND.equals(accessor.getCommand())) {
+          // C1 (denetim 2026-11-17): Client SEND yalnız /app/** (controller handler'ları)
+          // hedefleyebilir. Simple broker prefix'lerine (/topic/**, /user/**, /queue/**)
+          // doğrudan publish, anonim guest token'la sahte yayın (chat/RTC/presence) imkânı
+          // veriyordu — controller katmanındaki sterilizasyon/rate-limit/ban tamamen
+          // bypass ediliyordu. Kim (authenticated/guest) olduğundan BAĞIMSIZ zorunlu.
+          String sendDestination = accessor.getDestination();
+          if (sendDestination == null || !sendDestination.startsWith("/app/")) {
+            throw new org.springframework.messaging.MessageDeliveryException(
+                message, "Forbidden STOMP SEND destination: " + sendDestination);
+          }
+          if (accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth) {
+            SecurityContextHolder.getContext().setAuthentication(auth);
+          }
         } else if (accessor.getUser() instanceof UsernamePasswordAuthenticationToken auth) {
           // SEND/SUBSCRIBE vb. — REST ile aynı SecurityContext (ROLE_* dahil)
           SecurityContextHolder.getContext().setAuthentication(auth);
@@ -153,6 +167,13 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
       if (!jwtUtil.validateToken(token, cachedUser.getUsername(), tokenVersion)) {
         throw new org.springframework.messaging.MessageDeliveryException(
             message, "Invalid or expired JWT token");
+      }
+
+      // Y2 (denetim 2026-11-17): pasifleştirilmiş hesap WS bağlantısı da kuramaz
+      // (REST filtresiyle simetrik — önceden CONNECT aktifliği atlıyordu).
+      if (!Boolean.TRUE.equals(cachedUser.getIsActive())) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "User account is deactivated");
       }
 
       List<GrantedAuthority> authorities = cachedUser.getAuthorities().stream()
@@ -353,8 +374,21 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
     }
 
     // 4. WebRTC caller sinyalleşme kanalı (/topic/rtc-client/{clientRef}/rtc)
+    // Y3 (denetim 2026-11-17): sahiplik — clientRef'i İLK abone olan session'a bağla.
+    // Web/mobil client çağrıdan ÖNCE abone olur (çağrı registry'si henüz boş olabilir),
+    // bu yüzden "aktif çağrı eşleşmesi" yerine claim modeli: aynı clientRef'e farklı
+    // session abone olamaz. Guest (website) oturumlarının bu kanala ihtiyacı yok.
     Matcher rtcClientMatcher = RTC_CLIENT_TOPIC_PATTERN.matcher(destination);
     if (rtcClientMatcher.matches()) {
+      if ("website".equals(loginSource)) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "Guest cannot subscribe to rtc-client channel");
+      }
+      String clientRef = rtcClientMatcher.group(1);
+      if (!claimRtcClientRef(clientRef, accessor.getSessionId())) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "Cannot subscribe to another client's rtc channel");
+      }
       return;
     }
 
@@ -469,5 +503,30 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
     if (names.contains("ROLE_ADMIN")) return 3;
     if (names.contains("ROLE_EDITOR")) return 2;
     return 1;
+  }
+
+  /**
+   * Y3: rtc-client kanalı sahiplik claim'i — {@code rtc:ref:{clientRef} → sessionId}
+   * (SETNX benzeri, TTL 1 saat ≈ WS oturum ömrü). İlk abone olan session'a bağlanır;
+   * aynı session yeniden abone olabilir, FARKLI session reddedilir. Redis down ise
+   * çağrı özelliği kırılmasın diye best-effort izin verilir (log'lu) — clientRef'in
+   * kendisi client üretimli rastgele UUID olduğundan tahmin esas bariyerdir.
+   */
+  private boolean claimRtcClientRef(String clientRef, String sessionId) {
+    if (clientRef == null || sessionId == null) {
+      return false;
+    }
+    String key = "rtc:ref:" + clientRef;
+    try {
+      Object owner = redisTemplate.opsForValue().get(key);
+      if (owner == null) {
+        redisTemplate.opsForValue().set(key, sessionId, 1, java.util.concurrent.TimeUnit.HOURS);
+        return true;
+      }
+      return sessionId.equals(owner.toString());
+    } catch (Exception e) {
+      log.warn("rtc-client claim kontrolü Redis'e ulaşamadı (best-effort izin): {}", e.getMessage());
+      return true;
+    }
   }
 }

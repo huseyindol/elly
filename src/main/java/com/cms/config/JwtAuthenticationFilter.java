@@ -113,6 +113,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
           return;
         }
 
+        // Y2 (denetim 2026-11-17): pasifleştirilmiş hesap anında kilitlenir — token süresi
+        // (30 dk) beklemeden. Cache 30dk TTL'li olduğundan setUserStatus evict'i ile burası
+        // tazelenir; DB'den gelen isActive=false da burada yakalanır.
+        if (!Boolean.TRUE.equals(cachedUser.getIsActive())) {
+          sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "ACCOUNT_DEACTIVATED",
+              "User account is deactivated");
+          return;
+        }
+
         // Cache'teki authorities'den Spring Security authority'leri oluştur
         List<GrantedAuthority> authorities = cachedUser.getAuthorities().stream()
             .map(SimpleGrantedAuthority::new)

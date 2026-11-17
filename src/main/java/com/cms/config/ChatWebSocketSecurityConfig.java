@@ -374,18 +374,21 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
     }
 
     // 4. WebRTC caller sinyalleşme kanalı (/topic/rtc-client/{clientRef}/rtc)
-    // Y3 (denetim 2026-11-17): sahiplik — clientRef'i İLK abone olan session'a bağla.
+    // Y3 (denetim 2026-11-17): sahiplik — clientRef'i İLK abone olan KULLANICIYA bağla.
     // Web/mobil client çağrıdan ÖNCE abone olur (çağrı registry'si henüz boş olabilir),
-    // bu yüzden "aktif çağrı eşleşmesi" yerine claim modeli: aynı clientRef'e farklı
-    // session abone olamaz. Guest (website) oturumlarının bu kanala ihtiyacı yok.
+    // bu yüzden "aktif çağrı eşleşmesi" yerine claim modeli. Anahtar userId (sessionId
+    // DEĞİL): WS reconnect'ta sessionId değişir ama clientRef sabit kalır — sessionId
+    // anahtarlarsak kullanıcı 1 saat (TTL) boyunca kendi kanalına abone olamazdı.
+    // Aynı kullanıcının ikinci cihazı abone olabilir (kabul); FARKLI kullanıcı reddedilir.
+    // Guest (website) oturumlarının bu kanala ihtiyacı yok.
     Matcher rtcClientMatcher = RTC_CLIENT_TOPIC_PATTERN.matcher(destination);
     if (rtcClientMatcher.matches()) {
-      if ("website".equals(loginSource)) {
+      if ("website".equals(loginSource) || sessionUserId == null) {
         throw new org.springframework.messaging.MessageDeliveryException(
             message, "Guest cannot subscribe to rtc-client channel");
       }
       String clientRef = rtcClientMatcher.group(1);
-      if (!claimRtcClientRef(clientRef, accessor.getSessionId())) {
+      if (!claimRtcClientRef(clientRef, sessionUserId)) {
         throw new org.springframework.messaging.MessageDeliveryException(
             message, "Cannot subscribe to another client's rtc channel");
       }
@@ -506,24 +509,27 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
   }
 
   /**
-   * Y3: rtc-client kanalı sahiplik claim'i — {@code rtc:ref:{clientRef} → sessionId}
-   * (SETNX benzeri, TTL 1 saat ≈ WS oturum ömrü). İlk abone olan session'a bağlanır;
-   * aynı session yeniden abone olabilir, FARKLI session reddedilir. Redis down ise
-   * çağrı özelliği kırılmasın diye best-effort izin verilir (log'lu) — clientRef'in
-   * kendisi client üretimli rastgele UUID olduğundan tahmin esas bariyerdir.
+   * Y3: rtc-client kanalı sahiplik claim'i — {@code rtc:ref:{clientRef} → userId}
+   * (atomik SETNX, TTL 1 saat). İlk abone olan kullanıcıya bağlanır; aynı kullanıcı
+   * yeniden abone olabilir (WS reconnect dahil), FARKLI kullanıcı reddedilir.
+   * Redis down ise çağrı özelliği kırılmasın diye best-effort izin verilir (log'lu) —
+   * clientRef'in kendisi client üretimli rastgele UUID olduğundan tahmin esas bariyerdir.
    */
-  private boolean claimRtcClientRef(String clientRef, String sessionId) {
-    if (clientRef == null || sessionId == null) {
+  private boolean claimRtcClientRef(String clientRef, Long userId) {
+    if (clientRef == null || userId == null) {
       return false;
     }
     String key = "rtc:ref:" + clientRef;
     try {
       Object owner = redisTemplate.opsForValue().get(key);
-      if (owner == null) {
-        redisTemplate.opsForValue().set(key, sessionId, 1, java.util.concurrent.TimeUnit.HOURS);
-        return true;
+      if (owner != null) {
+        return owner.toString().equals(userId.toString());
       }
-      return sessionId.equals(owner.toString());
+      // Atomik claim: yarışta iki eşzamanlı istekten yalnız biri yerleşir
+      Boolean claimed = redisTemplate.opsForValue()
+          .setIfAbsent(key, userId.toString(), 1, java.util.concurrent.TimeUnit.HOURS);
+      return Boolean.TRUE.equals(claimed) || userId.toString()
+          .equals(String.valueOf(redisTemplate.opsForValue().get(key)));
     } catch (Exception e) {
       log.warn("rtc-client claim kontrolü Redis'e ulaşamadı (best-effort izin): {}", e.getMessage());
       return true;

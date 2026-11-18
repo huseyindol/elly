@@ -1,0 +1,91 @@
+# ============================================
+# DEPLOYMENT - coturn (TURN/STUN relay for WebRTC)
+# ============================================
+# WebRTC peer'leri NAT arkasindayken relay olarak kullanilir.
+# Backend TURN_URL/USERNAME/CREDENTIAL env'leriyle ayni kimligi paylasir
+# (RtcIceConfigService -> GET /api/v1/notifications/ice-servers).
+#
+# hostNetwork: true — coturn'in dinamik relay-port araligi (min/max-port)
+# Service nodePort'lariyla ifade edilemez; pod dogrudan node portlarini dinler.
+# GCP firewall'da acilmasi gerekenler: UDP:3478, TCP:3478, UDP:49160-49200
+# (bkz. docs/KUBERNETES_LOCAL_SETUP.md allow-http-https kuralina benzer).
+#
+# Ilk kurulum: bu dosya CI tarafindan uygulanmaz; Redis/RabbitMQ gibi elle:
+#   sudo kubectl apply -f k8s/2f-coturn.yaml -n elly
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coturn
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: turn
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # hostNetwork + tek node: rolling cakismasi onle
+  selector:
+    matchLabels:
+      app: elly-cms
+      component: turn
+  template:
+    metadata:
+      labels:
+        app: elly-cms
+        component: turn
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: coturn
+          image: coturn/coturn:4.6-alpine
+          args:
+            - "--listening-port=3478"
+            - "--fingerprint"
+            - "--lt-cred-mech"
+            - "--realm=huseyindol.com"
+            - "--user=$(TURN_USERNAME):$(TURN_CREDENTIAL)"
+            - "--min-port=49160"
+            - "--max-port=49200"
+            - "--no-cli"
+            - "--log-file=stdout"
+            - "--verbose"
+          env:
+            - name: TURN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: elly-secret
+                  key: TURN_USERNAME
+            - name: TURN_CREDENTIAL
+              valueFrom:
+                secretKeyRef:
+                  name: elly-secret
+                  key: TURN_CREDENTIAL
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+            # CPU limiti yok: relay ani yukte CPU ister, throttling video'yu bozar
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pgrep -x turnserver"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+---
+# Kume ici diagnostik/dns adresi (asil trafik hostNetwork uzerinden).
+apiVersion: v1
+kind: Service
+metadata:
+  name: coturn
+  namespace: elly
+  labels:
+    app: elly-cms
+    component: turn
+spec:
+  clusterIP: None
+  selector:
+    app: elly-cms
+    component: turn

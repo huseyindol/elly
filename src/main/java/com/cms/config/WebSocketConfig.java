@@ -23,5 +23,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     registry.addEndpoint("/ws")
         .setAllowedOriginPatterns("*")
         .withSockJS();
+    // SockJS protokolü implemente etmeyen istemciler için raw WebSocket ucu
+    // (örn. macOS ajanı). Aynı broker ve CONNECT-auth kurallarına bağlanır;
+    // tarayıcı/mobile /ws (SockJS) ucunda değişiksiz kalır.
+    registry.addEndpoint("/ws-native")
+        .setAllowedOriginPatterns("*");
   }
 }

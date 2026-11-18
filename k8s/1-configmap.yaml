@@ -69,6 +69,10 @@ data:
   RABBITMQ_MGMT_URL: "http://rabbitmq-management:15672/api"
   RABBITMQ_VHOST: "/"
 
+  # --- WebRTC TURN (coturn, k8s/2f-coturn.yaml) ---
+  # Kimlik (TURN_USERNAME/TURN_CREDENTIAL) elly-secret'te; burada yalnizca URL.
+  TURN_URL: "turn:api.huseyindol.com:3478"
+
   # --- Mail SMTP (Mail+Form v2) ---
   # v2'de SMTP host/port/username/password ENV ya da ConfigMap'te DEGIL, her
   # tenant DB'sindeki mail_accounts tablosunda saklanir (panel uzerinden eklenir).

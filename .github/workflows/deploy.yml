@@ -123,6 +123,9 @@ jobs:
           export REDIS_PASSWORD_B64=$(echo -n "${{ secrets.REDIS_PASSWORD }}" | base64)
           export RABBITMQ_USER_B64=$(echo -n "${{ secrets.RABBITMQ_USER }}" | base64)
           export RABBITMQ_PASSWORD_B64=$(echo -n "${{ secrets.RABBITMQ_PASSWORD }}" | base64)
+          # WebRTC TURN (coturn) — backend ice-servers ucu + k8s/2f-coturn.yaml
+          export TURN_USERNAME_B64=$(echo -n "${{ secrets.TURN_USERNAME }}" | base64)
+          export TURN_CREDENTIAL_B64=$(echo -n "${{ secrets.TURN_CREDENTIAL }}" | base64)
 
           # ============================================
           # Mail+Form v2 — AES-256 sifreleme anahtari

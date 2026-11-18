@@ -156,6 +156,8 @@ public class SecurityConfig {
             // ve anyRequest().authenticated() kuralina dusuyor → 401.
             // AntPathRequestMatcher dogrudan path stringi karsilastirir, MVC mapping aramaz.
             .requestMatchers(AntPathRequestMatcher.antMatcher("/ws/**")).permitAll()
+            // Raw WebSocket ucu (macOS ajanı) — auth STOMP CONNECT interceptor'ında.
+            .requestMatchers(AntPathRequestMatcher.antMatcher("/ws-native/**")).permitAll()
             .anyRequest().authenticated())
         .exceptionHandling(exceptions -> exceptions
             .authenticationEntryPoint((request, response, authException) -> {

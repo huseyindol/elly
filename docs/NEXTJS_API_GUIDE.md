@@ -2641,6 +2641,58 @@ Tenant'ın aylık AI token limitini ve günlük istek limitini günceller. Limit
 
 ---
 
+## WebSocket & WebRTC Signaling
+
+### Uçlar (Endpoints)
+
+| Uç | Protokol | Kim kullanır |
+|---|---|---|
+| `/ws` | STOMP over **SockJS** (fallback'li) | Tarayıcılar (admin paneli) ve mobil uygulama |
+| `/ws-native` | STOMP over **raw WebSocket** | SockJS protokolü implemente etmeyen istemciler (örn. `elly-mac-agent`) |
+
+İkisi de aynı broker'a (`/topic`, `/user`), aynı `/app` prefix'ine ve **aynı auth kurallarına** bağlanır.
+
+### Kimlik doğrulama (her iki uç)
+
+STOMP **CONNECT** frame'inde native header: `Authorization: Bearer <JWT>`.
+
+- JWT `loginSource` claim'i `admin | tenant | website` olmalı; `tenantId` claim'i **zorunlu** (`TENANT_REQUIRED`).
+- Aktif oturum kuralları: `tokenVersion` doğrulanır, deaktive kullanıcı reddedilir.
+- WS HTTP el sıkışması kimliksizdir (cookie kullanılmaz); yetkilendirme tamamen CONNECT'te.
+
+### Güvenlik kuralları (whitelist)
+
+- **SEND** yalnız `/app/**` hedeflerine izin verir; başka hedef `MessageDeliveryException`.
+- **SUBSCRIBE** whitelist: `/user/queue/**`, `/topic/presence`, `/topic/groups/new|deleted` (admin), `/topic/user/{ kendi userId'si }/(groups/joined|groups/removed|membership|rtc)`, `/topic/rtc-client/{ref}/rtc` (Redis claim), `/topic/tenant/{tid}/group/{uuid}...`.
+
+### RTC çağrı sinyalleşmesi (STOMP SEND → `/app/...`)
+
+| Hedef | Body | Not |
+|---|---|---|
+| `/app/rtc/call` | `DtoCallStart { "calleeUserId": Long, "groupId"?: String }` | Yalnız `loginSource=admin` oturumu. Çalan taraftan RINGING, karşıdan INCOMING_CALL. |
+| `/app/rtc/{callId}/answer` | — | Kabul. **ANSWERED sonrası SDP offer'ı çağıran üretir.** |
+| `/app/rtc/{callId}/reject` | — | Red. |
+| `/app/rtc/{callId}/cancel` | — | Çalan taraf, RINGING'deyken. |
+| `/app/rtc/{callId}/hangup` | — | Taraflardan herhangi biri. |
+| `/app/rtc/{callId}/sdp` | `DtoCallSdp { "sdpType": "offer"\|"answer", "sdp": String }` | Katılımcılara oldugu gibi aktarılır. |
+| `/app/rtc/{callId}/ice` | `DtoCallIce { "candidate", "sdpMid", "sdpMLineIndex" }` | Katılımcılara oldugu gibi aktarılır. |
+
+`callId` UUID'dir. Sinyaller **`/topic/user/{userId}/rtc`** üzerinden (yedek: `/user/queue/rtc`) `DtoCallSignal { type, callId, peerUserId, peerDisplayName, ringAll, sdpType, sdp, candidate, sdpMid, sdpMLineIndex, reason }` zarfıyla iletilir. `type` değerleri: `INCOMING_CALL, RINGING, ANSWERED, CALL_TAKEN, REJECTED, CANCELLED, HANGUP, TIMEOUT, UNAVAILABLE, BUSY, ERROR, SDP, ICE`.
+
+### ICE sunucuları
+
+`GET /api/v1/notifications/ice-servers` (authenticated) → `[{ "urls": [...], "username"?, "credential"? }]`. STUN her zaman; TURN yalnız `TURN_URL` / `TURN_USERNAME` / `TURN_CREDENTIAL` env'leri tanımlıysa.
+
+### Mac ajan akışı (referans — `elly-mac-agent`)
+
+1. `POST /api/v1/auth/login` (`loginType: "admin"`, `tenantId`) → token (30 dk) + refreshToken (7 gün).
+2. Raw WS `/ws-native/websocket` → STOMP CONNECT (`Authorization: Bearer`) → SUBSCRIBE `/topic/user/{agentUserId}/rtc`.
+3. `INCOMING_CALL` → `peerUserId` sahip değilse `reject`, ise otomatik `answer`.
+4. `SDP (offer)` → `setRemoteDescription` → `createAnswer` → SEND `/app/rtc/{callId}/sdp` → `ICE` alışverişi → yayın.
+5. `HANGUP | CANCELLED | TIMEOUT` → kamera kapanır. Tüm oturumlar tenant DB'sindeki `call_logs` tablosuna yazılır.
+
+---
+
 ## Response Format
 
 Tüm API'ler şu formatta döner:

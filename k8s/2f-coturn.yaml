@@ -41,6 +41,10 @@ spec:
           image: coturn/coturn:4.6-alpine
           args:
             - "--listening-port=3478"
+            # VM'in dis IP'si (34.135.64.132) 1:1 NAT ile ic adrese (10.128.0.2) cevrilir. Bu eslesme
+            # verilmeyince relay adresleri IC adres olarak duyurulur; o adrese disaridan ulasilamaz ve
+            # TURN uzerinden hicbir medya akamaz (tahsisat yine de "basarili" doner).
+            - "--external-ip=34.135.64.132/10.128.0.2"
             - "--fingerprint"
             - "--lt-cred-mech"
             - "--realm=huseyindol.com"

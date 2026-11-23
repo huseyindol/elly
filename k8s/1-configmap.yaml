@@ -71,7 +71,9 @@ data:
 
   # --- WebRTC TURN (coturn, k8s/2f-coturn.yaml) ---
   # Kimlik (TURN_USERNAME/TURN_CREDENTIAL) elly-secret'te; burada yalnizca URL.
-  TURN_URL: "turn:api.huseyindol.com:3478"
+  # NOT: api.huseyindol.com Cloudflare proxy'sinde — TURN portu CF'ten gecmez,
+  # bu yuzden dogrudan statik VM IP'si kullanilir (UDP + TCP cesitleri).
+  TURN_URL: "turn:34.135.64.132:3478,turn:34.135.64.132:3478?transport=tcp"
 
   # --- Mail SMTP (Mail+Form v2) ---
   # v2'de SMTP host/port/username/password ENV ya da ConfigMap'te DEGIL, her

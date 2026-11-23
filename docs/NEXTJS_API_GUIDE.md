@@ -2686,7 +2686,7 @@ STOMP **CONNECT** frame'inde native header: `Authorization: Bearer <JWT>`.
 ### Mac ajan akışı (referans — `elly-mac-agent`)
 
 1. `POST /api/v1/auth/login` (`loginType: "admin"`, `tenantId`) → token (30 dk) + refreshToken (7 gün).
-2. Raw WS `/ws-native/websocket` → STOMP CONNECT (`Authorization: Bearer`) → SUBSCRIBE `/topic/user/{agentUserId}/rtc`.
+2. Raw WS `/ws-native` (SockJS'teki gibi `/websocket` eki YOK) → STOMP CONNECT (`Authorization: Bearer`) → SUBSCRIBE `/topic/user/{agentUserId}/rtc`.
 3. `INCOMING_CALL` → `peerUserId` sahip değilse `reject`, ise otomatik `answer`.
 4. `SDP (offer)` → `setRemoteDescription` → `createAnswer` → SEND `/app/rtc/{callId}/sdp` → `ICE` alışverişi → yayın.
 5. `HANGUP | CANCELLED | TIMEOUT` → kamera kapanır. Tüm oturumlar tenant DB'sindeki `call_logs` tablosuna yazılır.

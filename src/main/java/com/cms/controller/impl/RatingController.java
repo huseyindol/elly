@@ -21,6 +21,7 @@ import com.cms.entity.RootEntityResponse;
 import com.cms.mapper.RatingMapper;
 import com.cms.service.IPostService;
 import com.cms.service.IRatingService;
+import com.cms.util.ClientIpResolver;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -51,8 +52,10 @@ public class RatingController extends BaseController implements IRatingControlle
       return error("Post ID is required");
     }
 
-    // User identifier (IP adresi)
-    String userIp = request.getRemoteAddr();
+    // Kullanıcı tanımlayıcısı — GERÇEK ziyaretçi adresi. Prod'da istekler bir iç proxy adresinden geldiği için
+    // remoteAddr her ziyaretçi için aynı çıkıyordu: her yazıda biri "kullanıcı" oluyordu ve son yazan önceki
+    // oyu eziyordu.
+    String userIp = ClientIpResolver.resolve(request);
     rating.setUserIdentifier(userIp);
 
     Rating savedRating = ratingService.saveRating(rating);

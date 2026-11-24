@@ -16,6 +16,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import com.cms.config.TenantContext;
 import com.cms.exception.FormValidationException;
 import com.cms.exception.TooManyRequestsException;
+import com.cms.util.ClientIpResolver;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -123,19 +124,16 @@ public class FormSpamProtectionService {
     return counter.count;
   }
 
+  /**
+   * Dakikada gönderim limiti GERÇEK ziyaretçiye göre olmalı. Prod'da istekler Cloudflare → k3s ServiceLB →
+   * Traefik yoluyla geldiğinden {@code X-Forwarded-For} ve {@code remoteAddr} her ziyaretçi için aynı iç adreste
+   * görünüyordu: limit tüm tenant'ta o formu dolduran herkesin PAYLAŞTIĞI tek sayaç oluyordu (5 gönderimden
+   * sonra form herkese 429 dönerdi). Bu yüzden adres tek noktadan çözülür: {@link ClientIpResolver}.
+   */
   private String resolveClientIpFromContext() {
     RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
     if (attrs instanceof ServletRequestAttributes servletAttrs) {
-      HttpServletRequest request = servletAttrs.getRequest();
-      String xff = request.getHeader("X-Forwarded-For");
-      if (xff != null && !xff.isBlank()) {
-        return xff.split(",")[0].trim();
-      }
-      String realIp = request.getHeader("X-Real-IP");
-      if (realIp != null && !realIp.isBlank()) {
-        return realIp.trim();
-      }
-      return request.getRemoteAddr();
+      return ClientIpResolver.resolve(servletAttrs.getRequest());
     }
     return null;
   }

@@ -196,7 +196,8 @@ public class ChatWebSocketController {
     Long userId = resolveUserIdFromSessionAttrs(accessor);
     String username = resolveUsernameFromSessionAttrs(accessor);
     if (userId == null) return;
-    boolean firstSession = presenceService.userConnected(userId);
+    boolean firstSession =
+        presenceService.userConnected(resolveOptionalSessionTenant(accessor), userId, accessor.getSessionId());
     if (firstSession) {
       DtoChatPresence presence = new DtoChatPresence(userId, username, "ONLINE");
       messagingTemplate.convertAndSend("/topic/presence", presence);
@@ -211,7 +212,8 @@ public class ChatWebSocketController {
     Long userId = resolveUserIdFromSessionAttrs(accessor);
     String username = resolveUsernameFromSessionAttrs(accessor);
     if (userId == null) return;
-    boolean lastSession = presenceService.userDisconnected(userId);
+    boolean lastSession =
+        presenceService.userDisconnected(resolveOptionalSessionTenant(accessor), userId, accessor.getSessionId());
     if (lastSession) {
       DtoChatPresence presence = new DtoChatPresence(userId, username, "OFFLINE");
       messagingTemplate.convertAndSend("/topic/presence", presence);

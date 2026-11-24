@@ -3,6 +3,30 @@
 Bu dosya projedeki orta ve büyük ölçekli geliştirmelerin kaydını tutar.
 Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayabilir.
 
+## [2026-11-24] Çevrimiçi Kaydı Tazeleme (tenant'lı) + Giriş Sayaçlarında Gerçek İstemci IP'si
+**Tip:** 🐛 Düzeltme / 🔒 Güvenlik | **Boyut:** Orta
+
+### Özet
+- **Çevrimiçi kaydı 5 dakikada siliniyordu:** `chat:presence:<userId>` yalnızca STOMP CONNECT'te yazılıyor, ömrünü (300 sn) tazeleyen yoktu. WebSocket'i açık olan kullanıcı 5 dakika sonra "çevrimdışı" görünüyordu; `CallSessionService.isUserReachable` bu kayda baktığı için anlık bildirimi olmayan kullanıcı aranamaz oluyordu. `ChatPresenceService` artık kendi açık oturumlarını tutar ve `@Scheduled` iş her 60 sn'de (`chat.presence.refresh-ms`) kaydı tazeler. Sayaç Redis'te ortak, oturum listesi instance'a özeldir.
+- **Kayıt tenant'a göre ayrıldı:** `chat:presence:<tenantId>:<userId>`. Kullanıcı numaraları her tenant veritabanında ayrı sayıldığı için tek kayıt, başka tenant'taki aynı numaralı kullanıcıyı çevrimiçi gösterirdi (tazeleme gelmeden 5 dk ile sınırlıydı). `isOnline` imzası `isOnline(tenantId, userId)` oldu; tek çağıran `CallSessionService`.
+- **Zamanlayıcı havuzu:** `spring.task.scheduling.pool.size=4` — zamanlanmış işler tek iş parçacığını paylaşıyordu, yavaş bir iş tazelemeyi geciktirebilirdi.
+- **Giriş IP kilidi küreseldi:** prod'da trafik Cloudflare → k3s ServiceLB → Traefik → uygulama. ServiceLB kaynağı `10.42.0.1`'e çevirir, Traefik güvenmediği `X-Forwarded-For`'ı atar → her istek aynı IP: **30 hatalı giriş herkesin girişini 15 dk kilitliyordu**. Yeni `util.ClientIpResolver`: `CF-Connecting-IP` (IP değişmezi olarak doğrulanır) → XFF ilk değeri → remoteAddr. Yalnız `AuthController.resolveClientIp` geçti; kullanıcı başına limit (5/15 dk) değişmedi.
+- **Bilinen açık (takip):** origin'e 80/443'ten doğrudan erişilebiliyor; Cloudflare'ı atlayan bir istemci `CF-Connecting-IP`'yi taklit edebilir. Tam güven için origin'e erişim Cloudflare IP aralıklarıyla sınırlandırılmalı. `FormSpamProtectionService`, `RatingController`, `RequestTimingInterceptor` eski çözümde bırakıldı (aynı ortak-IP etkisi; ayrı değerlendirilecek).
+- **Doğrulama:** compile ✅ · `ChatPresenceServiceTest` 7, `ClientIpResolverTest` 5, `AuthAndPresenceWiringTest` 2 (yeni) + `SecurityHardeningTest` 7, `SecurityPatch2Test` 7 ✅.
+- **Sözleşme:** REST/WS sözleşmesi değişmedi. Redis anahtar biçimi değişti (eski anahtarlar 5 dk içinde kendini temizler).
+
+---
+
+## [2026-11-23] Raw WebSocket Ucu (`/ws-native`) + TURN (coturn) Altyapısı
+**Tip:** ✨ Özellik | **Boyut:** Orta
+
+### Özet
+- **`/ws-native`:** SockJS implemente etmeyen istemciler için (macOS ajanı) ham WebSocket ucu. Aynı broker, aynı CONNECT kimlik doğrulaması; `/ws` (SockJS) değişmedi. `SecurityConfig`'te `permitAll` (kimlik doğrulama STOMP CONNECT'te).
+- **TURN:** `k8s/2f-coturn.yaml` (hostNetwork, 3478 + relay 49160–49200, **`--external-ip=34.135.64.132/10.128.0.2`**: VM dış IP'si iç adrese 1:1 NAT'lanır; bu verilmezse relay adresleri iç IP olarak duyurulur ve TURN üzerinden medya akmaz), `TURN_URL` configmap, `TURN_USERNAME/CREDENTIAL` secret + deploy.yml. Backend kodu değişmedi (`RtcIceConfigService` env okur).
+- **Doküman:** `docs/NEXTJS_API_GUIDE.md` → "WebSocket & WebRTC Signaling" (uçlar, CONNECT başlığı, whitelist, `/app/rtc/*` yükleri).
+
+---
+
 ## [2026-11-10 (2)] Güvenlik Kısa-Vade Paketi (S4/S5/S7/S8/S9/S10/T1-T4)
 **Tip:** 🔒 Güvenlik | **Boyut:** Orta
 

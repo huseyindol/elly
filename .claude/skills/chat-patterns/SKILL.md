@@ -127,11 +127,15 @@ TENANT rollü kullanıcılar `/api/v1/chat/**`'e erişemez (chat:read yok) —
 | `/app/rtc/{callId}/{answer,reject,cancel,hangup,sdp,ice}` | Çağrı yaşam döngüsü + SDP/ICE relay |
 
 ## WebRTC Arama (Faz 1)
-- Backend yalnız sinyalleşme (SDP/ICE opak relay) + orkestrasyon; medya P2P. STUN/TURN backend'de yok.
+- Backend yalnız sinyalleşme (SDP/ICE opak relay) + orkestrasyon; medya P2P. ICE sunucu listesi:
+  `GET /api/v1/notifications/ice-servers` (`TURN_URL` / `TURN_USERNAME` / `TURN_CREDENTIAL` env'leri; prod'da coturn — `k8s/2f-coturn.yaml`).
 - Panel-içi: hiyerarşi kuralı (kendi seviyesi ve altı; aynı chat grubunun üyeleriyse ATLANIR).
 - Ring-all: tenant destek çağrısı tüm online panel kullanıcılarını çaldırır; ilk cevaplayan
   atomik kazanır (CALL_TAKEN diğerlerine).
 - Durum in-memory (`CallSessionService`) — TEK instance varsayımı; 30sn ring timeout; busy/presence kontrolü.
+- Çevrimiçi kaydı: `chat:presence:<tenantId>:<userId>` (Redis; kullanıcı numaraları tenant'a özeldir). Ömür
+  300 sn, instance'ın açık WS oturumları için 60 sn'de bir tazelenir (`ChatPresenceService.refreshLiveSessions`) —
+  tazeleme yoksa 5 dakikadan uzun bağlantılar "çevrimdışı" görünür ve aranamaz.
 - `call_logs` her tenant DB'sinde (migration: `db-migration-call-logs.sql`).
 
 ## REST Endpoint Pattern'i

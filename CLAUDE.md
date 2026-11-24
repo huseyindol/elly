@@ -100,7 +100,7 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 ## Chat Sistemi
 - **AC=TC tek model:** Her chat grubu ait oldugu TENANT DB'sinde yasar (basedb yok); 5 tablo her tenant'ta (chat_groups, chat_group_members, chat_messages, chat_message_reads, chat_message_edits)
 - **Routing:** Tenant, WS CONNECT'te token `tenantId` claim'inden; REST'te `/api/v1/chat/tenant/{tid}/...` URL'inden
-- **WebSocket:** `${API}/ws` (SockJS+STOMP), CONNECT'te `Authorization: Bearer` zorunlu (guest token'la anonim de baglanir)
+- **WebSocket:** `${API}/ws` (SockJS+STOMP), CONNECT'te `Authorization: Bearer` zorunlu (guest token'la anonim de baglanir). SockJS kullanmayan istemciler (macOS ajanı) icin ham WS ucu: `${API}/ws-native` (ayni broker ve CONNECT kurallari)
 - **Permission:** `chat:read` (tum kullanicilar), `chat:manage` (EDITOR+)
 - **Visibility:** VIEWER=1 (herkese acik) → EDITOR=2 → ADMIN=3 → SUPER_ADMIN=4 (gizli), DM her zaman 4
 - **Davet hiyerarsisi:** Davet eden, KENDI SEVIYESI ve altindaki kullanicilari davet edebilir (admin→admin dahil); SUPER_ADMIN herkesi
@@ -110,7 +110,7 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Detay:** `chat-patterns` skill'i acilir; query/topic ornekleri orada
 
 ## WebRTC Arama (Faz 1 — sinyallesme)
-- **Kapsam:** Backend yalniz SINYALLESME (SDP/ICE relay) + cagri orkestrasyonu; medya P2P, backend gormez. STUN/TURN backend'de YOK (client sorumlulugu)
+- **Kapsam:** Backend yalniz SINYALLESME (SDP/ICE relay) + cagri orkestrasyonu; medya P2P, backend gormez. ICE sunucu listesi backend verir: `GET /api/v1/notifications/ice-servers` (`TURN_URL/TURN_USERNAME/TURN_CREDENTIAL` env'leri; prod'da coturn — `k8s/2f-coturn.yaml`)
 - **Iki mod:** (1) panel-ici admin→admin (hiyerarsi kurali; ayni chat grubunun uyeleriyse hiyerarsi ATLANIR), (2) tenant destek cagrisi = ring-all (tum online panel kullanicilari calar, ilk cevaplayan kazanir, digerlerine CALL_TAKEN)
 - **Client gonderir:** `/app/rtc/call`, `/app/tenant-rtc/{tid}/call`, `/app/rtc/{callId}/{answer,reject,cancel,hangup,sdp,ice}`
 - **Client abone olur:** `/topic/user/{userId}/rtc` (ESAS yol), `/user/queue/rtc` (yedek); tenant caller ayrica `/topic/rtc-client/{clientRef}/rtc` (userId bilmeden abone olmak icin)

@@ -22,6 +22,7 @@ import com.cms.dto.DtoGuestTokenResponse;
 import com.cms.entity.RootEntityResponse;
 import com.cms.service.IAuthService;
 import com.cms.util.AuthCookieWriter;
+import com.cms.util.ClientIpResolver;
 import com.cms.util.JwtUtil;
 
 import java.util.LinkedHashMap;
@@ -94,7 +95,7 @@ public class AuthController extends BaseController implements IAuthController {
     if (dtoLogin.getTenantId() != null && !dtoLogin.getTenantId().isBlank()) {
       TenantContext.setTenantId(dtoLogin.getTenantId());
     }
-    // Brute-force sayaçları için istemci IP'si (proxy zinciri arkasında XFF ilk değer).
+    // Brute-force sayaçları için istemci adresi (proxy zincirinin arkasındaki gerçek istemci — ClientIpResolver).
     DtoAuthResponse response = authService.login(dtoLogin, resolveClientIp(httpRequest));
 
     // 2FA gerekiyorsa tam token henüz yok (sadece mfaToken) — oturum cookie'leri YAZMA.
@@ -106,17 +107,9 @@ public class AuthController extends BaseController implements IAuthController {
     return ok(response);
   }
 
-  /**
-   * İstemci IP'si: X-Forwarded-For ilk değeri (Cloudflare/Cloud Run proxy zinciri),
-   * yoksa remoteAddr. Sayaç anahtarı için yeterli — XFF sahtesi halinde IP sayacı
-   * yanıltılabilir olsa da username sayacı (tenant+username) bağımsız korunur.
-   */
+  /** Brute-force sayaç anahtarı için istemci adresi — bkz. {@link ClientIpResolver}. */
   private String resolveClientIp(jakarta.servlet.http.HttpServletRequest request) {
-    String xff = request.getHeader("X-Forwarded-For");
-    if (xff != null && !xff.isBlank()) {
-      return xff.split(",")[0].trim();
-    }
-    return request.getRemoteAddr();
+    return ClientIpResolver.resolve(request);
   }
 
   /**

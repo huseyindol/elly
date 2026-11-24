@@ -20,8 +20,9 @@ public interface IAuthService {
   /**
    * Kullanıcı adı/e-posta + şifre ile giriş.
    *
-   * @param clientIp brute-force sayaçları için istemci IP'si (X-Forwarded-For ilk değer
-   *                 veya remoteAddr — AuthController çıkarır); null/blank ise "unknown" anahtarına düşer
+   * @param clientIp brute-force sayaçları için istemci IP'si (AuthController,
+   *                 {@code util.ClientIpResolver} ile çıkarır: CF-Connecting-IP → X-Forwarded-For ilk değer
+   *                 → remoteAddr); null/blank ise "unknown" anahtarına düşer
    */
   DtoAuthResponse login(DtoLogin dtoLogin, String clientIp);
 

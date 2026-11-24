@@ -335,7 +335,7 @@ public class CallSessionService {
   // ─────────────────────────── Yardımcılar ───────────────────────────
 
   private boolean isUserReachable(Long userId, String tenantId) {
-    if (presenceService.isOnline(userId)) {
+    if (presenceService.isOnline(tenantId, userId)) {
       return true;
     }
     if (pushNotificationService == null || tenantId == null || tenantId.isBlank()) {

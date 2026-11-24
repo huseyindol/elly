@@ -483,9 +483,10 @@ public class AuthService implements IAuthService {
     // Refresh token oluştur
     String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(), tenantId, loginSource);
 
-    // Refresh token'ı upsert (INSERT veya UPDATE - tek sorgu)
+    // Refresh token'ı upsert (INSERT veya UPDATE - tek sorgu). Tabloda S5 gereği SHA-256 özeti
+    // saklanır; refreshToken() da özetle arar. Ham yazılırsa yenileme kaydı hiç bulamazdı.
     Date expiryDate = new Date(System.currentTimeMillis() + refreshTokenExpiration);
-    refreshTokenRepository.upsertRefreshToken(user.getId(), refreshTokenString, expiryDate);
+    refreshTokenRepository.upsertRefreshToken(user.getId(), sha256Hex(refreshTokenString), expiryDate);
 
     // Response oluştur
     DtoAuthResponse response = new DtoAuthResponse();

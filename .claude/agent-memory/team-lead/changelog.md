@@ -3,12 +3,24 @@
 Bu dosya projedeki orta ve büyük ölçekli geliştirmelerin kaydını tutar.
 Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayabilir.
 
+## [2026-11-24 (3)] Yenileme Belirteci Girişte Ham Yazılıyordu — Yenileme Her İstemcide Reddediliyordu
+**Tip:** 🐛 Düzeltme / 🔒 Güvenlik | **Boyut:** Küçük
+
+### Özet
+- **Hata:** 2026-11-10 sertleştirme paketi (`958b0d4`, S5) yenileme aramasını SHA-256 özetine çevirdi ama girişteki yazmayı (`issueFullAuthToken` → `upsertRefreshToken`) ham bıraktı. Girişte verilen her yenileme belirteci `POST /auth/refresh`'te "Refresh token not found" (400) alıyordu → erişim anahtarının süresi dolunca (30 dk) bütün istemciler (mobil, panel, Mac ajanı) yeniden girişe düşüyordu. Canlı veri: iki tenant'taki 7 belirtecin 7'si ham (`eyJ…`, 244–252 karakter; özet olsaydı 64 hex).
+- **Düzeltme:** giriş de özet yazar (tek satır). Yan etki: S5'in amacı (veritabanı sızsa bile belirteç kullanılamaz) ilk kez fiilen geçerli.
+- **Geçiş:** düzeltme canlıya çıkınca açık oturumlar bir kez yeniden giriş yapar (bugün de her seferinde yapıldığı gibi; bkz. `docs/NEXTJS_API_GUIDE.md` depolama notu). Oturum kapatma / kullanıcı silme kullanıcı numarasıyla çalışır, etkilenmez.
+- **Test:** `AuthServiceRefreshTokenTest` 3 (giriş→yenileme el sıkışması; tabloda yalnız özet; belirteç değişimi: eskisi gider, yenisi çalışır) — düzeltme öncesi 3/3 kırmızı, sonrası yeşil. Bu akışı deneyen test yoktu, o yüzden hata 14 gün görünmedi.
+- **Sözleşme:** değişmedi.
+
+---
+
 ## [2026-11-24 (2)] Gerçek Zamanlı Kullanıcı Teslimatında Tenant İzolasyonu — Faz 1
 **Tip:** 🔒 Güvenlik | **Boyut:** Orta
 
 ### Özet
 - **Boşluk:** kullanıcı **numaraları** ve **adları** tenant veritabanına özeldir (iki tenant'ta da `admin` var; tenant2'nin bir sonraki kullanıcısı 4 numarayı alırdı = tenant1'deki sahip). (1) `/topic/user/{userId}/…` abonelik yetkisi yalnız numarayı karşılaştırıyordu → başka tenant'taki aynı numaralı kullanıcı çağrı sinyallerini dinleyip `/app/rtc/{callId}/answer|sdp|ice` ile çağrıya katılabiliyordu. (2) Kullanıcı hedefli kuyruk (`convertAndSendToUser(username, …)`) oturumun kullanıcı adına bakıyordu → tenant ayrımı yok (bugün kuyruk teslimatı çalışmadığı için henüz gerçekleşmiyordu).
-- **Tenant'lı kullanıcı konuları:** `/topic/tenant/{tenantId}/user/{userId}/(rtc|membership|groups/joined|groups/removed)` — yalnız kendi tenant'ı + kendi userId'si abone olabilir (`ChatTopics.userRtcTopic(tenantId, userId)` vb.). **GEÇİŞ (faz 2'de kalkar):** eski tenant'sız konuya yayın hâlâ yapılıyor ve aboneliği **yalnız panel oturumlarında** (`loginSource=admin`) kabul ediliyor; tenant-site oturumlarına kapalı.
+- **Tenant'lı kullanıcı konuları:** `/topic/tenant/{tenantId}/user/{userId}/(rtc|membership|groups/joined|groups/removed)` — yalnız kendi tenant'ı + kendi userId'si abone olabilir (`ChatTopics.userRtcTopic(tenantId, userId)` vb.). **GEÇİŞ (faz 2'de kalkar):** eski tenant'sız konuya yayın hâlâ yapılıyor ve aboneliği **yalnız panel oturumlarında** (`loginSource=admin`) kabul ediliyor; tenant-site oturumlarına kapalı. **Faz 2 kodlandı (`2a5d9d0`, yayın onayı bekliyor):** eski konuya yayın tamamen kaldırıldı; abonelik panel oturumlarında yayınsız kabul ediliyor (bağlantı kopmaz). Yayın, eski derlemeyi çalışıran iPhone 12 güncellenince.
 - **Kullanıcı hedefli kuyruk anahtarı tenant'lı:** WS oturumunun teslimat adı `ChatTopics.userKey(tenantId, username)` (Spring `DestinationUserNameProvider` kancası — kimlik adı `getName()` kullanıcı adı kalır); 7 yayıncı noktası (bildirimler, okunmamış sayısı, üyelik olayları, çağrı sinyali) aynı anahtarı kullanır. Tenant bilinmiyorsa hiçbir oturumla eşleşmez (fail-closed).
 - **Çağrı servisi:** `sendSignal` tenant alır; `answer/reject/cancel/hangup/relaySdp/relayIce` katılımcı denetiminde tenant'ı da karşılaştırır (`sameTenant`); "meşgul" kaydı ve clientRef yansıması `tenant:userId` anahtarlı; rtc-client Redis claim anahtarı `rtc:ref:{tenantId}:{clientRef}`; yabancı tenant'tan gelen cevaba verilen CALL_TAKEN yalnız cevaplayanın kendi tenant'ına gider; kurulmayan destek çağrısında clientRef kaydı geri alınır.
 - **Doğrulama:** compile ✅ · yeni testler: `CallSessionTenantIsolationTest` 12, `ChatTopicsTest` 3, `SecurityHardeningTest` +3 (tenant'lı konu yetkisi, eski konunun panel-only olması, CONNECT teslimat adı) → ilgili 46 test ✅. Review: `code-reviewer` (onay, küçük düzeltmeler uygulandı) + `security-guard` (şartlı onay; 4 şart da uygulandı).
@@ -25,7 +37,7 @@ Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayab
 - **Kayıt tenant'a göre ayrıldı:** `chat:presence:<tenantId>:<userId>`. Kullanıcı numaraları her tenant veritabanında ayrı sayıldığı için tek kayıt, başka tenant'taki aynı numaralı kullanıcıyı çevrimiçi gösterirdi (tazeleme gelmeden 5 dk ile sınırlıydı). `isOnline` imzası `isOnline(tenantId, userId)` oldu; tek çağıran `CallSessionService`.
 - **Zamanlayıcı havuzu:** `spring.task.scheduling.pool.size=4` — zamanlanmış işler tek iş parçacığını paylaşıyordu, yavaş bir iş tazelemeyi geciktirebilirdi.
 - **Giriş IP kilidi küreseldi:** prod'da trafik Cloudflare → k3s ServiceLB → Traefik → uygulama. ServiceLB kaynağı `10.42.0.1`'e çevirir, Traefik güvenmediği `X-Forwarded-For`'ı atar → her istek aynı IP: **30 hatalı giriş herkesin girişini 15 dk kilitliyordu**. Yeni `util.ClientIpResolver`: `CF-Connecting-IP` (IP değişmezi olarak doğrulanır) → XFF ilk değeri → remoteAddr. Yalnız `AuthController.resolveClientIp` geçti; kullanıcı başına limit (5/15 dk) değişmedi.
-- **Bilinen açık (takip):** origin'e 80/443'ten doğrudan erişilebiliyor; Cloudflare'ı atlayan bir istemci `CF-Connecting-IP`'yi taklit edebilir. Tam güven için origin'e erişim Cloudflare IP aralıklarıyla sınırlandırılmalı. `FormSpamProtectionService`, `RatingController`, `RequestTimingInterceptor` eski çözümde bırakıldı (aynı ortak-IP etkisi; ayrı değerlendirilecek).
+- **Bilinen açık (takip):** origin'e 80/443'ten doğrudan erişilebiliyor; Cloudflare'ı atlayan bir istemci `CF-Connecting-IP`'yi taklit edebilir. Tam güven için origin'e erişim Cloudflare IP aralıklarıyla sınırlandırılmalı. `FormSpamProtectionService`, `RatingController`, `RequestTimingInterceptor` eski çözümde bırakıldı (aynı ortak-IP etkisi; ayrı değerlendirilecek). **Kapandı (2026-11-24):** origin'in 80/443'e erişimi GCP güvenlik duvarında yalnız Cloudflare IPv4 aralıklarına sınırlandırıldı (doğrudan erişim zaman aşımına düşüyor; Cloudflare üzerinden 401 geliyor). `FormSpamProtectionService` ve `RatingController` `ClientIpResolver`'a geçti (`00c40bc`; canlıda doğrulandı: sayaç gerçek ziyaretçi adresiyle açıldı). `RequestTimingInterceptor` eski çözümde (yalnız ölçüm).
 - **Doğrulama:** compile ✅ · `ChatPresenceServiceTest` 7, `ClientIpResolverTest` 5, `AuthAndPresenceWiringTest` 2 (yeni) + `SecurityHardeningTest` 7, `SecurityPatch2Test` 7 ✅.
 - **Sözleşme:** REST/WS sözleşmesi değişmedi. Redis anahtar biçimi değişti (eski anahtarlar 5 dk içinde kendini temizler).
 

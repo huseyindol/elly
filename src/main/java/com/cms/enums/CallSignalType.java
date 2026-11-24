@@ -1,7 +1,7 @@
 package com.cms.enums;
 
 /**
- * WebRTC sinyalleşme mesaj tipleri — esas yol {@code /topic/user/{userId}/rtc}
+ * WebRTC sinyalleşme mesaj tipleri — esas yol {@code /topic/tenant/{tenantId}/user/{userId}/rtc}
  * ({@code /user/queue/rtc} yedek; tenant caller ayrıca {@code /topic/rtc-client/{clientRef}/rtc})
  * üzerinden client'a gider ({@code com.cms.dto.DtoCallSignal.type}).
  */

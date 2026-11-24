@@ -9,6 +9,7 @@ import com.cms.entity.User;
 import com.cms.repository.ChatGroupMemberRepository;
 import com.cms.repository.ChatGroupRepository;
 import com.cms.repository.UserRepository;
+import com.cms.util.ChatTopics;
 import com.cms.util.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.simp.user.DestinationUserNameProvider;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -44,6 +46,10 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfigurer {
 
+  /** Kullanıcıya özel konu — tenant'lı (asıl biçim): konudaki tenant ve userId oturumunkiyle eşleşmeli. */
+  private static final Pattern TENANT_USER_TOPIC_PATTERN =
+      Pattern.compile("^/topic/tenant/([^/]+)/user/(\\d+)/(groups/joined|groups/removed|membership|rtc)$");
+  /** Tenant'sız eski kullanıcı konusu — GEÇİŞ: istemciler tenant'lı konuya geçene kadar açık. */
   private static final Pattern USER_TOPIC_PATTERN =
       Pattern.compile("^/topic/user/(\\d+)/(groups/joined|groups/removed|membership|rtc)$");
   private static final Pattern TENANT_GROUP_TOPIC_PATTERN =
@@ -182,9 +188,14 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
 
       JwtAuthenticationFilter.CachedUserPrincipal principal =
           new JwtAuthenticationFilter.CachedUserPrincipal(cachedUser, authorities);
+      // Kullanıcı hedefli teslimat (/user/queue/**, convertAndSendToUser) STOMP oturumunun "kullanıcı adına"
+      // bakar. Kullanıcı adları tenant'a özeldir; oturumun teslimat adı tenant'lı anahtar olur ki başka
+      // tenant'taki aynı adlı kullanıcıya giden bildirim bu oturuma düşmesin. Yayıncılar aynı anahtarı üretir
+      // (ChatTopics.userKey). Bu, Spring'in çok kiracılı kancasıdır (DestinationUserNameProvider): kimlik adı
+      // (getName()) kullanıcı adı olarak kalır.
+      accessor.setUser(sessionUser(principal, authorities, tenantIdClaim, cachedUser.getUsername()));
       UsernamePasswordAuthenticationToken auth =
           new UsernamePasswordAuthenticationToken(principal, null, authorities);
-      accessor.setUser(auth);
       SecurityContextHolder.getContext().setAuthentication(auth);
 
       Map<String, Object> sessionAttrs = accessor.getSessionAttributes();
@@ -245,6 +256,37 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
     TenantContext.clear();
     log.debug("WebSocket guest authenticated: sessionId={}, displayName={}, tenantId={}",
         sessionId, displayName, tenantIdClaim);
+  }
+
+  /**
+   * STOMP oturumunun kullanıcısı: kullanıcı hedefli teslimat için tenant'lı ad
+   * ({@link DestinationUserNameProvider}). Oturum defteri ve {@code @SendToUser} bu adı kullanır;
+   * {@link #getName()} kullanıcı adı olarak kalır. Bir {@link UsernamePasswordAuthenticationToken}'dır —
+   * sonraki karelerde {@code accessor.getUser() instanceof UsernamePasswordAuthenticationToken} denetimleri
+   * (yetkilendirme, SecurityContext) aynen çalışır.
+   */
+  static UsernamePasswordAuthenticationToken sessionUser(
+      JwtAuthenticationFilter.CachedUserPrincipal principal,
+      List<GrantedAuthority> authorities,
+      String tenantId,
+      String username) {
+    return new TenantScopedSessionUser(principal, authorities, ChatTopics.userKey(tenantId, username));
+  }
+
+  private static final class TenantScopedSessionUser extends UsernamePasswordAuthenticationToken
+      implements DestinationUserNameProvider {
+    private final String destinationUserName;
+
+    TenantScopedSessionUser(Object principal, Collection<? extends GrantedAuthority> authorities,
+        String destinationUserName) {
+      super(principal, null, authorities);
+      this.destinationUserName = destinationUserName;
+    }
+
+    @Override
+    public String getDestinationUserName() {
+      return destinationUserName;
+    }
   }
 
   private CachedUserDetails resolveCachedUser(String username, String loginSource) {
@@ -321,7 +363,8 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
    * STOMP SUBSCRIBE yetkilendirmesi:
    * - /user/queue/** : kendi oturumuna özel kuyruklar (tüm doğrulanmış oturumlara açık)
    * - /topic/presence, /topic/groups/new, /topic/groups/deleted : yalnız loginSource="admin"
-   * - /topic/user/{userId}/** : yalnız kendi userId'si ile eşleşen oturumlar
+   * - /topic/tenant/{tid}/user/{userId}/... : yalnız kendi tenant'ı + kendi userId'si ile eşleşen oturumlar (asıl)
+   * - /topic/user/{userId}/... : eski tenant'sız biçim (GEÇİŞ — yalnız panel oturumlarına ve yalnız kendi userId'si)
    * - /topic/rtc-client/{clientRef}/rtc : doğrulanmış oturumlar (clientRef boş olamaz)
    * - /topic/tenant/{tid}/group/{groupId}(/.*)? ve /topic/group/{groupId}(/.*)? :
    *   grup erişim kontrolü (üyelik, visitorAccess veya rol görünürlüğü) + tenant izolasyonu
@@ -362,11 +405,31 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
       return;
     }
 
-    // 3. Kullanıcıya özel topic (/topic/user/{userId}/...)
+    // 3. Kullanıcıya özel topic — tenant'lı biçim (asıl): kendi tenant'ı + kendi userId'si.
+    // Kullanıcı numaraları tenant veritabanına özeldir; numara karşılaştırması tek başına başka tenant'taki
+    // aynı numaralı kullanıcıya o konuyu açardı.
+    Matcher tenantUserMatcher = TENANT_USER_TOPIC_PATTERN.matcher(destination);
+    if (tenantUserMatcher.matches()) {
+      Long targetUserId = Long.valueOf(tenantUserMatcher.group(2));
+      boolean own = sessionUserId != null && sessionUserId.equals(targetUserId)
+          && sessionTenant != null && sessionTenant.equals(tenantUserMatcher.group(1));
+      if (!own) {
+        throw new org.springframework.messaging.MessageDeliveryException(
+            message, "Cannot subscribe to another user's topic: " + destination);
+      }
+      return;
+    }
+
+    // 3b. Tenant'sız eski kullanıcı konusu — GEÇİŞ (istemciler tenant'lı konuya geçene kadar).
+    // Yalnız PANEL oturumlarına (admin web, mobil, Mac ajanı): onlar henüz eski konuyu dinliyor olabilir.
+    // Tenant-site oturumlarına kapalı: oradan kaydolan bir kullanıcı başka tenant'taki aynı numaralı
+    // kullanıcının konusunu dinleyip çağrı sinyallerini alabilirdi (tenant sitesi eski konuyu hiç kullanmadı:
+    // kendi sinyallerini /topic/rtc-client/{ref}/rtc ve /user/queue/rtc üzerinden alır).
     Matcher userMatcher = USER_TOPIC_PATTERN.matcher(destination);
     if (userMatcher.matches()) {
       Long targetUserId = Long.valueOf(userMatcher.group(1));
-      if (sessionUserId == null || !sessionUserId.equals(targetUserId)) {
+      if (!"admin".equals(loginSource)
+          || sessionUserId == null || !sessionUserId.equals(targetUserId)) {
         throw new org.springframework.messaging.MessageDeliveryException(
             message, "Cannot subscribe to another user's topic: " + destination);
       }
@@ -388,7 +451,7 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
             message, "Guest cannot subscribe to rtc-client channel");
       }
       String clientRef = rtcClientMatcher.group(1);
-      if (!claimRtcClientRef(clientRef, sessionUserId)) {
+      if (!claimRtcClientRef(clientRef, sessionTenant, sessionUserId)) {
         throw new org.springframework.messaging.MessageDeliveryException(
             message, "Cannot subscribe to another client's rtc channel");
       }
@@ -509,17 +572,19 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
   }
 
   /**
-   * Y3: rtc-client kanalı sahiplik claim'i — {@code rtc:ref:{clientRef} → userId}
+   * Y3: rtc-client kanalı sahiplik claim'i — {@code rtc:ref:{tenantId}:{clientRef} → userId}
    * (atomik SETNX, TTL 1 saat). İlk abone olan kullanıcıya bağlanır; aynı kullanıcı
    * yeniden abone olabilir (WS reconnect dahil), FARKLI kullanıcı reddedilir.
+   * Anahtar tenant'lıdır: kullanıcı numaraları tenant veritabanına özeldir — başka tenant'taki aynı
+   * numaralı kullanıcı claim'in sahibi sayılmaz.
    * Redis down ise çağrı özelliği kırılmasın diye best-effort izin verilir (log'lu) —
    * clientRef'in kendisi client üretimli rastgele UUID olduğundan tahmin esas bariyerdir.
    */
-  private boolean claimRtcClientRef(String clientRef, Long userId) {
+  private boolean claimRtcClientRef(String clientRef, String tenantId, Long userId) {
     if (clientRef == null || userId == null) {
       return false;
     }
-    String key = "rtc:ref:" + clientRef;
+    String key = "rtc:ref:" + (tenantId == null ? "" : tenantId) + ":" + clientRef;
     try {
       Object owner = redisTemplate.opsForValue().get(key);
       if (owner != null) {

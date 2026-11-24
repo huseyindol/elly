@@ -104,7 +104,7 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Permission:** `chat:read` (tum kullanicilar), `chat:manage` (EDITOR+)
 - **Visibility:** VIEWER=1 (herkese acik) → EDITOR=2 → ADMIN=3 → SUPER_ADMIN=4 (gizli), DM her zaman 4
 - **Davet hiyerarsisi:** Davet eden, KENDI SEVIYESI ve altindaki kullanicilari davet edebilir (admin→admin dahil); SUPER_ADMIN herkesi
-- **Topic'ler:** `/topic/tenant/{tid}/group/{groupId}` (mesaj/typing/read/bans), `/topic/groups/new`, `/topic/groups/deleted`, `/topic/user/{userId}/membership`, `/topic/presence`
+- **Topic'ler:** `/topic/tenant/{tid}/group/{groupId}` (mesaj/typing/read/bans), `/topic/groups/new`, `/topic/groups/deleted`, `/topic/tenant/{tid}/user/{userId}/membership|groups/joined|groups/removed` (kullanici konulari TENANT'LI: kullanici numaralari tenant DB'sine ozel), `/topic/presence`
 - **Guest chat:** `POST /auth/guest-token` (tenantId + sessionId ZORUNLU, `loginSource=website`); guest yazma kapisi: grup `tenantId` dolu + `visitorAccess=true`
 - **Bildirim:** Tenant tarafindan gelen mesajlar (guest/visitor/TENANT rollu) o tenant'in SUPER_ADMIN+ADMIN'lerine `CHAT_MESSAGE` bildirimi uretir; panel rolu gonderirse bildirim YOK (spam onlemi)
 - **Detay:** `chat-patterns` skill'i acilir; query/topic ornekleri orada
@@ -113,7 +113,7 @@ Spring Boot 3.5.7 tabanli multi-tenant CMS. Java 21, PostgreSQL (database-per-te
 - **Kapsam:** Backend yalniz SINYALLESME (SDP/ICE relay) + cagri orkestrasyonu; medya P2P, backend gormez. ICE sunucu listesi backend verir: `GET /api/v1/notifications/ice-servers` (`TURN_URL/TURN_USERNAME/TURN_CREDENTIAL` env'leri; prod'da coturn — `k8s/2f-coturn.yaml`)
 - **Iki mod:** (1) panel-ici admin→admin (hiyerarsi kurali; ayni chat grubunun uyeleriyse hiyerarsi ATLANIR), (2) tenant destek cagrisi = ring-all (tum online panel kullanicilari calar, ilk cevaplayan kazanir, digerlerine CALL_TAKEN)
 - **Client gonderir:** `/app/rtc/call`, `/app/tenant-rtc/{tid}/call`, `/app/rtc/{callId}/{answer,reject,cancel,hangup,sdp,ice}`
-- **Client abone olur:** `/topic/user/{userId}/rtc` (ESAS yol), `/user/queue/rtc` (yedek); tenant caller ayrica `/topic/rtc-client/{clientRef}/rtc` (userId bilmeden abone olmak icin)
+- **Client abone olur:** `/topic/tenant/{tid}/user/{userId}/rtc` (ESAS yol; tenant'siz `/topic/user/{userId}/rtc` gecis icin gecici acik — YALNIZ panel oturumlarinda), `/user/queue/rtc` (yedek; BUGUN TESLIM ETMIYOR — basit aracin onekleri `/topic`,`/user`; cozumlenen `/queue/…` hedefi araciya uymuyor), tenant caller ayrica `/topic/rtc-client/{clientRef}/rtc` (userId bilmeden abone olmak icin). `/rtc/{callId}/*` katilimci denetimi, "mesgul" kaydi ve clientRef yansimasi tenant'i da kapsar
 - **Durum:** In-memory registry (`CallSessionService`, ConcurrentHashMap) — TEK instance varsayimi, yatay olcekleme icin Faz 2 (Redis + broker relay) gerekir. 30sn ring timeout, busy/presence kontrolu
 - **call_logs:** Her tenant DB'sinde metadata (`CallLog`, status: RINGING→ANSWERED/REJECTED/CANCELLED/MISSED, ANSWERED→COMPLETED); migration `db-migration-call-logs.sql` her tenant'a uygulanmali. Henuz okuyan REST endpoint yok (sonraki faz)
 

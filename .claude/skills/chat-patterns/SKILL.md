@@ -109,13 +109,30 @@ TENANT rollü kullanıcılar `/api/v1/chat/**`'e erişemez (chat:read yok) —
 | `/topic/tenant/{tid}/group/{groupId}/bans` | `DtoChatBanEvent` | Ban/unban |
 | `/topic/groups/new` | `DtoChatGroup` | Grup oluşturulunca |
 | `/topic/groups/deleted` | `groupId` (string) | Grup silinince |
-| `/topic/user/{userId}/membership` | membership event | Davet/çıkarma (banner dahil) |
+| `/topic/tenant/{tid}/user/{userId}/membership` | membership event | Davet/çıkarma (banner dahil) |
+| `/topic/tenant/{tid}/user/{userId}/groups/joined` · `/groups/removed` | `DtoChatGroup` · membership event | Gruba eklendi / çıkarıldı |
 | `/topic/presence` | `DtoChatPresence` | Online/offline |
-| `/topic/user/{userId}/rtc` | `DtoCallSignal` | WebRTC sinyali (ESAS yol) |
+| `/topic/tenant/{tid}/user/{userId}/rtc` | `DtoCallSignal` | WebRTC sinyali (ESAS yol) |
 | `/topic/rtc-client/{clientRef}/rtc` | `DtoCallSignal` | Tenant caller'ın kendi sinyalleri |
+| `/user/queue/notifications` · `/notifications/unread-count` · `/membership` · `/groups/joined` · `/groups/removed` · `/rtc` · `/chat-errors` | ilgili payload | Oturuma özel; teslimat sunucuda tenant'lı anahtarla — **ama bugün hiçbiri teslim edilmiyor, bkz. not** |
 
-(`/topic/group/{id}` ve `/topic/user/{id}/groups/joined` legacy — yeni kod tenant-aware
-`ChatTopics` üretimini kullanmalı.)
+(`/topic/group/{id}` legacy — yeni kod tenant-aware `ChatTopics` üretimini kullanmalı.
+`/topic/user/{id}/…` tenant'sız eski kullanıcı konusudur — **GEÇİŞ**: yalnız panel oturumlarında (`loginSource=admin`)
+aboneliğe ve yayına açık, istemciler tenant'lı konuya geçince kaldırılır.)
+
+**Kullanıcı hedefli kuyruk (`/user/queue/**`) bugün teslim etmiyor.** `WebSocketConfig` basit aracı
+`enableSimpleBroker("/topic", "/user")` ile kurulu; kullanıcı hedefli çözümleme `/queue/<ad>-user<oturumKimliği>`
+hedefi üretir, o hiçbir aracı önekine uymaz ve yayın atılır (2026-11-24 canlı doğrulama: okunmamış sayısı itmesi
+200 dönüyor, kare gelmiyor). Panel/mobil bu yüzden anlık bildirim itmeyi WS'ten almıyor. Kuyruğu açmak
+(`"/queue"` öneki) ayrı bir iş: admin aynı üyelik/çağrı sinyallerini hem konudan hem kuyruktan dinler → tekillik şart.
+
+**Kullanıcı konuları neden tenant'lı:** kullanıcı **numaraları** ve **adları** her tenant veritabanına
+özeldir (iki tenant'ta da `admin` olabilir). Konu adı tenant'sız kalırsa başka tenant'taki aynı numaralı
+kullanıcı o konuya abone olup çağrı sinyallerini alabilir; kullanıcı hedefli kuyruk (`convertAndSendToUser`)
+kullanıcı adına bakar, anahtar tenant'sız olursa bildirim başka tenant'taki aynı adlı oturuma düşer.
+Bu yüzden: konular `ChatTopics.userRtcTopic(tenantId, userId)` vb. ile üretilir; kuyruk gönderimlerinde
+anahtar `ChatTopics.userKey(tenantId, username)` olur (WS oturumu da bu anahtarla kurulur);
+`/rtc/{callId}/*` katılımcı denetimi tenant'ı da karşılaştırır.
 
 **Client → Server (publish):**
 | Destination | İşlem |

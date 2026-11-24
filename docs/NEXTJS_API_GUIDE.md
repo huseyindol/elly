@@ -2663,7 +2663,32 @@ STOMP **CONNECT** frame'inde native header: `Authorization: Bearer <JWT>`.
 ### Güvenlik kuralları (whitelist)
 
 - **SEND** yalnız `/app/**` hedeflerine izin verir; başka hedef `MessageDeliveryException`.
-- **SUBSCRIBE** whitelist: `/user/queue/**`, `/topic/presence`, `/topic/groups/new|deleted` (admin), `/topic/user/{ kendi userId'si }/(groups/joined|groups/removed|membership|rtc)`, `/topic/rtc-client/{ref}/rtc` (Redis claim), `/topic/tenant/{tid}/group/{uuid}...`.
+- **SUBSCRIBE** whitelist: `/user/queue/**`, `/topic/presence`, `/topic/groups/new|deleted` (admin), `/topic/tenant/{kendi tenant'ı}/user/{kendi userId'si}/(groups/joined|groups/removed|membership|rtc)`, `/topic/rtc-client/{ref}/rtc` (Redis claim), `/topic/tenant/{tid}/group/{uuid}...`.
+- **GEÇİŞ (kaldırılacak):** eski tenant'sız `/topic/user/{kendi userId'si}/(…)` aboneliği **yalnız panel oturumlarında** (`loginSource=admin`: admin web, mobil, Mac ajanı) henüz kabul ediliyor ve o konuya da yayın yapılıyor. İstemciler tenant'lı konuya geçince ikisi de kalkar. Tenant-site oturumları için kapalı.
+
+### Kullanıcıya özel konular (tenant'lı)
+
+Kullanıcı **numaraları her tenant veritabanında ayrı** sayılır: aynı numara başka tenant'ta başka kullanıcıdır. Bu yüzden kullanıcıya özel her konu tenant'lıdır:
+
+| Eski (geçiş) | Asıl (kullanılacak) | İçerik |
+|---|---|---|
+| `/topic/user/{userId}/rtc` | `/topic/tenant/{tenantId}/user/{userId}/rtc` | `DtoCallSignal` |
+| `/topic/user/{userId}/membership` | `/topic/tenant/{tenantId}/user/{userId}/membership` | `DtoChatMembershipEvent` |
+| `/topic/user/{userId}/groups/joined` | `/topic/tenant/{tenantId}/user/{userId}/groups/joined` | `DtoChatGroup` |
+| `/topic/user/{userId}/groups/removed` | `/topic/tenant/{tenantId}/user/{userId}/groups/removed` | `DtoChatMembershipEvent` |
+
+`tenantId` = CONNECT'teki token'ın `tenantId` claim'i. Abonelik yalnız **kendi tenant'ı + kendi userId'si** için kabul edilir; başka tenant'taki aynı numaralı kullanıcı abone olamaz. Sunucu üretimi: `ChatTopics.userRtcTopic(tenantId, userId)` vb.
+
+`/user/queue/**` (bildirimler, okunmamış sayısı, üyelik olayları, `rtc`) istemci tarafında değişmedi: abonelik aynı, teslimat sunucuda tenant'lı anahtarla yapılır (aynı adlı başka tenant kullanıcısına düşmez).
+
+> [!IMPORTANT]
+> **Bugün `/user/queue/**` üzerinden hiçbir yayın teslim edilmiyor.** Basit aracın önekleri `/topic` ve `/user` olarak
+> tanımlı; kullanıcı hedefli çözümleme sonucu `/queue/<ad>-user<oturumKimliği>` diye bir hedef üretiyor ve bu hiçbir
+> öneke uymadığından yayın aracı tarafından atılıyor (2026-11-24'te canlıda doğrulandı: okunmamış sayısı itmesi
+> 200 dönüyor, kare gelmiyor). Bu yüzden anlık bildirim itmesi bugün çalışmıyor; istemciler yoklamayla yetiniyor.
+> Tenant'lı anahtar düzeltmesi bu yol açıldığında doğru çalışması için yapıldı. Kuyruğu açmak
+> (`enableSimpleBroker("/topic", "/queue")`) ayrı bir değişikliktir: admin paneli üyelik ve çağrı sinyallerini hem
+> konudan hem kuyruktan dinlediği için her sinyal iki kez gelir — önce istemcide tekillik sağlanmalı.
 
 ### RTC çağrı sinyalleşmesi (STOMP SEND → `/app/...`)
 
@@ -2677,7 +2702,9 @@ STOMP **CONNECT** frame'inde native header: `Authorization: Bearer <JWT>`.
 | `/app/rtc/{callId}/sdp` | `DtoCallSdp { "sdpType": "offer"\|"answer", "sdp": String }` | Katılımcılara oldugu gibi aktarılır. |
 | `/app/rtc/{callId}/ice` | `DtoCallIce { "candidate", "sdpMid", "sdpMLineIndex" }` | Katılımcılara oldugu gibi aktarılır. |
 
-`callId` UUID'dir. Sinyaller **`/topic/user/{userId}/rtc`** üzerinden (yedek: `/user/queue/rtc`) `DtoCallSignal { type, callId, peerUserId, peerDisplayName, ringAll, sdpType, sdp, candidate, sdpMid, sdpMLineIndex, reason }` zarfıyla iletilir. `type` değerleri: `INCOMING_CALL, RINGING, ANSWERED, CALL_TAKEN, REJECTED, CANCELLED, HANGUP, TIMEOUT, UNAVAILABLE, BUSY, ERROR, SDP, ICE`.
+"Katılımcı" denetimi **tenant dahil** yapılır (`/app/rtc/{callId}/*`): çağrının tenant'ı, isteği yapan oturumun tenant'ı ile aynı olmalı; başka tenant'taki aynı numaralı kullanıcı çağrıyı cevaplayamaz/bitiremez, SDP/ICE'ı aktarılamaz.
+
+`callId` UUID'dir. Sinyaller **`/topic/tenant/{tenantId}/user/{userId}/rtc`** üzerinden iletilir (yedek olarak `/user/queue/rtc`'ye de yazılır — bkz. yukarıdaki uyarı: bu yol bugün teslim etmiyor) `DtoCallSignal { type, callId, peerUserId, peerDisplayName, ringAll, sdpType, sdp, candidate, sdpMid, sdpMLineIndex, reason }` zarfıyla. `type` değerleri: `INCOMING_CALL, RINGING, ANSWERED, CALL_TAKEN, REJECTED, CANCELLED, HANGUP, TIMEOUT, UNAVAILABLE, BUSY, ERROR, SDP, ICE`.
 
 ### ICE sunucuları
 
@@ -2686,7 +2713,7 @@ STOMP **CONNECT** frame'inde native header: `Authorization: Bearer <JWT>`.
 ### Mac ajan akışı (referans — `elly-mac-agent`)
 
 1. `POST /api/v1/auth/login` (`loginType: "admin"`, `tenantId`) → token (30 dk) + refreshToken (7 gün).
-2. Raw WS `/ws-native` (SockJS'teki gibi `/websocket` eki YOK) → STOMP CONNECT (`Authorization: Bearer`) → SUBSCRIBE `/topic/user/{agentUserId}/rtc`.
+2. Raw WS `/ws-native` (SockJS'teki gibi `/websocket` eki YOK) → STOMP CONNECT (`Authorization: Bearer`) → SUBSCRIBE `/topic/tenant/{tenantId}/user/{agentUserId}/rtc`.
 3. `INCOMING_CALL` → `peerUserId` sahip değilse `reject`, ise otomatik `answer`.
 4. `SDP (offer)` → `setRemoteDescription` → `createAnswer` → SEND `/app/rtc/{callId}/sdp` → `ICE` alışverişi → yayın.
 5. `HANGUP | CANCELLED | TIMEOUT` → kamera kapanır. Tüm oturumlar tenant DB'sindeki `call_logs` tablosuna yazılır.

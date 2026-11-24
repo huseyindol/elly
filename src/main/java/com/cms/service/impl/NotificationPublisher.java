@@ -1,5 +1,6 @@
 package com.cms.service.impl;
 
+import com.cms.config.TenantContext;
 import com.cms.dto.DtoNotification;
 import com.cms.dto.DtoNotificationUnreadCount;
 import com.cms.entity.Notification;
@@ -9,6 +10,7 @@ import com.cms.mapper.NotificationMapper;
 import com.cms.repository.NotificationRepository;
 import com.cms.repository.UserRepository;
 import com.cms.service.INotificationPublisher;
+import com.cms.util.ChatTopics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -69,7 +71,10 @@ public class NotificationPublisher implements INotificationPublisher {
     long count = notificationRepository.countByUserIdAndReadFlagFalse(userId);
     DtoNotificationUnreadCount payload = new DtoNotificationUnreadCount(count);
     userRepository.findById(userId).ifPresent(user ->
-        messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/notifications/unread-count", payload));
+        messagingTemplate.convertAndSendToUser(
+            // Tenant'lı anahtar: kullanıcı adları tenant'a özeldir, aynı adlı başka tenant kullanıcısına düşmesin.
+            ChatTopics.userKey(TenantContext.getTenantId(), user.getUsername()),
+            "/queue/notifications/unread-count", payload));
   }
 
   /**
@@ -97,7 +102,8 @@ public class NotificationPublisher implements INotificationPublisher {
 
   private void pushNotification(Long userId, DtoNotification dto) {
     userRepository.findById(userId).ifPresentOrElse(user -> {
-      messagingTemplate.convertAndSendToUser(user.getUsername(), "/queue/notifications", dto);
+      messagingTemplate.convertAndSendToUser(
+          ChatTopics.userKey(TenantContext.getTenantId(), user.getUsername()), "/queue/notifications", dto);
       log.debug("Notification WS push → userId={} username={} notificationId={}",
           userId, user.getUsername(), dto.getId());
     }, () -> log.warn("Notification WS push skipped — userId={} not found", userId));

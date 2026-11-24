@@ -1,5 +1,6 @@
 package com.cms.controller.impl;
 
+import com.cms.config.TenantContext;
 import com.cms.controller.IChatGroupController;
 import com.cms.dto.DtoChatBan;
 import com.cms.dto.DtoChatBanRequest;
@@ -74,6 +75,9 @@ public class ChatGroupController implements IChatGroupController {
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<RootEntityResponse<DtoChatMember>> addMember(
       @PathVariable UUID groupId, @PathVariable Long userId) {
+    // Bildirim tenant'ı = isteğin geçerli tenant'ı (kullanıcı bu tenant'ta çözülür). Servis çağrısı bağlamı
+    // değiştirebildiği için (grup yönlendiricisi) önce yakalanır.
+    String tenantId = TenantContext.getTenantId();
     DtoChatMember member = groupService.addMember(groupId, userId, getCurrentUserId());
     DtoChatGroup group = groupService.getGroupById(groupId, userId);
     DtoChatMembershipEvent event = DtoChatMembershipEvent.builder()
@@ -83,7 +87,7 @@ public class ChatGroupController implements IChatGroupController {
         .group(group)
         .message("Gruba dahil edildiniz.")
         .build();
-    membershipNotifier.notifyJoined(userId, group, event);
+    membershipNotifier.notifyJoined(tenantId, userId, group, event);
     return ResponseEntity.status(HttpStatus.CREATED).body(RootEntityResponse.ok(member));
   }
 
@@ -92,6 +96,7 @@ public class ChatGroupController implements IChatGroupController {
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<RootEntityResponse<DtoChatMember>> addMemberByEmail(
       @PathVariable UUID groupId, @Valid @RequestBody DtoChatMemberInvite request) {
+    String tenantId = TenantContext.getTenantId();
     DtoChatMember member = groupService.addMemberByEmail(groupId, request.getEmail(), getCurrentUserId());
     Long userId = member.getUserId();
     DtoChatGroup group = groupService.getGroupById(groupId, userId);
@@ -102,7 +107,7 @@ public class ChatGroupController implements IChatGroupController {
         .group(group)
         .message("Gruba dahil edildiniz.")
         .build();
-    membershipNotifier.notifyJoined(userId, group, event);
+    membershipNotifier.notifyJoined(tenantId, userId, group, event);
     return ResponseEntity.status(HttpStatus.CREATED).body(RootEntityResponse.ok(member));
   }
 
@@ -110,6 +115,7 @@ public class ChatGroupController implements IChatGroupController {
   @DeleteMapping({"/groups/{groupId}/members/{userId}", "/tenant/{tenantId}/groups/{groupId}/members/{userId}"})
   @PreAuthorize("hasAuthority('chat:manage')")
   public ResponseEntity<Void> removeMember(@PathVariable UUID groupId, @PathVariable Long userId) {
+    String tenantId = TenantContext.getTenantId();
     groupService.removeMember(groupId, userId, getCurrentUserId());
     DtoChatMembershipEvent event = DtoChatMembershipEvent.builder()
         .action("REMOVED")
@@ -117,7 +123,7 @@ public class ChatGroupController implements IChatGroupController {
         .userId(userId)
         .message("Gruptan çıkarıldınız.")
         .build();
-    membershipNotifier.notifyRemoved(userId, groupId, event);
+    membershipNotifier.notifyRemoved(tenantId, userId, groupId, event);
     return ResponseEntity.noContent().build();
   }
 

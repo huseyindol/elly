@@ -6,8 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.security.Principal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,14 +21,18 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageDeliveryException;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.simp.user.DestinationUserNameProvider;
+import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -152,6 +158,7 @@ class SecurityHardeningTest {
 
   @Test
   void stompSubscribe_userPersonalTopic_onlyAllowsMatchingUserId() {
+    // GEÇİŞ: tenant'sız eski konu — istemciler tenant'lı konuya geçince bu kural kalkar.
     Message<?> ownSub = buildSubscribeMessage("/topic/user/42/rtc", "admin", "t1", 42L, "ROLE_EDITOR");
     assertDoesNotThrow(
         () -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(ownSub), ownSub));
@@ -159,6 +166,90 @@ class SecurityHardeningTest {
     Message<?> otherSub = buildSubscribeMessage("/topic/user/99/rtc", "admin", "t1", 42L, "ROLE_EDITOR");
     assertThrows(MessageDeliveryException.class,
         () -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(otherSub), otherSub));
+  }
+
+  @Test
+  void stompSubscribe_legacyUserTopic_isClosedToTenantSiteSessions() {
+    // Eski tenant'sız konu geçiş için açık ama YALNIZ panel oturumlarına (admin web, mobil, Mac ajanı).
+    // Tenant sitesi eski konuyu hiç kullanmadı; açık kalsaydı oradan kaydolan bir kullanıcı başka tenant'taki
+    // aynı numaralı kullanıcının çağrı sinyallerini dinleyebilirdi.
+    for (String suffix : List.of("rtc", "membership", "groups/joined", "groups/removed")) {
+      Message<?> tenantSession = buildSubscribeMessage("/topic/user/42/" + suffix, "tenant", "t1", 42L, "ROLE_TENANT");
+      assertThrows(MessageDeliveryException.class,
+          () -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(tenantSession), tenantSession), suffix);
+    }
+  }
+
+  @Test
+  void stompConnect_sessionCarriesTenantQualifiedDeliveryName() {
+    // Kullanıcı hedefli teslimat (/user/queue/**) oturumun "teslimat adına" bakar; o ad tenant'lı olmalı ki
+    // başka tenant'taki aynı adlı kullanıcıya giden bildirim bu oturuma düşmesin. Kimlik adı (getName())
+    // kullanıcı adı olarak kalır: WS iş parçacığında adı okuyan başka kod etkilenmez.
+    when(jwtUtil.extractLoginSource("tok")).thenReturn("admin");
+    when(jwtUtil.extractUsername("tok")).thenReturn("ali");
+    when(jwtUtil.extractTenantId("tok")).thenReturn("t1");
+    when(jwtUtil.validateToken(any(), any(), any())).thenReturn(true);
+    Role role = new Role();
+    role.setName("EDITOR");
+    User user = new User();
+    ReflectionTestUtils.setField(user, "id", 42L); // kimlik sütunu: setter yok
+    user.setUsername("ali");
+    user.setIsActive(true);
+    user.setTokenVersion(7L);
+    user.setRoles(Set.of(role));
+    when(userRepository.findByUsername("ali")).thenReturn(Optional.of(user));
+
+    StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+    accessor.setNativeHeader("Authorization", "Bearer tok");
+    Map<String, Object> attributes = new HashMap<>();
+    accessor.setSessionAttributes(attributes);
+    accessor.setLeaveMutable(true);
+    Message<?> connect = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+    ChannelRegistration registration = mock(ChannelRegistration.class);
+    wsSecurityConfig.configureClientInboundChannel(registration);
+    ArgumentCaptor<ChannelInterceptor> interceptors = ArgumentCaptor.forClass(ChannelInterceptor.class);
+    verify(registration).interceptors(interceptors.capture());
+    Message<?> result = interceptors.getValue().preSend(connect, null);
+
+    Principal sessionUser = StompHeaderAccessor.wrap(result).getUser();
+    assertTrue(sessionUser instanceof UsernamePasswordAuthenticationToken,
+        "sonraki karelerdeki instanceof denetimleri (yetkilendirme, SecurityContext) çalışmaya devam etsin");
+    assertEquals("ali", sessionUser.getName());
+    assertTrue(sessionUser instanceof DestinationUserNameProvider);
+    assertEquals("t1:ali", ((DestinationUserNameProvider) sessionUser).getDestinationUserName());
+    assertEquals(42L, attributes.get("userId"));
+    assertEquals("t1", attributes.get("tenantId"));
+    assertEquals("ali", attributes.get("username"));
+  }
+
+  @Test
+  void stompSubscribe_tenantUserTopic_requiresOwnTenantAndOwnUserId() {
+    // Kullanıcı numaraları tenant veritabanına özeldir: 42 numarası başka tenant'ta başka kullanıcıdır.
+    // Eski tenant'sız konu bunu ayıramıyordu — aynı numaralı diğer tenant kullanıcısı konuya abone olup
+    // çağrı sinyallerini alabiliyordu.
+    for (String suffix : List.of("rtc", "membership", "groups/joined", "groups/removed")) {
+      Message<?> own = buildSubscribeMessage("/topic/tenant/t1/user/42/" + suffix, "admin", "t1", 42L, "ROLE_EDITOR");
+      assertDoesNotThrow(() -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(own), own),
+          "own tenant + own id: " + suffix);
+
+      for (String foreign : List.of(
+          "/topic/tenant/t2/user/42/" + suffix,   // aynı numara, başka tenant
+          "/topic/tenant/t1/user/99/" + suffix,   // aynı tenant, başka kullanıcı
+          "/topic/tenant/t2/user/99/" + suffix)) {
+        Message<?> sub = buildSubscribeMessage(foreign, "admin", "t1", 42L, "ROLE_EDITOR");
+        assertThrows(MessageDeliveryException.class,
+            () -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(sub), sub), foreign);
+      }
+    }
+
+    // Tenant'ı bilinmeyen oturum (guest) hiçbir kullanıcı konusuna giremez.
+    Message<?> guest = buildSubscribeMessage("/topic/tenant/t1/user/42/rtc", "website", "t1", null, "chat:guest");
+    assertThrows(MessageDeliveryException.class,
+        () -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(guest), guest));
+    Message<?> noTenant = buildSubscribeMessage("/topic/tenant/t1/user/42/rtc", "admin", null, 42L, "ROLE_EDITOR");
+    assertThrows(MessageDeliveryException.class,
+        () -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(noTenant), noTenant));
   }
 
   @Test

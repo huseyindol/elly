@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /**
  * Kullanıcı gruba davet edildiğinde veya gruptan çıkarıldığında
- * {@code /topic/user/{userId}/groups/joined|removed} topic'lerine giden payload.
+ * {@code /topic/tenant/{tenantId}/user/{userId}/groups/joined|removed} topic'lerine giden payload.
  */
 @Getter
 @Setter

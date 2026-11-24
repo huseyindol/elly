@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * WebRTC sinyalleşme WS controller'ı. İş mantığı tamamen {@link CallSessionService}'te;
  * burada yalnız session attribute çözümü + yön (panel/tenant) ayrımı yapılır.
- * Yanıtlar esas olarak {@code /topic/user/{userId}/rtc} üzerinden ({@code /user/queue/rtc}
+ * Yanıtlar esas olarak {@code /topic/tenant/{tenantId}/user/{userId}/rtc} üzerinden ({@code /user/queue/rtc}
  * yedek) {@link CallSessionService} tarafından gönderilir.
  */
 @Controller
@@ -67,31 +67,35 @@ public class CallSignalController {
 
   @MessageMapping("/rtc/{callId}/answer")
   public void answer(@DestinationVariable UUID callId, SimpMessageHeaderAccessor accessor) {
-    callSessionService.answer(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.username(accessor));
+    callSessionService.answer(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.username(accessor),
+        WsSessionUtils.optionalTenant(accessor));
   }
 
   @MessageMapping("/rtc/{callId}/reject")
   public void reject(@DestinationVariable UUID callId, SimpMessageHeaderAccessor accessor) {
-    callSessionService.reject(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.username(accessor));
+    callSessionService.reject(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.optionalTenant(accessor));
   }
 
   @MessageMapping("/rtc/{callId}/cancel")
   public void cancel(@DestinationVariable UUID callId, SimpMessageHeaderAccessor accessor) {
-    callSessionService.cancel(callId, WsSessionUtils.requireUserId(accessor));
+    callSessionService.cancel(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.optionalTenant(accessor));
   }
 
   @MessageMapping("/rtc/{callId}/hangup")
   public void hangup(@DestinationVariable UUID callId, SimpMessageHeaderAccessor accessor) {
-    callSessionService.hangup(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.username(accessor));
+    callSessionService.hangup(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.username(accessor),
+        WsSessionUtils.optionalTenant(accessor));
   }
 
   @MessageMapping("/rtc/{callId}/sdp")
   public void sdp(@DestinationVariable UUID callId, @Payload DtoCallSdp payload, SimpMessageHeaderAccessor accessor) {
-    callSessionService.relaySdp(callId, WsSessionUtils.requireUserId(accessor), payload);
+    callSessionService.relaySdp(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.optionalTenant(accessor),
+        payload);
   }
 
   @MessageMapping("/rtc/{callId}/ice")
   public void ice(@DestinationVariable UUID callId, @Payload DtoCallIce payload, SimpMessageHeaderAccessor accessor) {
-    callSessionService.relayIce(callId, WsSessionUtils.requireUserId(accessor), payload);
+    callSessionService.relayIce(callId, WsSessionUtils.requireUserId(accessor), WsSessionUtils.optionalTenant(accessor),
+        payload);
   }
 }

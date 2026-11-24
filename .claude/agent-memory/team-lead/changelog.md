@@ -3,6 +3,20 @@
 Bu dosya projedeki orta ve büyük ölçekli geliştirmelerin kaydını tutar.
 Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayabilir.
 
+## [2026-11-24 (2)] Gerçek Zamanlı Kullanıcı Teslimatında Tenant İzolasyonu — Faz 1
+**Tip:** 🔒 Güvenlik | **Boyut:** Orta
+
+### Özet
+- **Boşluk:** kullanıcı **numaraları** ve **adları** tenant veritabanına özeldir (iki tenant'ta da `admin` var; tenant2'nin bir sonraki kullanıcısı 4 numarayı alırdı = tenant1'deki sahip). (1) `/topic/user/{userId}/…` abonelik yetkisi yalnız numarayı karşılaştırıyordu → başka tenant'taki aynı numaralı kullanıcı çağrı sinyallerini dinleyip `/app/rtc/{callId}/answer|sdp|ice` ile çağrıya katılabiliyordu. (2) Kullanıcı hedefli kuyruk (`convertAndSendToUser(username, …)`) oturumun kullanıcı adına bakıyordu → tenant ayrımı yok (bugün kuyruk teslimatı çalışmadığı için henüz gerçekleşmiyordu).
+- **Tenant'lı kullanıcı konuları:** `/topic/tenant/{tenantId}/user/{userId}/(rtc|membership|groups/joined|groups/removed)` — yalnız kendi tenant'ı + kendi userId'si abone olabilir (`ChatTopics.userRtcTopic(tenantId, userId)` vb.). **GEÇİŞ (faz 2'de kalkar):** eski tenant'sız konuya yayın hâlâ yapılıyor ve aboneliği **yalnız panel oturumlarında** (`loginSource=admin`) kabul ediliyor; tenant-site oturumlarına kapalı.
+- **Kullanıcı hedefli kuyruk anahtarı tenant'lı:** WS oturumunun teslimat adı `ChatTopics.userKey(tenantId, username)` (Spring `DestinationUserNameProvider` kancası — kimlik adı `getName()` kullanıcı adı kalır); 7 yayıncı noktası (bildirimler, okunmamış sayısı, üyelik olayları, çağrı sinyali) aynı anahtarı kullanır. Tenant bilinmiyorsa hiçbir oturumla eşleşmez (fail-closed).
+- **Çağrı servisi:** `sendSignal` tenant alır; `answer/reject/cancel/hangup/relaySdp/relayIce` katılımcı denetiminde tenant'ı da karşılaştırır (`sameTenant`); "meşgul" kaydı ve clientRef yansıması `tenant:userId` anahtarlı; rtc-client Redis claim anahtarı `rtc:ref:{tenantId}:{clientRef}`; yabancı tenant'tan gelen cevaba verilen CALL_TAKEN yalnız cevaplayanın kendi tenant'ına gider; kurulmayan destek çağrısında clientRef kaydı geri alınır.
+- **Doğrulama:** compile ✅ · yeni testler: `CallSessionTenantIsolationTest` 12, `ChatTopicsTest` 3, `SecurityHardeningTest` +3 (tenant'lı konu yetkisi, eski konunun panel-only olması, CONNECT teslimat adı) → ilgili 46 test ✅. Review: `code-reviewer` (onay, küçük düzeltmeler uygulandı) + `security-guard` (şartlı onay; 4 şart da uygulandı).
+- **Bilinen (bu değişiklik kapsamı dışı):** `/user/queue/**` bugün hiç teslim etmiyor (basit aracın önekleri `/topic`,`/user`; çözülen `/queue/…-user<oturum>` hedefi öneke uymuyor — canlıda doğrulandı). Kuyruğu açmak ayrı iş (admin panelinde çift sinyal). Review'da bulunan, ayrıca değerlendirilecekler: panel oturumları başka tenant'ın grup konularına abone olabiliyor (üyelik numarasıyla karşılaştırılıyor); `/topic/presence` ve `/topic/groups/new|deleted` tenant'sız yayın; sohbet hız limiti userId ile anahtarlı.
+- **Sözleşme:** istemciler (admin, mobil, Mac ajanı) kullanıcı konularında tenant'lı biçime geçmeli. Yasak bir SUBSCRIBE'a sunucu STOMP ERROR yollayıp bağlantıyı kapatıyor (davranış değişmedi; yeni biçime geçen istemci eski sunucuda döngüye düşer → **önce backend, sonra istemciler**).
+
+---
+
 ## [2026-11-24] Çevrimiçi Kaydı Tazeleme (tenant'lı) + Giriş Sayaçlarında Gerçek İstemci IP'si
 **Tip:** 🐛 Düzeltme / 🔒 Güvenlik | **Boyut:** Orta
 

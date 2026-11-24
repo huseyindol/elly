@@ -102,12 +102,13 @@ class CallSessionTenantIsolationTest {
   }
 
   @Test
-  void transitionStillMirrorsToTheLegacyTopic() {
+  void legacyTenantLessTopicIsNoLongerFed() {
     placeCall();
 
-    // GEÇİŞ: henüz yenilenmemiş istemciler için eski tenant'sız konu da beslenir (faz 2'de kalkar).
-    assertEquals(1, topicSends("/topic/user/2/rtc"));
-    assertEquals(1, topicSends("/topic/user/1/rtc"));
+    // Eski tenant'sız konu başka tenant'taki aynı numaralı kullanıcıya da açık olduğundan kapatıldı:
+    // oraya artık hiçbir sinyal yazılmaz (eski istemciler oradan hiçbir şey alamaz — sessiz, bağlantı kopmaz).
+    assertEquals(0, topicSends("/topic/user/2/rtc"));
+    assertEquals(0, topicSends("/topic/user/1/rtc"));
   }
 
   @Test

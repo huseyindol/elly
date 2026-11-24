@@ -36,9 +36,6 @@ public class ChatMembershipNotifier {
     String tenant = notBlank(group.getTenantId()) ? group.getTenantId() : tenantId;
     messagingTemplate.convertAndSend(ChatTopics.userGroupJoinedTopic(tenant, userId), group);
     messagingTemplate.convertAndSend(ChatTopics.userMembershipTopic(tenant, userId), event);
-    // GEÇİŞ: eski tenant'sız konular — istemciler tenant'lı konuya geçince kaldırılır.
-    messagingTemplate.convertAndSend(ChatTopics.userGroupJoinedTopic(userId), group);
-    messagingTemplate.convertAndSend(ChatTopics.userMembershipTopic(userId), event);
 
     userRepository.findById(userId).ifPresentOrElse(user -> {
       String userKey = ChatTopics.userKey(tenant, user.getUsername());
@@ -51,9 +48,6 @@ public class ChatMembershipNotifier {
   public void notifyRemoved(String tenantId, Long userId, UUID groupId, DtoChatMembershipEvent event) {
     messagingTemplate.convertAndSend(ChatTopics.userGroupRemovedTopic(tenantId, userId), event);
     messagingTemplate.convertAndSend(ChatTopics.userMembershipTopic(tenantId, userId), event);
-    // GEÇİŞ: eski tenant'sız konular — istemciler tenant'lı konuya geçince kaldırılır.
-    messagingTemplate.convertAndSend(ChatTopics.userGroupRemovedTopic(userId), event);
-    messagingTemplate.convertAndSend(ChatTopics.userMembershipTopic(userId), event);
 
     userRepository.findById(userId).ifPresentOrElse(user -> {
       String userKey = ChatTopics.userKey(tenantId, user.getUsername());

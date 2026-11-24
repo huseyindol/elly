@@ -157,8 +157,10 @@ class SecurityHardeningTest {
   }
 
   @Test
-  void stompSubscribe_userPersonalTopic_onlyAllowsMatchingUserId() {
-    // GEÇİŞ: tenant'sız eski konu — istemciler tenant'lı konuya geçince bu kural kalkar.
+  void stompSubscribe_legacyUserTopic_isAcceptedSilentlyForPanelSessionsOnly() {
+    // Eski tenant'sız konu KAPALI (yayın yok). Abonelik, panel oturumları ve yalnız kendi userId'si için
+    // reddedilmez: yasak bir SUBSCRIBE bağlantıyı kapattığı için eski sürümdeki panel istemcileri
+    // (henüz tenant'lı konuya geçmemiş) yeniden bağlanma döngüsüne düşmesin. Oradan hiçbir şey gelmez.
     Message<?> ownSub = buildSubscribeMessage("/topic/user/42/rtc", "admin", "t1", 42L, "ROLE_EDITOR");
     assertDoesNotThrow(
         () -> wsSecurityConfig.authorizeSubscribe(StompHeaderAccessor.wrap(ownSub), ownSub));
@@ -170,7 +172,7 @@ class SecurityHardeningTest {
 
   @Test
   void stompSubscribe_legacyUserTopic_isClosedToTenantSiteSessions() {
-    // Eski tenant'sız konu geçiş için açık ama YALNIZ panel oturumlarına (admin web, mobil, Mac ajanı).
+    // Eski tenant'sız konu kapalı (yayın yok) ve aboneliği YALNIZ panel oturumlarına kabul ediliyor.
     // Tenant sitesi eski konuyu hiç kullanmadı; açık kalsaydı oradan kaydolan bir kullanıcı başka tenant'taki
     // aynı numaralı kullanıcının çağrı sinyallerini dinleyebilirdi.
     for (String suffix : List.of("rtc", "membership", "groups/joined", "groups/removed")) {

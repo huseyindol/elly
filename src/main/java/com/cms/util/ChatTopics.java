@@ -120,28 +120,4 @@ public final class ChatTopics {
     String tenant = tenantId == null ? "" : URLEncoder.encode(tenantId, StandardCharsets.UTF_8);
     return tenant + ":" + username;
   }
-
-  // ───────────── GEÇİŞ: tenant'sız eski konumlar ─────────────
-  // Yalnız istemciler tenant'lı konulara geçene kadar eski konuya da yayın yapmak için. Bütün istemciler
-  // (admin, mobil, Mac ajanı) yenilendiğinde yayıncılar ve abonelik yetkisi kaldırılmalı.
-
-  /** Tenant'sız eski konu (yalnız geçiş için). Yeni kod {@link #userGroupJoinedTopic(String, Long)}. */
-  public static String userGroupJoinedTopic(Long userId) {
-    return "/topic/user/" + userId + "/groups/joined";
-  }
-
-  /** Tenant'sız eski konu (yalnız geçiş için). Yeni kod {@link #userGroupRemovedTopic(String, Long)}. */
-  public static String userGroupRemovedTopic(Long userId) {
-    return "/topic/user/" + userId + "/groups/removed";
-  }
-
-  /** Tenant'sız eski konu (yalnız geçiş için). Yeni kod {@link #userMembershipTopic(String, Long)}. */
-  public static String userMembershipTopic(Long userId) {
-    return "/topic/user/" + userId + "/membership";
-  }
-
-  /** Tenant'sız eski konu (yalnız geçiş için). Yeni kod {@link #userRtcTopic(String, Long)}. */
-  public static String userRtcTopic(Long userId) {
-    return "/topic/user/" + userId + "/rtc";
-  }
 }

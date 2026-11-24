@@ -117,8 +117,8 @@ TENANT rollü kullanıcılar `/api/v1/chat/**`'e erişemez (chat:read yok) —
 | `/user/queue/notifications` · `/notifications/unread-count` · `/membership` · `/groups/joined` · `/groups/removed` · `/rtc` · `/chat-errors` | ilgili payload | Oturuma özel; teslimat sunucuda tenant'lı anahtarla — **ama bugün hiçbiri teslim edilmiyor, bkz. not** |
 
 (`/topic/group/{id}` legacy — yeni kod tenant-aware `ChatTopics` üretimini kullanmalı.
-`/topic/user/{id}/…` tenant'sız eski kullanıcı konusudur — **GEÇİŞ**: yalnız panel oturumlarında (`loginSource=admin`)
-aboneliğe ve yayına açık, istemciler tenant'lı konuya geçince kaldırılır.)
+`/topic/user/{id}/…` tenant'sız eski kullanıcı konusudur — **KAPALI**: oraya hiçbir şey yayımlanmaz; aboneliği
+yalnız panel oturumlarında (`loginSource=admin`) ve yalnız kendi userId'si için bağlantı kopmasın diye kabul edilir.)
 
 **Kullanıcı hedefli kuyruk (`/user/queue/**`) bugün teslim etmiyor.** `WebSocketConfig` basit aracı
 `enableSimpleBroker("/topic", "/user")` ile kurulu; kullanıcı hedefli çözümleme `/queue/<ad>-user<oturumKimliği>`

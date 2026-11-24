@@ -49,7 +49,8 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
   /** Kullanıcıya özel konu — tenant'lı (asıl biçim): konudaki tenant ve userId oturumunkiyle eşleşmeli. */
   private static final Pattern TENANT_USER_TOPIC_PATTERN =
       Pattern.compile("^/topic/tenant/([^/]+)/user/(\\d+)/(groups/joined|groups/removed|membership|rtc)$");
-  /** Tenant'sız eski kullanıcı konusu — GEÇİŞ: istemciler tenant'lı konuya geçene kadar açık. */
+  /** Tenant'sız ESKİ kullanıcı konusu — kapatıldı: yayın yok; abonelik yalnız eski panel istemcilerinin bağlantısı
+   *  kopmasın diye (panel oturumu + kendi userId'si) kabul edilir. Bkz. kural 3b. */
   private static final Pattern USER_TOPIC_PATTERN =
       Pattern.compile("^/topic/user/(\\d+)/(groups/joined|groups/removed|membership|rtc)$");
   private static final Pattern TENANT_GROUP_TOPIC_PATTERN =
@@ -364,7 +365,7 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
    * - /user/queue/** : kendi oturumuna özel kuyruklar (tüm doğrulanmış oturumlara açık)
    * - /topic/presence, /topic/groups/new, /topic/groups/deleted : yalnız loginSource="admin"
    * - /topic/tenant/{tid}/user/{userId}/... : yalnız kendi tenant'ı + kendi userId'si ile eşleşen oturumlar (asıl)
-   * - /topic/user/{userId}/... : eski tenant'sız biçim (GEÇİŞ — yalnız panel oturumlarına ve yalnız kendi userId'si)
+   * - /topic/user/{userId}/... : KAPALI eski tenant'sız biçim (yayın yok; yalnız panel oturumu + kendi userId'si için abonelik kabul edilir, bağlantı kopmasın diye)
    * - /topic/rtc-client/{clientRef}/rtc : doğrulanmış oturumlar (clientRef boş olamaz)
    * - /topic/tenant/{tid}/group/{groupId}(/.*)? ve /topic/group/{groupId}(/.*)? :
    *   grup erişim kontrolü (üyelik, visitorAccess veya rol görünürlüğü) + tenant izolasyonu
@@ -420,11 +421,12 @@ public class ChatWebSocketSecurityConfig implements WebSocketMessageBrokerConfig
       return;
     }
 
-    // 3b. Tenant'sız eski kullanıcı konusu — GEÇİŞ (istemciler tenant'lı konuya geçene kadar).
-    // Yalnız PANEL oturumlarına (admin web, mobil, Mac ajanı): onlar henüz eski konuyu dinliyor olabilir.
-    // Tenant-site oturumlarına kapalı: oradan kaydolan bir kullanıcı başka tenant'taki aynı numaralı
-    // kullanıcının konusunu dinleyip çağrı sinyallerini alabilirdi (tenant sitesi eski konuyu hiç kullanmadı:
-    // kendi sinyallerini /topic/rtc-client/{ref}/rtc ve /user/queue/rtc üzerinden alır).
+    // 3b. Tenant'sız ESKİ kullanıcı konusu — KAPALI: artık oraya hiçbir şey yayımlanmıyor (tenant'lı konu
+    // tek yol). Abonelik yalnız iki nedenden kabul edilir: (1) eski sürümdeki panel istemcileri (admin web,
+    // mobil, Mac ajanı) hâlâ abone olmaya çalışır; yasak bir SUBSCRIBE bağlantıyı kapattığı için reddetmek
+    // onları yeniden bağlanma döngüsüne sokardı. (2) Kural dar: yalnız panel oturumları ve yalnız kendi
+    // userId'si. Tenant-site oturumlarına ve başka kullanıcının konusuna kapalı (kullanıcı numaraları tenant
+    // veritabanına özeldir: başka tenant'taki aynı numaralı kullanıcı bu konudan sinyal alabiliyordu).
     Matcher userMatcher = USER_TOPIC_PATTERN.matcher(destination);
     if (userMatcher.matches()) {
       Long targetUserId = Long.valueOf(userMatcher.group(1));

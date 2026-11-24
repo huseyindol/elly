@@ -435,16 +435,15 @@ public class CallSessionService {
   }
 
   /**
-   * Sinyali hedefe iletir. Esas yol tenant'lı kullanıcı konusu ({@code /topic/tenant/{tid}/user/{uid}/rtc}) —
-   * bu projede user-destination ({@code convertAndSendToUser}) her ortamda teslim etmediği için. Ek olarak
-   * user-queue'ya da gönderilir (tenant'lı kullanıcı anahtarıyla).
-   *
-   * <p>GEÇİŞ: istemciler (admin, mobil, Mac ajanı) tenant'lı konuya geçene kadar sinyal eski tenant'sız
-   * konuya da yazılır. Bütün istemciler yenilendiğinde bu satır ve eski konunun abonelik yetkisi kaldırılır.
+   * Sinyali hedefe iletir. Esas yol tenant'lı kullanıcı konusu
+   * ({@code /topic/tenant/{tid}/user/{uid}/rtc}) — bu projede user-destination
+   * ({@code convertAndSendToUser}) teslim etmediği için. Ek olarak user-queue'ya da gönderilir (tenant'lı
+   * kullanıcı anahtarıyla). Tenant'sız eski kullanıcı konusuna ({@code /topic/user/{uid}/rtc}) artık YAYIN
+   * YAPILMAZ: o konu başka tenant'taki aynı numaralı kullanıcıya da açık olduğundan kapatıldı (2026-11-24);
+   * aboneliği yalnız bağlantı kopmasın diye kabul ediliyor, oradan hiçbir şey gelmez.
    */
   private void sendSignal(String tenantId, Long userId, String username, DtoCallSignal signal) {
     messagingTemplate.convertAndSend(ChatTopics.userRtcTopic(tenantId, userId), signal);
-    messagingTemplate.convertAndSend(ChatTopics.userRtcTopic(userId), signal);
     // Tenant caller: userId bilmeden kendi ref topic'inden alır.
     String clientRef = clientRefByUser.get(userKey(tenantId, userId));
     if (clientRef != null) {

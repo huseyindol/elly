@@ -2664,13 +2664,13 @@ STOMP **CONNECT** frame'inde native header: `Authorization: Bearer <JWT>`.
 
 - **SEND** yalnız `/app/**` hedeflerine izin verir; başka hedef `MessageDeliveryException`.
 - **SUBSCRIBE** whitelist: `/user/queue/**`, `/topic/presence`, `/topic/groups/new|deleted` (admin), `/topic/tenant/{kendi tenant'ı}/user/{kendi userId'si}/(groups/joined|groups/removed|membership|rtc)`, `/topic/rtc-client/{ref}/rtc` (Redis claim), `/topic/tenant/{tid}/group/{uuid}...`.
-- **GEÇİŞ (kaldırılacak):** eski tenant'sız `/topic/user/{kendi userId'si}/(…)` aboneliği **yalnız panel oturumlarında** (`loginSource=admin`: admin web, mobil, Mac ajanı) henüz kabul ediliyor ve o konuya da yayın yapılıyor. İstemciler tenant'lı konuya geçince ikisi de kalkar. Tenant-site oturumları için kapalı.
+- **KAPALI:** eski tenant'sız `/topic/user/{userId}/…` biçimine artık **hiçbir şey yayımlanmıyor**. Abonelik, eski sürümdeki panel istemcilerinin bağlantısı kopmasın diye (`loginSource=admin` + yalnız kendi userId'si) reddedilmeden kabul edilir; oradan hiçbir şey gelmez. Tenant-site oturumlarına ve başka kullanıcının konusuna reddedilir.
 
 ### Kullanıcıya özel konular (tenant'lı)
 
 Kullanıcı **numaraları her tenant veritabanında ayrı** sayılır: aynı numara başka tenant'ta başka kullanıcıdır. Bu yüzden kullanıcıya özel her konu tenant'lıdır:
 
-| Eski (geçiş) | Asıl (kullanılacak) | İçerik |
+| Kapatılan eski biçim | Kullanılacak biçim | İçerik |
 |---|---|---|
 | `/topic/user/{userId}/rtc` | `/topic/tenant/{tenantId}/user/{userId}/rtc` | `DtoCallSignal` |
 | `/topic/user/{userId}/membership` | `/topic/tenant/{tenantId}/user/{userId}/membership` | `DtoChatMembershipEvent` |

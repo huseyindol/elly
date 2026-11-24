@@ -84,7 +84,9 @@ public class AuthService implements IAuthService {
   private final AesEncryptor aesEncryptor;
   private final OAuthProviderClient oAuthProviderClient;
 
-  @Value("${jwt.refresh.expiration:3600000}")
+  private static final int MAX_ACTIVE_REFRESH_TOKENS_PER_USER = 10;
+
+  @Value("${jwt.refresh.expiration:7776000000}")
   private Long refreshTokenExpiration;
   @Value("${jwt.expiration:1800000}")
   private Long accessTokenExpiration;
@@ -467,26 +469,28 @@ public class AuthService implements IAuthService {
   /**
    * Kullanıcı için access + refresh token üretir ve DtoAuthResponse döner.
    * login() ve verifyMfaLogin() tarafından paylaşılır.
+   * Çoklu cihaz oturumları desteklenir: mevcut tokenVersion ve diğer cihazların refresh
+   * token'ları korunur; yalnız süresi dolmuş/iptal kayıtlar temizlenir.
    */
   private DtoAuthResponse issueFullAuthToken(User user, String loginSource, String tenantId) {
-    // Token version'ı artır
-    Long newTokenVersion = (user.getTokenVersion() != null ? user.getTokenVersion() : 0L) + 1;
+    Long tokenVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
 
-    // Native query ile token_version'ı güncelle (tam entity update yerine)
-    userRepository.updateTokenVersion(user.getId(), newTokenVersion);
-    // Token version değişti, cache'i temizle
-    userAuthCacheService.evictUserCache(user.getUsername());
-
-    // JWT token oluştur (güncel version ile)
-    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), newTokenVersion, tenantId, loginSource);
+    // JWT token oluştur (mevcut version ile — diğer cihazların access token'ları düşmez)
+    String token = jwtUtil.generateToken(user.getId(), user.getUsername(), tokenVersion, tenantId, loginSource);
 
     // Refresh token oluştur
     String refreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(), tenantId, loginSource);
 
-    // Refresh token'ı upsert (INSERT veya UPDATE - tek sorgu). Tabloda S5 gereği SHA-256 özeti
-    // saklanır; refreshToken() da özetle arar. Ham yazılırsa yenileme kaydı hiç bulamazdı.
-    Date expiryDate = new Date(System.currentTimeMillis() + refreshTokenExpiration);
-    refreshTokenRepository.upsertRefreshToken(user.getId(), sha256Hex(refreshTokenString), expiryDate);
+    // Süresi dolmuş/iptal kayıtları temizle; kullanıcı başına en fazla MAX_ACTIVE_REFRESH_TOKENS_PER_USER
+    // aktif cihaz oturumu tut (en eskileri düşür). DB'de S5 gereği SHA-256 özeti saklanır.
+    Date nowDate = new Date();
+    refreshTokenRepository.deleteExpiredOrRevokedByUserId(user.getId(), nowDate);
+    List<RefreshToken> activeTokens = refreshTokenRepository.findAllByUserIdOrderByExpiryDateDesc(user.getId());
+    if (activeTokens.size() >= MAX_ACTIVE_REFRESH_TOKENS_PER_USER) {
+      refreshTokenRepository.deleteAll(
+          activeTokens.subList(MAX_ACTIVE_REFRESH_TOKENS_PER_USER - 1, activeTokens.size()));
+    }
+    refreshTokenRepository.save(createRefreshTokenEntity(user, refreshTokenString));
 
     // Response oluştur
     DtoAuthResponse response = new DtoAuthResponse();
@@ -544,37 +548,24 @@ public class AuthService implements IAuthService {
       throw new BadRequestException("User account is deactivated");
     }
 
-    // Token version'ı artır (yeni token alındığında eski token'ları geçersiz kılmak
-    // için)
-    Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
-    user.setTokenVersion(currentVersion + 1);
-    user = userRepository.save(user);
-    // Refresh token'da token version değişti, cache temizle
-    userAuthCacheService.evictUserCache(user.getUsername());
+    // Çoklu cihaz: tokenVersion artırılmaz — diğer cihazların oturumları açık kalır.
+    // Güvenlik iptali yalnız allDevices logout, şifre değişimi ve hesap pasifleştirmede yapılır.
+    Long tokenVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
 
     // Tenant ve loginSource bilgilerini mevcut refresh token'dan al
     String tenantId = jwtUtil.extractTenantId(refreshTokenString);
     String loginSource = jwtUtil.extractLoginSource(refreshTokenString);
 
-    // Yeni access token oluştur (güncel version ile)
-    String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getTokenVersion(),
+    // Yeni access token oluştur (mevcut version ile)
+    String newToken = jwtUtil.generateToken(user.getId(), user.getUsername(), tokenVersion,
         tenantId, loginSource);
 
-    // Eski refresh token'ı iptal et (Token Rotation için)
-    refreshToken.setIsRevoked(true);
-    refreshTokenRepository.save(refreshToken);
-
-    // Yeni refresh token oluştur (Token Rotation)
+    // Yalnız kullanılan refresh token'ı döndür (diğer cihazların token'larına dokunulmaz)
     String newRefreshTokenString = jwtUtil.generateRefreshToken(user.getId(), user.getUsername(),
         tenantId, loginSource);
+    refreshTokenRepository.delete(refreshToken);
+    refreshTokenRepository.flush();
 
-    // Kullanıcının tüm eski refresh token'larını sil (unique constraint ihlalini
-    // önlemek için)
-    // Önce silme işlemini yap, sonra yeni token'ı kaydet
-    refreshTokenRepository.deleteByUserId(user.getId());
-    refreshTokenRepository.flush(); // Hemen commit et
-
-    // Yeni refresh token'ı kaydet
     RefreshToken newRefreshToken = createRefreshTokenEntity(user, newRefreshTokenString);
     refreshTokenRepository.save(newRefreshToken);
 
@@ -841,13 +832,22 @@ public class AuthService implements IAuthService {
   }
 
   /**
-   * S4: Oturumu tamamen kapatır — kullanıcının refresh token'ını siler ve tokenVersion'ı
-   * artırarak MEVCUT access token'ları da anında geçersiz kılar (çalınan token kurtarma yolu).
-   * Cache evict ile aktif pod'lardaki yetki kopyası da düşer.
+   * S4: Tüm cihazlardan çıkış — kullanıcının tüm refresh token'larını siler ve tokenVersion'ı
+   * artırarak mevcut access token'ları da anında geçersiz kılar.
    */
   @Override
   @Transactional
   public void logout(String username, String tenantId) {
+    logout(username, tenantId, null);
+  }
+
+  /**
+   * Cihaz bazlı veya tüm cihazlardan çıkış: {@code refreshToken} verilmişse yalnız o cihazın
+   * refresh token'ı silinir (diğer cihazlar açık kalır); verilmemişse S4 davranışı uygulanır.
+   */
+  @Override
+  @Transactional
+  public void logout(String username, String tenantId, String refreshToken) {
     if (username == null || username.isBlank()) {
       throw new UnauthorizedException("Logout için kimlik doğrulaması gerekli");
     }
@@ -857,6 +857,11 @@ public class AuthService implements IAuthService {
     }
     User user = userRepository.findByUsername(username)
         .orElseThrow(() -> new UnauthorizedException("Invalid token or user not found"));
+    if (refreshToken != null && !refreshToken.isBlank()) {
+      refreshTokenRepository.deleteByTokenAndUserId(sha256Hex(refreshToken), user.getId());
+      log.info("User logged out (single device session revoked): {}", username);
+      return;
+    }
     refreshTokenRepository.deleteByUserId(user.getId());
     Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
     user.setTokenVersion(currentVersion + 1);

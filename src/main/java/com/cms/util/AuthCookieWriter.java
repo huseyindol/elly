@@ -31,7 +31,7 @@ public class AuthCookieWriter {
   @Value("${jwt.expiration:1800000}")
   private long jwtAccessExpirationMs;
 
-  @Value("${jwt.refresh.expiration:604800000}")
+  @Value("${jwt.refresh.expiration:7776000000}")
   private long jwtRefreshExpirationMs;
 
   /**

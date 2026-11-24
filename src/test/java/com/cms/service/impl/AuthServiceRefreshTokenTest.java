@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.cms.config.CustomUserDetailsService.CustomUserPrincipal;
@@ -45,6 +46,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -54,16 +56,16 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Giriş → yenileme el sıkışması: girişin veritabanına yazdığı değer, yenileme isteğinin aradığı
- * değerle aynı olmalı. Sertleştirme paketi (S5) arama tarafını SHA-256'ya çevirdi, yazma tarafını
- * unuttu — girişte verilen her yenileme anahtarı "Refresh token not found" ile reddediliyor, bütün
- * istemciler erişim anahtarının süresi dolunca (30 dk) yeniden girişe düşüyordu.
+ * Giriş → yenileme el sıkışması ve çoklu cihaz oturumu: girişin veritabanına yazdığı özet değer,
+ * yenileme isteğinin aradığı değerle aynı olmalı; ikinci cihaz girişi veya bir cihazın refresh
+ * işlemi diğer cihazın refresh/access token'ını bozmamalı; tekil logout yalnız o cihazı silmeli.
  */
 class AuthServiceRefreshTokenTest {
 
   private static final String TENANT = "tenant1";
+  private static final long NINETY_DAYS_MS = 7_776_000_000L;
 
-  /** refresh_tokens tablosunun kuklası; anahtar = tabloya yazılan token sütunu. */
+  /** refresh_tokens tablosunun kuklası; anahtar = tabloya yazılan SHA-256 token sütunu. */
   private final Map<String, RefreshToken> refreshTokensTable = new HashMap<>();
 
   private RefreshTokenRepository refreshTokenRepository;
@@ -99,7 +101,7 @@ class AuthServiceRefreshTokenTest {
         mock(AesEncryptor.class),
         mock(OAuthProviderClient.class));
     ReflectionTestUtils.setField(authService, "accessTokenExpiration", 1_800_000L);
-    ReflectionTestUtils.setField(authService, "refreshTokenExpiration", 604_800_000L);
+    ReflectionTestUtils.setField(authService, "refreshTokenExpiration", NINETY_DAYS_MS);
 
     // Panel kullanıcısı: şifresi doğrulanmış, aktif.
     Role viewer = new Role();
@@ -107,37 +109,73 @@ class AuthServiceRefreshTokenTest {
     user = new User();
     ReflectionTestUtils.setField(user, "id", 21L); // kimlik sütunu: setter yok
     user.setUsername("mac-agent");
+    user.setTokenVersion(3L);
     user.setRoles(new HashSet<>(Set.of(viewer)));
     when(authenticationManager.authenticate(any())).thenReturn(
         new UsernamePasswordAuthenticationToken(new CustomUserPrincipal(user), null, List.of()));
+    when(userRepository.findByUsername("mac-agent")).thenReturn(Optional.of(user));
     when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     when(jwtUtil.generateToken(any(), any(), any(), any(), any()))
-        .thenReturn("access-token-1", "access-token-2", "access-token-3");
+        .thenReturn("access-token-1", "access-token-2", "access-token-3", "access-token-4");
     when(jwtUtil.generateRefreshToken(any(), any(), any(), any()))
-        .thenReturn("refresh-token-1", "refresh-token-2", "refresh-token-3");
+        .thenReturn("refresh-token-1", "refresh-token-2", "refresh-token-3", "refresh-token-4");
     when(jwtUtil.validateRefreshToken(anyString())).thenReturn(true);
     when(jwtUtil.extractTenantId(anyString())).thenReturn(TENANT);
     when(jwtUtil.extractLoginSource(anyString())).thenReturn("admin");
 
-    // Tablo kuklası: girişin yazdığı satır, yenilemenin aradığı anahtarla birebir aranır.
-    doAnswer(inv -> {
-      RefreshToken row = new RefreshToken();
-      row.setToken(inv.getArgument(1));
-      row.setExpiryDate(inv.getArgument(2));
-      row.setUser(user);
-      refreshTokensTable.put(row.getToken(), row);
-      return null;
-    }).when(refreshTokenRepository).upsertRefreshToken(anyLong(), anyString(), any());
+    // Çoklu satır tablo kuklası: user_id tekil kısıtı olmadan birden fazla oturum tutulur.
     when(refreshTokenRepository.findByToken(anyString()))
         .thenAnswer(inv -> Optional.ofNullable(refreshTokensTable.get(inv.getArgument(0))));
+    when(refreshTokenRepository.findAllByUserIdOrderByExpiryDateDesc(anyLong()))
+        .thenAnswer(inv -> {
+          Long uid = inv.getArgument(0);
+          return refreshTokensTable.values().stream()
+              .filter(r -> uid.equals(r.getUser().getId()))
+              .sorted(Comparator.comparing(RefreshToken::getExpiryDate).reversed())
+              .toList();
+        });
     when(refreshTokenRepository.save(any())).thenAnswer(inv -> {
       RefreshToken row = inv.getArgument(0);
       refreshTokensTable.put(row.getToken(), row);
       return row;
     });
     doAnswer(inv -> {
-      refreshTokensTable.clear();
+      RefreshToken row = inv.getArgument(0);
+      refreshTokensTable.remove(row.getToken());
+      return null;
+    }).when(refreshTokenRepository).delete(any(RefreshToken.class));
+    doAnswer(inv -> {
+      Iterable<?> rows = inv.getArgument(0);
+      for (Object o : rows) {
+        if (o instanceof RefreshToken row) {
+          refreshTokensTable.remove(row.getToken());
+        }
+      }
+      return null;
+    }).when(refreshTokenRepository).deleteAll(any());
+    doAnswer(inv -> {
+      Long uid = inv.getArgument(0);
+      Date now = inv.getArgument(1);
+      refreshTokensTable.entrySet().removeIf(e ->
+          uid.equals(e.getValue().getUser().getId())
+              && (Boolean.TRUE.equals(e.getValue().getIsRevoked())
+                  || e.getValue().getExpiryDate().before(now)));
+      return null;
+    }).when(refreshTokenRepository).deleteExpiredOrRevokedByUserId(anyLong(), any());
+    when(refreshTokenRepository.deleteByTokenAndUserId(anyString(), anyLong())).thenAnswer(inv -> {
+      String tok = inv.getArgument(0);
+      Long uid = inv.getArgument(1);
+      RefreshToken existing = refreshTokensTable.get(tok);
+      if (existing != null && uid.equals(existing.getUser().getId())) {
+        refreshTokensTable.remove(tok);
+        return 1;
+      }
+      return 0;
+    });
+    doAnswer(inv -> {
+      Long uid = inv.getArgument(0);
+      refreshTokensTable.entrySet().removeIf(e -> uid.equals(e.getValue().getUser().getId()));
       return null;
     }).when(refreshTokenRepository).deleteByUserId(anyLong());
   }
@@ -175,6 +213,43 @@ class AuthServiceRefreshTokenTest {
 
     assertEquals("access-token-3", authService.refreshToken(refreshRequest(second)).getToken());
     assertThrows(BadRequestException.class, () -> authService.refreshToken(refreshRequest(first)));
+  }
+
+  @Test
+  void multiDevice_secondLoginAndRefreshKeepFirstDeviceAlive() {
+    DtoAuthResponse mobile = authService.login(panelLogin(), "203.0.113.9");
+    DtoAuthResponse web = authService.login(panelLogin(), "203.0.113.10");
+
+    assertEquals(2, refreshTokensTable.size());
+    assertEquals(3L, user.getTokenVersion(), "yeni giriş diğer cihazların access token'ını düşürmemeli");
+
+    // Web oturumu token yenilediğinde mobil oturum (hem access version hem refresh token) sağlam kalır.
+    DtoAuthResponse webRefreshed = authService.refreshToken(refreshRequest(web.getRefreshToken()));
+    assertEquals(3L, user.getTokenVersion());
+
+    DtoAuthResponse mobileRefreshed = authService.refreshToken(refreshRequest(mobile.getRefreshToken()));
+    assertNotEquals(webRefreshed.getRefreshToken(), mobileRefreshed.getRefreshToken());
+    assertEquals(2, refreshTokensTable.size());
+    verify(jwtUtil, org.mockito.Mockito.times(4)).generateToken(21L, "mac-agent", 3L, TENANT, "admin");
+  }
+
+  @Test
+  void logout_withRefreshTokenRevokesOnlyThatDevice_withoutRefreshTokenRevokesAll() {
+    DtoAuthResponse mobile = authService.login(panelLogin(), "203.0.113.9");
+    DtoAuthResponse web = authService.login(panelLogin(), "203.0.113.10");
+
+    // Yalnız web çıkış yapar → mobil oturum yaşamaya devam eder, tokenVersion değişmez.
+    authService.logout("mac-agent", TENANT, web.getRefreshToken());
+    assertEquals(1, refreshTokensTable.size());
+    assertEquals(3L, user.getTokenVersion());
+    assertThrows(BadRequestException.class, () -> authService.refreshToken(refreshRequest(web.getRefreshToken())));
+    DtoAuthResponse mobileRefreshed = authService.refreshToken(refreshRequest(mobile.getRefreshToken()));
+    assertNotEquals(mobile.getRefreshToken(), mobileRefreshed.getRefreshToken());
+
+    // Tüm cihazlardan çıkış (refreshToken null) → tüm satırlar silinir ve tokenVersion artar.
+    authService.logout("mac-agent", TENANT, null);
+    assertTrue(refreshTokensTable.isEmpty());
+    assertEquals(4L, user.getTokenVersion());
   }
 
   private static DtoLogin panelLogin() {

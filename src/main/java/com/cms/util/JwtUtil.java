@@ -27,8 +27,8 @@ public class JwtUtil {
   @Value("${jwt.expiration:86400000}")
   private Long expiration; // 24 saat (milisaniye cinsinden)
 
-  @Value("${jwt.refresh.expiration:604800000}")
-  private Long refreshExpiration; // 7 gün (milisaniye cinsinden)
+  @Value("${jwt.refresh.expiration:7776000000}")
+  private Long refreshExpiration; // 90 gün (milisaniye cinsinden)
 
   @Value("${jwt.mfa.expiration:300000}")
   private Long mfaExpiration; // 5 dakika (milisaniye cinsinden)
@@ -142,6 +142,7 @@ public class JwtUtil {
     // signWith JJWT'de encryptWith ile birlikte kullanılamaz
     return Jwts.builder()
         .claims(claims)
+        .id(java.util.UUID.randomUUID().toString())
         .subject(subject)
         .issuedAt(new Date(System.currentTimeMillis()))
         .expiration(new Date(System.currentTimeMillis() + expiration))
@@ -178,6 +179,7 @@ public class JwtUtil {
     // signWith JJWT'de encryptWith ile birlikte kullanılamaz
     return Jwts.builder()
         .claims(claims)
+        .id(java.util.UUID.randomUUID().toString())
         .subject(subject)
         .issuedAt(new Date(System.currentTimeMillis()))
         .expiration(new Date(System.currentTimeMillis() + refreshExpiration))

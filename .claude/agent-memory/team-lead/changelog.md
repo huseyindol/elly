@@ -3,6 +3,18 @@
 Bu dosya projedeki orta ve büyük ölçekli geliştirmelerin kaydını tutar.
 Her ajan (Claude, Antigravity) bu dosyayı okuyarak projenin geçmişini anlayabilir.
 
+## [2026-11-24 (4)] Çoklu Cihaz Oturumu + 90 Günlük Sliding Refresh Token
+**Tip:** ✨ İyileştirme / 🔒 Güvenlik | **Boyut:** Orta
+
+### Özet
+- **Sorun:** Tekil `refresh_tokens.user_id` kısıtı ve login/refresh'te `tokenVersion++` artışı yüzünden web panelden veya başka cihazdan giriş/yenileme yapıldığında telefondaki oturum anında 401'e düşüyordu; ayrıca 7 günlük refresh süresi uzun süre kapalı kalan mobilde erken düşüşe yol açıyordu.
+- **Çoklu cihaz oturumu:** `RefreshToken` `@OneToOne` → `@ManyToOne`; `refresh_tokens.user_id` tekil kısıtı kaldırıldı (`migration/db-migration-multi-device-refresh-tokens.sql`, `upsertRefreshToken` kalktı). `issueFullAuthToken` ve `refreshToken` artık `tokenVersion`'ı artırmaz; kullanıcı başına en fazla 10 aktif refresh token korunur (süresi dolmuş/iptal kayıtlar temizlenir, fazlası en eskiden düşer). `JwtUtil` access/refresh token'larına benzersiz `jti` ekler.
+- **90 gün sliding:** `jwt.refresh.expiration` varsayılanı ve `k8s/1-configmap.yaml` `JWT_REFRESH_EXPIRATION` değeri `7776000000` (90 gün) yapıldı; her `/auth/refresh` yeni 90 günlük token döner.
+- **Cihaz bazlı logout:** `POST /api/v1/auth/logout` body'de `refreshToken` (veya cookie) alırsa yalnız o cihazın oturumunu kapatır; `?allDevices=true` veya token'sız çağrıda + `changePassword` + hesap pasifleştirmede tüm cihazlar (`tokenVersion++`) iptal edilmeye devam eder.
+- **Doğrulama:** compile ✅ · `AuthServiceRefreshTokenTest` 5/5 (çoklu cihaz + cihaz bazlı/tüm cihaz logout dahil), `SecurityHardeningTest` + `SecurityPatch2Test` ✅.
+
+---
+
 ## [2026-11-24 (3)] Yenileme Belirteci Girişte Ham Yazılıyordu — Yenileme Her İstemcide Reddediliyordu
 **Tip:** 🐛 Düzeltme / 🔒 Güvenlik | **Boyut:** Küçük
 

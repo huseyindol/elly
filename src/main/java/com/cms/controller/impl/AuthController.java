@@ -25,9 +25,15 @@ import com.cms.util.AuthCookieWriter;
 import com.cms.util.ClientIpResolver;
 import com.cms.util.JwtUtil;
 
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +42,9 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController extends BaseController implements IAuthController {
+
+  private static final ObjectMapper LOGOUT_MAPPER = new ObjectMapper();
+  private static final int MAX_LOGOUT_BODY_BYTES = 8192;
 
   private final IAuthService authService;
   private final JwtUtil jwtUtil;
@@ -163,14 +172,14 @@ public class AuthController extends BaseController implements IAuthController {
   }
 
   /**
-   * S4: Oturumu tamamen kapatır — Bearer access token ZORUNLU (permitAll path altında
-   * olmasına rağmen principal yoksa 401 döner). Sunucu tarafında: refresh token silinir +
-   * tokenVersion artırılır (tüm access token'lar anında geçersiz). İstemci tarafında oturum
-   * cookie'leri temizlenir.
+   * S4: Oturumu kapatır — Bearer access token ZORUNLU (permitAll path altında
+   * olmasına rağmen principal yoksa 401 döner). {@code ?allDevices=true} verilmedikçe
+   * body/cookie'den {@code refreshToken} gelirse yalnız o cihazın oturumu kapatılır;
+   * aksi halde tüm cihazların oturumları iptal edilir ve {@code tokenVersion} artırılır.
    */
   @Override
   @PostMapping("/logout")
-  public RootEntityResponse<Boolean> logout(jakarta.servlet.http.HttpServletRequest httpRequest,
+  public RootEntityResponse<Boolean> logout(HttpServletRequest httpRequest,
       HttpServletResponse httpResponse) {
     Object principal = org.springframework.security.core.context.SecurityContextHolder
         .getContext().getAuthentication() != null
@@ -182,8 +191,37 @@ public class AuthController extends BaseController implements IAuthController {
       throw new com.cms.exception.UnauthorizedException("Authentication required");
     }
 
-    authService.logout(userPrincipal.getUsername(), TenantContext.getTenantId());
+    boolean allDevices = "true".equalsIgnoreCase(httpRequest.getParameter("allDevices"));
+    String refreshToken = allDevices ? null : resolveLogoutRefreshToken(httpRequest);
+    authService.logout(userPrincipal.getUsername(), TenantContext.getTenantId(), refreshToken);
     authCookieWriter.clearAuthCookies(httpResponse);
     return ok(true);
+  }
+
+  private String resolveLogoutRefreshToken(HttpServletRequest request) {
+    String contentType = request.getContentType();
+    if (contentType != null && contentType.toLowerCase().contains("application/json")) {
+      try {
+        byte[] buf = request.getInputStream().readNBytes(MAX_LOGOUT_BODY_BYTES);
+        if (buf.length > 0) {
+          JsonNode node = LOGOUT_MAPPER.readTree(new String(buf, StandardCharsets.UTF_8));
+          JsonNode rt = node.get("refreshToken");
+          if (rt != null && rt.isTextual() && !rt.asText().isBlank()) {
+            return rt.asText();
+          }
+        }
+      } catch (Exception ignored) {
+        // Geçersiz/eksik gövdede cookie veya all-devices yoluna düş
+      }
+    }
+    Cookie[] cookies = request.getCookies();
+    if (cookies != null) {
+      for (Cookie c : cookies) {
+        if ("refreshToken".equals(c.getName()) && c.getValue() != null && !c.getValue().isBlank()) {
+          return c.getValue();
+        }
+      }
+    }
+    return null;
   }
 }

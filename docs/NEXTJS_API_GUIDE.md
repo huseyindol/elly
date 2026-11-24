@@ -68,8 +68,8 @@ Token'da `loginSource: "admin"` bulunur. Kullanıcı `managedTenants` listesinde
 {
   "result": true,
   "data": {
-    "token": "string",           // JWT access token (24 saat geçerli)
-    "refreshToken": "string",    // JWT refresh token (7 gün geçerli)
+    "token": "string",           // JWE access token (30 dakika geçerli)
+    "refreshToken": "string",    // JWE refresh token (90 gün geçerli, sliding)
     "type": "Bearer",
     "userId": 1,
     "username": "string",
@@ -88,7 +88,10 @@ Token'da `loginSource: "admin"` bulunur. Kullanıcı `managedTenants` listesinde
 ---
 
 ### POST /api/v1/auth/refresh
-Token yenileme. Refresh token rotasyonu uygulanır (eski token geçersiz olur).
+Token yenileme. **Çoklu cihaz (multi-device) oturumları desteklenir**: aynı kullanıcı
+hem web panelde hem mobilde aynı anda oturum tutabilir (kullanıcı başına en fazla 10
+aktif cihaz). Yalnız kullanılan refresh token döndürülür (sliding 90 gün) ve eski
+refresh token geçersiz olur; diğer cihazların erişim/yenileme anahtarları korunur.
 
 **Body:**
 ```json
@@ -100,20 +103,24 @@ Token yenileme. Refresh token rotasyonu uygulanır (eski token geçersiz olur).
 **Response:** Login response ile aynı yapı — yeni `token` ve `refreshToken` döner.
 
 > **Depolama notu (S5):** Refresh token'lar veritabanında **SHA-256 hash** olarak saklanır.
-> Hash geçişini içeren deploy'dan SONRA eski refresh token'lar geçersizdir — kullanıcılar
-> bir kez yeniden login olur (bir kerelik).
+> `refresh_tokens.user_id` üzerindeki tekil kısıt kaldırılmıştır (bkz. `db-migration-multi-device-refresh-tokens.sql`).
 
 ---
 
 ### POST /api/v1/auth/logout
-Oturumu **tamamen** kapatır (S4). `Authorization: Bearer` access token zorunludur (permitAll
+Oturumu kapatır (S4). `Authorization: Bearer` access token zorunludur (permitAll
 path altındadır ama principal yoksa `401` döner).
 
+**Body (opsiyonel) / Query:**
+- Body'de `{"refreshToken": "..."}` veya `refreshToken` cookie'si gönderilirse **yalnız o
+  cihazın** oturumu kapatılır (diğer cihazlar açık kalır).
+- Gönderilmezse veya `?allDevices=true` verilirse kullanıcının **tüm cihazlardaki**
+  refresh token'ları silinir ve `tokenVersion` artırılır (tüm access token'lar anında geçersiz).
+
 **Etkisi:**
-- Kullanıcının refresh token'ı DB'den silinir.
-- `tokenVersion` artırılır → **mevcut access token'lar anında geçersiz** (tüm cihazlar dahil).
+- İlgili (veya tüm) refresh token DB'den silinir; `?allDevices=true` / token'sız çağrıda `tokenVersion` artırılır.
 - Oturum cookie'leri (`accessToken`, `refreshToken`, `userCode`, `expiredDate`) `Max-Age=0` ile temizlenir.
-- Auth cache evict edilir.
+- Tüm cihaz kapatmada auth cache evict edilir.
 
 **Response:**
 ```json
